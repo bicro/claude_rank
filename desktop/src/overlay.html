@@ -719,10 +719,9 @@ listen('metrics-updated', (event) => updateStats(event.payload));
   await loadIdentity();
   loadMyRanking();
   loadLeaderboard();
-  try {
-    const dashboard = await invoke('get_dashboard_data');
-    updateStats(dashboard);
-  } catch (e) { console.error('Failed to load dashboard:', e); }
+  // Don't await get_dashboard_data - just fire and forget
+  // The metrics-updated event listener (line 716) will update UI when ready
+  invoke('get_dashboard_data').then(updateStats).catch(e => console.error('Failed to load dashboard:', e));
 })();
 
 setInterval(() => { loadLeaderboard(); loadMyRanking(); }, 120000);

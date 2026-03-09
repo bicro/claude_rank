@@ -15,6 +15,15 @@ impl FileWatcher {
         points: Arc<Mutex<PointsEngine>>,
         ranking: Arc<Mutex<RankingEngine>>,
     ) {
+        // Emit cached stats immediately (before background refresh)
+        // MetricsEngine::new() already loaded the cache, so emit it now for instant UI
+        if let Ok(m) = metrics.lock() {
+            if m.data.stats.total_sessions > 0 {
+                info!("[stats-watcher] emitting cached stats immediately");
+                let _ = app.emit("metrics-updated", &m.data);
+            }
+        }
+
         // Spawn initial load in background (non-blocking)
         let app_init = app.clone();
         let m_init = Arc::clone(&metrics);

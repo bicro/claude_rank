@@ -1,11 +1,25 @@
 use super::parser::*;
 use chrono::{DateTime, Timelike, Utc};
-use log::debug;
-use serde::Deserialize;
+use log::{debug, info, warn};
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::SystemTime;
+
+// ── Cache persistence structs ──
+
+#[derive(Serialize, Deserialize, Default)]
+struct PersistedCache {
+    stats: StatsCache,
+    file_metadata: HashMap<String, FileMetadata>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct FileMetadata {
+    mtime_secs: u64,
+    size: u64,
+}
 
 // ── Deserialization structs ──
 
@@ -89,12 +103,89 @@ pub struct JsonlTracker {
     cached_stats: StatsCache,
 }
 
+fn vaibfu_cache_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(".vaibfu").join("stats-cache.json"))
+}
+
 impl JsonlTracker {
     pub fn new() -> Self {
         Self {
             file_states: HashMap::new(),
             session_cache: HashMap::new(),
             cached_stats: StatsCache::default(),
+        }
+    }
+
+    /// Load cached stats from disk. Returns the cached StatsCache if available.
+    /// Also pre-populates file_states with cached metadata to skip unchanged files.
+    pub fn load_cache(&mut self) -> Option<StatsCache> {
+        let path = vaibfu_cache_path()?;
+        let data = std::fs::read_to_string(&path).ok()?;
+        let persisted: PersistedCache = serde_json::from_str(&data).ok()?;
+
+        // Pre-populate file_states from cached metadata
+        for (path_str, meta) in persisted.file_metadata {
+            let path = PathBuf::from(path_str);
+            let mtime = SystemTime::UNIX_EPOCH
+                + std::time::Duration::from_secs(meta.mtime_secs);
+            self.file_states.insert(path, (mtime, meta.size));
+        }
+
+        self.cached_stats = persisted.stats.clone();
+        info!(
+            "[jsonl] loaded cache: {} file states, {} sessions",
+            self.file_states.len(),
+            persisted.stats.total_sessions
+        );
+        Some(persisted.stats)
+    }
+
+    /// Save current stats and file metadata to disk cache.
+    fn save_cache(&self) {
+        let Some(path) = vaibfu_cache_path() else {
+            return;
+        };
+
+        // Ensure directory exists
+        if let Some(parent) = path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                warn!("[jsonl] failed to create cache dir: {}", e);
+                return;
+            }
+        }
+
+        // Build file metadata map
+        let mut file_metadata = HashMap::new();
+        for (file_path, (mtime, size)) in &self.file_states {
+            let mtime_secs = mtime
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            file_metadata.insert(
+                file_path.to_string_lossy().to_string(),
+                FileMetadata {
+                    mtime_secs,
+                    size: *size,
+                },
+            );
+        }
+
+        let persisted = PersistedCache {
+            stats: self.cached_stats.clone(),
+            file_metadata,
+        };
+
+        match serde_json::to_string(&persisted) {
+            Ok(json) => {
+                if let Err(e) = std::fs::write(&path, json) {
+                    warn!("[jsonl] failed to write cache: {}", e);
+                } else {
+                    debug!("[jsonl] saved cache with {} files", self.file_states.len());
+                }
+            }
+            Err(e) => {
+                warn!("[jsonl] failed to serialize cache: {}", e);
+            }
         }
     }
 
@@ -141,6 +232,8 @@ impl JsonlTracker {
     pub fn refresh(&mut self) -> StatsCache {
         let files = find_all_jsonl_files();
         let mut changed = false;
+        let mut skipped = 0;
+        let mut parsed = 0;
 
         // Remove cached entries for deleted files
         let current_paths: HashSet<_> = files.iter().map(|(p, _)| p.clone()).collect();
@@ -159,8 +252,19 @@ impl JsonlTracker {
             let mtime = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
             let size = meta.len();
 
+            // Compare seconds only (cache stores seconds, not nanos)
+            let mtime_secs = mtime
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+
             if let Some(&(old_mtime, old_size)) = self.file_states.get(path) {
-                if mtime == old_mtime && size == old_size {
+                let old_mtime_secs = old_mtime
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                if mtime_secs == old_mtime_secs && size == old_size {
+                    skipped += 1;
                     continue;
                 }
             }
@@ -170,11 +274,15 @@ impl JsonlTracker {
             self.file_states.insert(path.clone(), (mtime, size));
             self.session_cache.insert(path.clone(), stats);
             changed = true;
+            parsed += 1;
         }
+
+        info!("[jsonl] refresh: {} files skipped, {} parsed", skipped, parsed);
 
         if changed {
             let all_stats: Vec<&SessionStats> = self.session_cache.values().collect();
             self.cached_stats = aggregate_stats(&all_stats);
+            self.save_cache();
         }
 
         self.cached_stats.clone()
