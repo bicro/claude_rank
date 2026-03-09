@@ -58,6 +58,9 @@ jobs:
           echo "Available signing identities:"
           security find-identity -v -p codesigning
 
+      - name: Install create-dmg
+        run: brew install create-dmg
+
       - name: Build Tauri app (Universal macOS)
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}

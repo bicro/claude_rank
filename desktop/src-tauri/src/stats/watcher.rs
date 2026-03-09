@@ -15,8 +15,16 @@ impl FileWatcher {
         points: Arc<Mutex<PointsEngine>>,
         ranking: Arc<Mutex<RankingEngine>>,
     ) {
-        // Initial load
-        Self::refresh(&app, &metrics, &points, &ranking);
+        // Spawn initial load in background (non-blocking)
+        let app_init = app.clone();
+        let m_init = Arc::clone(&metrics);
+        let p_init = Arc::clone(&points);
+        let r_init = Arc::clone(&ranking);
+        std::thread::spawn(move || {
+            Self::refresh(&app_init, &m_init, &p_init, &r_init);
+        });
+
+        info!("[stats-watcher] started");
 
         // Spawn polling thread — refresh every 30s unconditionally
         // (JsonlTracker handles change detection internally)
@@ -39,8 +47,6 @@ impl FileWatcher {
                 error!("[stats-watcher] notify watcher failed: {}", e);
             }
         });
-
-        info!("[stats-watcher] started");
     }
 
     fn run_notify_watcher(
