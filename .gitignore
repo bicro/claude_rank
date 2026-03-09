@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+bun.lockb
+
+# Build output
+target/
+dist/
+
+# sqlite-vec binaries (downloaded by setup.sh)
+lib/*.dylib
+lib/*.so
+lib/*.dll
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# User data (contains API keys)
+.api_key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Tauri
+src-tauri/target/
+src-tauri/WixTools/
+src-tauri/gen/
+
+# Debug
+debug/
+*.pdb
+
+# Beta build artifacts
+beta_builds/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Backend
+backend/.env
+*.db
+desktop/src-tauri/gen/schemas/macOS-schema.json

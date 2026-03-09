@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Rank</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: transparent;
+    color: #e0e0e0;
+    overflow: hidden;
+    user-select: none;
+  }
+  .panel {
+    background: rgba(18, 18, 24, 0.88);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 16px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .header h1 { font-size: 16px; font-weight: 600; color: #fff; display: flex; align-items: center; }
+  .site-logo { height: 18px; width: 18px; margin-right: 6px; }
+  .header-right { display: flex; align-items: center; gap: 6px; }
+  .btn-icon {
+    background: none; border: none; color: #888; cursor: pointer;
+    font-size: 18px; padding: 4px 8px; border-radius: 6px;
+  }
+  .btn-icon:hover { background: rgba(255,255,255,0.08); color: #fff; }
+
+  /* Autostart toggle */
+  .autostart-toggle { display: flex; align-items: center; gap: 4px; }
+  .autostart-toggle .label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.3px; }
+  .switch {
+    position: relative; width: 32px; height: 18px;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .slider {
+    position: absolute; inset: 0; background: #333; border-radius: 9px;
+    cursor: pointer; transition: 0.2s;
+  }
+  .slider::before {
+    content: ''; position: absolute; width: 12px; height: 12px;
+    left: 3px; top: 3px; background: #fff; border-radius: 50%;
+    transition: 0.2s;
+  }
+  .switch input:checked + .slider { background: #6366f1; }
+  .switch input:checked + .slider::before { transform: translateX(14px); }
+
+  .user-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px;
+  }
+  .user-bar .username {
+    font-weight: 600; font-size: 14px; color: #fff;
+    cursor: pointer; border-bottom: 1px dashed transparent;
+    padding: 1px 0;
+  }
+  .user-bar .username:hover { border-bottom-color: rgba(255,255,255,0.3); }
+  .user-bar .username .pencil { font-size: 11px; color: #666; margin-left: 4px; opacity: 0; transition: opacity 0.15s; }
+  .user-bar .username:hover .pencil { opacity: 1; }
+  .username-edit-row { display: flex; align-items: center; gap: 4px; }
+  .user-bar .username-input {
+    font-weight: 600; font-size: 14px; color: #fff;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(99,102,241,0.5);
+    border-radius: 4px; padding: 1px 4px; outline: none;
+    font-family: inherit; width: 120px;
+  }
+  .user-bar .username-input.invalid { border-color: #ef4444; }
+  .btn-save-username {
+    background: #6366f1; border: none; color: #fff; font-size: 11px;
+    padding: 2px 8px; border-radius: 4px; cursor: pointer; font-weight: 600;
+  }
+  .btn-save-username:hover { background: #818cf8; }
+  .username-error {
+    font-size: 10px; color: #ef4444; margin-top: 2px; display: none;
+  }
+  .username-feedback {
+    font-size: 10px; color: #4ade80; margin-top: 2px;
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .username-feedback.show { opacity: 1; }
+  .username-prompt {
+    font-size: 11px; color: #a5b4fc; margin-bottom: 4px; display: none;
+  }
+  .username-prompt.show { display: block; }
+  .user-bar .hash {
+    font-size: 11px; color: #666; font-family: monospace;
+    cursor: pointer;
+  }
+  .user-bar .hash:hover { color: #999; }
+  .hash-feedback {
+    font-size: 10px; color: #4ade80; margin-left: 4px;
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .hash-feedback.show { opacity: 1; }
+  .rank-info {
+    margin-left: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+  .tier-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .tier-bronze   { background: rgba(205,127,50,0.15);  color: #cd7f32; }
+  .tier-silver   { background: rgba(192,192,192,0.15);  color: #c0c0c0; }
+  .tier-gold     { background: rgba(255,215,0,0.15);    color: #ffd700; }
+  .tier-platinum { background: rgba(229,228,226,0.15);  color: #e5e4e2; }
+  .tier-diamond  { background: rgba(185,242,255,0.15);  color: #b9f2ff; }
+  .rank-number {
+    font-size: 10px;
+    color: #666;
+    font-weight: 600;
+  }
+
+  .stats-row {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .stat-card {
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px; padding: 10px 12px;
+  }
+  .stat-card .label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-card .value { font-size: 20px; font-weight: 700; color: #fff; margin-top: 2px; }
+
+  .leaderboard {
+    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;
+  }
+  .leaderboard::-webkit-scrollbar { width: 4px; }
+  .leaderboard::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  .lb-header { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .lb-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 10px; border-radius: 8px; font-size: 13px;
+  }
+  .lb-row:hover { background: rgba(255,255,255,0.04); }
+  .lb-row.me { background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); }
+  .lb-rank { width: 24px; text-align: center; font-weight: 700; color: #888; }
+  .lb-rank.gold { color: #fbbf24; }
+  .lb-rank.silver { color: #94a3b8; }
+  .lb-rank.bronze { color: #d97706; }
+  .lb-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-score { font-weight: 600; color: #a5b4fc; font-variant-numeric: tabular-nums; }
+
+  .footer {
+    text-align: center; padding-top: 4px;
+  }
+  .footer a {
+    color: #6366f1; text-decoration: none; font-size: 12px; cursor: pointer;
+  }
+  .footer a:hover { text-decoration: underline; }
+  .drag-region { -webkit-app-region: drag; app-region: drag; }
+  .no-drag { -webkit-app-region: no-drag; app-region: no-drag; }
+  .loading { color: #555; font-size: 12px; text-align: center; padding: 20px 0; }
+
+  .activity-section { margin-top: 2px; }
+  .activity-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .activity-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+  .activity-toggle { display: flex; gap: 2px; background: rgba(255,255,255,0.04); border-radius: 6px; padding: 2px; }
+  .activity-toggle button { background: none; border: none; color: #666; font-size: 10px; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-weight: 600; }
+  .activity-toggle button.active { background: #6366f1; color: #fff; }
+  .activity-grid { display: grid; gap: 2px; justify-content: center; }
+  .activity-tile { width: 10px; height: 10px; border-radius: 2px; }
+  .activity-tile[data-level="0"] { background: rgba(255,255,255,0.04); }
+  .activity-tile[data-level="1"] { background: rgba(99,102,241,0.25); }
+  .activity-tile[data-level="2"] { background: rgba(99,102,241,0.50); }
+  .activity-tile[data-level="3"] { background: rgba(99,102,241,0.75); }
+  .activity-tile[data-level="4"] { background: #6366f1; }
+  .activity-summary { font-size: 10px; color: #666; margin-top: 4px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="header drag-region">
+    <h1><img src="logo.png" alt="ClaudeRank logo" class="site-logo">Oto Rankings</h1>
+    <div class="header-right no-drag">
+      <div class="autostart-toggle">
+        <span class="label">Auto-Update</span>
+        <label class="switch" title="Launch on startup">
+          <input type="checkbox" id="autostart">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <button class="btn-icon" id="btnHide" title="Hide (Alt+Space)">&#x2715;</button>
+    </div>
+  </div>
+
+  <div class="user-bar">
+    <div>
+      <div class="username" id="username" title="Click to edit">Loading...<span class="pencil">&#9998;</span></div>
+      <div class="username-prompt" id="usernamePrompt">What alias would you like to go by?</div>
+      <div class="username-edit-row" id="usernameEditRow" style="display:none">
+        <input class="username-input" id="usernameInput" maxlength="20" placeholder="3-20 chars, a-z 0-9 _">
+        <button class="btn-save-username" id="btnSaveUsername">Save</button>
+      </div>
+      <div class="username-error" id="usernameError"></div>
+      <div class="username-feedback" id="usernameFeedback">Saved!</div>
+      <div>
+        <span class="hash" id="userHash" title="Click to copy full ID">...</span>
+        <span class="hash-feedback" id="hashFeedback">Copied!</span>
+      </div>
+    </div>
+    <div class="rank-info">
+      <div class="tier-badge tier-bronze" id="tierBadge">\u{1f944} Bronze</div>
+      <div class="rank-number" id="rankNumber">#&mdash;</div>
+    </div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card"><div class="label">Tokens</div><div class="value" id="statTokens">&mdash;</div></div>
+    <div class="stat-card"><div class="label">Messages</div><div class="value" id="statMessages">&mdash;</div></div>
+    <div class="stat-card"><div class="label">Sessions</div><div class="value" id="statSessions">&mdash;</div></div>
+    <div class="stat-card"><div class="label">Tool Calls</div><div class="value" id="statTools">&mdash;</div></div>
+    <div class="stat-card" style="grid-column: span 2">
+      <div class="label">Est. Cost</div>
+      <div class="value" id="statCost">&mdash;</div>
+    </div>
+  </div>
+
+  <div class="lb-header">Leaderboard</div>
+  <div class="leaderboard" id="leaderboard">
+    <div class="loading">Loading leaderboard...</div>
+  </div>
+
+  <div class="activity-section">
+    <div class="activity-header">
+      <span class="activity-label">Activity</span>
+      <div class="activity-toggle">
+        <button class="active" data-range="1h">1H</button>
+        <button data-range="1d">1D</button>
+        <button data-range="1w">1W</button>
+      </div>
+    </div>
+    <div class="activity-grid" id="activityGrid"></div>
+    <div class="activity-summary" id="activitySummary"></div>
+  </div>
+
+  <div class="footer">
+    <a id="linkFull" href="#">View full rankings &rarr;</a>
+  </div>
+</div>
+
+<script>
+const { invoke } = window.__TAURI__.core;
+const { listen } = window.__TAURI__.event;
+
+let myUserHash = null;
+
+function fmt(n) {
+  if (n == null) return '\u2014';
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return n.toLocaleString();
+}
+
+async function loadIdentity() {
+  try {
+    const id = await invoke('get_ranking_identity');
+    myUserHash = id.user_hash;
+    document.getElementById('userHash').textContent = id.user_hash.substring(0, 8) + '...';
+
+    if (!id.username) {
+      // First time user - hide username display, show edit mode immediately
+      document.getElementById('username').style.display = 'none';
+      showUsernameEdit(true);
+    } else {
+      // Existing user - show username, ensure edit mode is hidden
+      document.getElementById('username').innerHTML =
+        escHtml(id.username) + '<span class="pencil">&#9998;</span>';
+      document.getElementById('username').style.display = 'block';
+      hideUsernameEdit();
+    }
+  } catch (e) {
+    console.error('Failed to load identity:', e);
+  }
+}
+
+// --- Inline username editing ---
+const usernameDisplay = document.getElementById('username');
+const usernameInput = document.getElementById('usernameInput');
+const usernameEditRow = document.getElementById('usernameEditRow');
+const usernameError = document.getElementById('usernameError');
+const usernameFeedback = document.getElementById('usernameFeedback');
+const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+
+function showUsernameEdit(isFirstTime) {
+  const prompt = document.getElementById('usernamePrompt');
+  if (isFirstTime) {
+    prompt.classList.add('show');
+  } else {
+    prompt.classList.remove('show');
+  }
+  const current = usernameDisplay.textContent.replace('✎', '').trim();
+  usernameInput.value = current === 'Anonymous' ? '' : current;
+  usernameDisplay.style.display = 'none';
+  usernameEditRow.style.display = 'flex';
+  usernameError.style.display = 'none';
+  usernameInput.classList.remove('invalid');
+  usernameInput.focus();
+  usernameInput.select();
+}
+
+function hideUsernameEdit() {
+  usernameEditRow.style.display = 'none';
+  usernameDisplay.style.display = 'block';
+  usernameError.style.display = 'none';
+  usernameInput.classList.remove('invalid');
+  document.getElementById('usernamePrompt').classList.remove('show');
+}
+
+function validateUsername(val) {
+  if (!val) return 'Username is required';
+  if (val.length < 3) return 'Min 3 characters';
+  if (val.length > 20) return 'Max 20 characters';
+  if (!usernameRegex.test(val)) return 'Only letters, numbers, underscores';
+  return null;
+}
+
+usernameDisplay.addEventListener('click', showUsernameEdit);
+
+usernameInput.addEventListener('input', () => {
+  const err = validateUsername(usernameInput.value.trim());
+  if (err) {
+    usernameInput.classList.add('invalid');
+    usernameError.textContent = err;
+    usernameError.style.display = 'block';
+  } else {
+    usernameInput.classList.remove('invalid');
+    usernameError.style.display = 'none';
+  }
+});
+
+let savingUsername = false;
+async function saveUsername() {
+  if (savingUsername) return;
+  const val = usernameInput.value.trim();
+  const err = validateUsername(val);
+  if (err) {
+    usernameInput.classList.add('invalid');
+    usernameError.textContent = err;
+    usernameError.style.display = 'block';
+    return;
+  }
+  if (!myUserHash) return;
+  savingUsername = true;
+  try {
+    await invoke('set_username', { userHash: myUserHash, username: val });
+    usernameDisplay.innerHTML = escHtml(val) + '<span class="pencil">&#9998;</span>';
+    hideUsernameEdit();
+    usernameFeedback.classList.add('show');
+    setTimeout(() => usernameFeedback.classList.remove('show'), 1500);
+  } catch (e) {
+    console.error('Failed to save username:', e);
+    usernameError.textContent = e.toString().replace(/^Error:\s*/, '');
+    usernameError.style.display = 'block';
+  } finally {
+    savingUsername = false;
+  }
+}
+
+document.getElementById('btnSaveUsername').addEventListener('click', (e) => {
+  e.preventDefault();
+  saveUsername();
+});
+
+usernameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); saveUsername(); }
+  if (e.key === 'Escape') { hideUsernameEdit(); }
+});
+// Remove blur-to-save to avoid conflicts with the save button click
+// Instead, clicking outside will cancel via a document listener
+document.addEventListener('click', (e) => {
+  if (usernameEditRow.style.display === 'flex' &&
+      !usernameEditRow.contains(e.target) &&
+      !usernameDisplay.contains(e.target)) {
+    hideUsernameEdit();
+  }
+});
+
+// --- Copy hash to clipboard ---
+document.getElementById('userHash').addEventListener('click', () => {
+  if (!myUserHash) return;
+  navigator.clipboard.writeText(myUserHash);
+  const fb = document.getElementById('hashFeedback');
+  fb.classList.add('show');
+  setTimeout(() => fb.classList.remove('show'), 1500);
+});
+
+// --- Autostart toggle ---
+(async () => {
+  try {
+    const enabled = await invoke('get_autostart_enabled');
+    document.getElementById('autostart').checked = enabled;
+  } catch (e) {
+    console.error('Failed to load autostart:', e);
+  }
+})();
+
+document.getElementById('autostart').addEventListener('change', async (e) => {
+  try {
+    await invoke('set_autostart_enabled', { enabled: e.target.checked });
+  } catch (err) {
+    console.error('Failed to toggle autostart:', err);
+    e.target.checked = !e.target.checked;
+  }
+});
+
+// --- Existing functionality ---
+
+const TIERS = [
+  { id: 'bronze',   name: 'Bronze',   icon: '\u{1f944}', min: 0 },
+  { id: 'silver',   name: 'Silver',   icon: '\u{1fa99}', min: 50 },
+  { id: 'gold',     name: 'Gold',     icon: '\u{1f3c6}', min: 200 },
+  { id: 'platinum', name: 'Platinum', icon: '\u{1f48e}', min: 500 },
+  { id: 'diamond',  name: 'Diamond',  icon: '\u{2b50}',  min: 1000 },
+];
+
+function getTierFromScore(score) {
+  for (let i = TIERS.length - 1; i >= 0; i--) {
+    if (score >= TIERS[i].min) return TIERS[i];
+  }
+  return TIERS[0];
+}
+
+async function loadMyRanking() {
+  if (!myUserHash) return;
+  try {
+    const data = await invoke('get_my_ranking', { userHash: myUserHash });
+    if (!data) return;
+
+    // Update tier badge
+    const tierBadge = document.getElementById('tierBadge');
+    const tier = data.tier
+      ? getTierFromScore(data.tier.tier === 'Diamond' ? 1000 : data.tier.tier === 'Platinum' ? 500 : data.tier.tier === 'Gold' ? 200 : data.tier.tier === 'Silver' ? 50 : 0)
+      : getTierFromScore(data.metrics ? data.metrics.weighted_score : 0);
+    tierBadge.className = 'tier-badge tier-' + tier.id;
+    tierBadge.textContent = tier.icon + ' ' + tier.name;
+
+    // Update rank number
+    const rankEl = document.getElementById('rankNumber');
+    const ranks = data.ranks || {};
+    const weightedRank = ranks.weighted;
+    if (weightedRank) {
+      const rank = weightedRank.rank || weightedRank;
+      const percentile = weightedRank.percentile;
+      rankEl.textContent = '#' + rank + (percentile ? ' \u00b7 Top ' + percentile + '%' : ' globally');
+    }
+  } catch (e) {
+    console.error('Failed to load ranking:', e);
+  }
+}
+
+async function loadLeaderboard() {
+  try {
+    const entries = await invoke('get_leaderboard');
+    const container = document.getElementById('leaderboard');
+    if (!entries || entries.length === 0) {
+      container.innerHTML = '<div class="loading">No entries yet</div>';
+      return;
+    }
+    container.innerHTML = entries.slice(0, 10).map((e, i) => {
+      const rank = i + 1;
+      const rankClass = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
+      const isMe = myUserHash && e.username && e.username === myUserHash;
+      return '<div class="lb-row ' + (isMe ? 'me' : '') + '">' +
+        '<div class="lb-rank ' + rankClass + '">' + rank + '</div>' +
+        '<div class="lb-name">' + escHtml(e.username) + '</div>' +
+        '<div class="lb-score">' + fmt(e.points) + '</div>' +
+      '</div>';
+    }).join('');
+  } catch (e) {
+    console.error('Failed to load leaderboard:', e);
+    document.getElementById('leaderboard').innerHTML = '<div class="loading">Failed to load</div>';
+  }
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '?';
+  return d.innerHTML;
+}
+
+// --- Activity tile grid ---
+let currentRange = '1h';
+let lastStatsData = null;
+
+document.querySelector('.activity-toggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-range]');
+  if (!btn) return;
+  currentRange = btn.dataset.range;
+  document.querySelectorAll('.activity-toggle button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderActivityGrid();
+});
+
+function calculateThresholds(counts) {
+  const nonZero = counts.filter(c => c > 0).sort((a, b) => a - b);
+  if (nonZero.length === 0) return [0, 0, 0, 0];
+  const q1 = nonZero[Math.floor(nonZero.length * 0.25)] || nonZero[0];
+  const q2 = nonZero[Math.floor(nonZero.length * 0.5)] || q1;
+  const q3 = nonZero[Math.floor(nonZero.length * 0.75)] || q2;
+  return [1, q1, q2, q3];
+}
+
+function getLevel(count, thresholds) {
+  if (count === 0) return 0;
+  if (count <= thresholds[1]) return 1;
+  if (count <= thresholds[2]) return 2;
+  if (count <= thresholds[3]) return 3;
+  return 4;
+}
+
+function getOverlayMaxCols() {
+  const grid = document.getElementById('activityGrid');
+  const w = grid.clientWidth;
+  if (w <= 0) return 15;
+  return Math.floor((w + 2) / (10 + 2));
+}
+
+function renderHour(hourCounts) {
+  const grid = document.getElementById('activityGrid');
+  const summary = document.getElementById('activitySummary');
+  const today = new Date().toISOString().split('T')[0];
+  const counts = new Array(24).fill(0);
+  for (const [key, val] of Object.entries(hourCounts)) {
+    const colonIdx = key.lastIndexOf(':');
+    if (colonIdx === -1) {
+      // Old format fallback
+      const h = parseInt(key, 10);
+      if (h >= 0 && h < 24) counts[h] += val;
+    } else {
+      // New format: filter to today
+      const datePart = key.substring(0, colonIdx);
+      const h = parseInt(key.substring(colonIdx + 1), 10);
+      if (datePart === today && h >= 0 && h < 24) counts[h] += val;
+    }
+  }
+  const thresholds = calculateThresholds(counts);
+  grid.style.gridTemplateRows = 'repeat(4, 10px)';
+  grid.style.gridTemplateColumns = 'repeat(6, 10px)';
+  grid.style.gridAutoFlow = 'column';
+  grid.innerHTML = counts.map((c, h) => {
+    const period = h < 12 ? 'AM' : 'PM';
+    const displayH = h % 12 === 0 ? 12 : h % 12;
+    return '<div class="activity-tile" data-level="' + getLevel(c, thresholds) + '" title="' + displayH + ' ' + period + ': ' + c + ' msgs"></div>';
+  }).join('');
+  const activeHours = counts.filter(c => c > 0).length;
+  summary.textContent = activeHours + ' active hour' + (activeHours !== 1 ? 's' : '') + ' today';
+}
+
+function renderDaily(dailyActivity) {
+  const grid = document.getElementById('activityGrid');
+  const summary = document.getElementById('activitySummary');
+  const today = new Date();
+  const maxCols = getOverlayMaxCols();
+  const maxTiles = maxCols * 4;
+  const actMap = {};
+  for (const e of (dailyActivity || [])) actMap[e.date] = e.messageCount || 0;
+  const allDates = Object.keys(actMap).sort();
+  const numDays = allDates.length > 0 ? Math.ceil((today - new Date(allDates[0])) / 86400000) + 1 : 30;
+  const days = [];
+  for (let i = numDays - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split('T')[0];
+    days.push({ date: dateStr, count: actMap[dateStr] || 0, dayLabel: d.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' }) });
+  }
+  const trimmed = days.length > maxTiles ? days.slice(-maxTiles) : days;
+  const totalSlots = Math.ceil(trimmed.length / 4) * 4;
+  const padCount = totalSlots - trimmed.length;
+  const counts = trimmed.map(d => d.count);
+  const thresholds = calculateThresholds(counts);
+  const numGridCols = Math.ceil(totalSlots / 4);
+  grid.style.gridTemplateRows = 'repeat(4, 10px)';
+  grid.style.gridTemplateColumns = 'repeat(' + numGridCols + ', 10px)';
+  grid.style.gridAutoFlow = 'column';
+  let html = '';
+  for (let i = 0; i < padCount; i++) html += '<div class="activity-tile" data-level="0"></div>';
+  html += trimmed.map(d =>
+    '<div class="activity-tile" data-level="' + getLevel(d.count, thresholds) + '" title="' + d.dayLabel + ': ' + d.count + ' msgs"></div>'
+  ).join('');
+  grid.innerHTML = html;
+  const activeDays = counts.filter(c => c > 0).length;
+  summary.textContent = activeDays + ' active day' + (activeDays !== 1 ? 's' : '');
+}
+
+function renderWeekly(dailyActivity) {
+  const grid = document.getElementById('activityGrid');
+  const summary = document.getElementById('activitySummary');
+  const today = new Date();
+  const maxCols = getOverlayMaxCols();
+  const maxTiles = maxCols * 4;
+  const actMap = {};
+  for (const e of (dailyActivity || [])) actMap[e.date] = e.messageCount || 0;
+  const allDates = Object.keys(actMap).sort();
+  const numDays = allDates.length > 0 ? Math.ceil((today - new Date(allDates[0])) / 86400000) + 1 : 30;
+  const days = [];
+  for (let i = numDays - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    days.push({ date: d.toISOString().split('T')[0], count: actMap[d.toISOString().split('T')[0]] || 0 });
+  }
+  // Aggregate into weeks
+  const weeks = [];
+  for (let i = 0; i < days.length; i += 7) {
+    const chunk = days.slice(i, i + 7);
+    const total = chunk.reduce((s, d) => s + d.count, 0);
+    const startDate = new Date(chunk[0].date);
+    weeks.push({ count: total, weekLabel: 'Week of ' + startDate.toLocaleDateString('en', { month: 'short', day: 'numeric' }) });
+  }
+  const trimmed = weeks.length > maxTiles ? weeks.slice(-maxTiles) : weeks;
+  const totalSlots = Math.ceil(trimmed.length / 4) * 4;
+  const padCount = totalSlots - trimmed.length;
+  const counts = trimmed.map(w => w.count);
+  const thresholds = calculateThresholds(counts);
+  const numGridCols = Math.ceil(totalSlots / 4);
+  grid.style.gridTemplateRows = 'repeat(4, 10px)';
+  grid.style.gridTemplateColumns = 'repeat(' + numGridCols + ', 10px)';
+  grid.style.gridAutoFlow = 'column';
+  let html = '';
+  for (let i = 0; i < padCount; i++) html += '<div class="activity-tile" data-level="0"></div>';
+  html += trimmed.map(w =>
+    '<div class="activity-tile" data-level="' + getLevel(w.count, thresholds) + '" title="' + w.weekLabel + ': ' + w.count + ' msgs"></div>'
+  ).join('');
+  grid.innerHTML = html;
+  const activeWeeks = counts.filter(c => c > 0).length;
+  summary.textContent = activeWeeks + ' active week' + (activeWeeks !== 1 ? 's' : '');
+}
+
+function renderActivityGrid() {
+  if (!lastStatsData) return;
+  if (currentRange === '1h') renderHour(lastStatsData.hourCounts || {});
+  else if (currentRange === '1d') renderDaily(lastStatsData.dailyActivity || []);
+  else renderWeekly(lastStatsData.dailyActivity || []);
+}
+
+const PRICING = [
+  { match: 'opus-4-6',  input: 5,    output: 25,   cacheRead: 0.50, cacheWrite: 6.25 },
+  { match: 'opus-4-5',  input: 5,    output: 25,   cacheRead: 0.50, cacheWrite: 6.25 },
+  { match: 'opus-4-1',  input: 15,   output: 75,   cacheRead: 1.50, cacheWrite: 18.75 },
+  { match: 'opus-4-0',  input: 15,   output: 75,   cacheRead: 1.50, cacheWrite: 18.75 },
+  { match: 'opus-4',    input: 15,   output: 75,   cacheRead: 1.50, cacheWrite: 18.75 },
+  { match: 'opus-3',    input: 15,   output: 75,   cacheRead: 1.50, cacheWrite: 18.75 },
+  { match: 'sonnet',    input: 3,    output: 15,   cacheRead: 0.30, cacheWrite: 3.75 },
+  { match: 'haiku-4-5', input: 1,    output: 5,    cacheRead: 0.10, cacheWrite: 1.25 },
+  { match: 'haiku-4',   input: 1,    output: 5,    cacheRead: 0.10, cacheWrite: 1.25 },
+  { match: 'haiku-3-5', input: 0.80, output: 4,    cacheRead: 0.08, cacheWrite: 1 },
+  { match: 'haiku-3',   input: 0.25, output: 1.25, cacheRead: 0.03, cacheWrite: 0.30 },
+];
+const FALLBACK_PRICE = { input: 3, output: 15, cacheRead: 0.30, cacheWrite: 3.75 };
+
+function estimateCost(modelUsage) {
+  let cost = 0;
+  for (const [model, usage] of Object.entries(modelUsage || {})) {
+    const tier = PRICING.find(p => model.includes(p.match)) || FALLBACK_PRICE;
+    cost += ((usage.inputTokens || 0) * tier.input +
+             (usage.outputTokens || 0) * tier.output +
+             (usage.cacheReadInputTokens || 0) * tier.cacheRead +
+             (usage.cacheCreationInputTokens || 0) * tier.cacheWrite) / 1_000_000;
+  }
+  return cost;
+}
+
+function fmtCost(cost) {
+  if (cost < 0.01) return '$0.00';
+  if (cost >= 1000) return '$' + (cost / 1000).toFixed(1) + 'K';
+  return '$' + cost.toFixed(2);
+}
+
+function updateStats(data) {
+  if (!data || !data.stats) return;
+  const s = data.stats;
+  const totalTokens = Object.values(s.modelUsage || {}).reduce((sum, m) =>
+    sum + (m.inputTokens || 0) + (m.outputTokens || 0) + (m.cacheReadInputTokens || 0) + (m.cacheCreationInputTokens || 0), 0);
+  const totalTools = (s.dailyActivity || []).reduce((sum, d) => sum + (d.toolCallCount || 0), 0);
+
+  document.getElementById('statTokens').textContent = fmt(totalTokens);
+  document.getElementById('statMessages').textContent = fmt(s.totalMessages);
+  document.getElementById('statSessions').textContent = fmt(s.totalSessions);
+  document.getElementById('statTools').textContent = fmt(totalTools);
+  document.getElementById('statCost').textContent = fmtCost(estimateCost(s.modelUsage));
+
+  lastStatsData = s;
+  renderActivityGrid();
+}
+
+document.getElementById('btnHide').addEventListener('click', () => invoke('hide_overlay'));
+document.getElementById('linkFull').addEventListener('click', (e) => {
+  e.preventDefault();
+  invoke('open_ranking_website');
+});
+
+listen('metrics-updated', (event) => updateStats(event.payload));
+
+(async () => {
+  await loadIdentity();
+  loadMyRanking();
+  loadLeaderboard();
+  try {
+    const dashboard = await invoke('get_dashboard_data');
+    updateStats(dashboard);
+  } catch (e) { console.error('Failed to load dashboard:', e); }
+})();
+
+setInterval(() => { loadLeaderboard(); loadMyRanking(); }, 120000);
+</script>
+</body>
+</html>

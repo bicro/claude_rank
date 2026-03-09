@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClaudeRank</title>
+    <link rel="icon" type="image/png" href="images/logo.png">
+    <link rel="stylesheet" href="css/style.css">
+    <script>if(localStorage.getItem('theme')==='dark')document.documentElement.setAttribute('data-theme','dark');</script>
+</head>
+<body>
+    <header class="site-header">
+        <h1><a href="/" style="color:inherit;text-decoration:none"><img src="images/logo.png" alt="ClaudeRank logo" class="site-logo">ClaudeRank</a></h1>
+        <nav class="header-nav" id="headerNav">
+            <div class="header-search">
+                <input type="text" id="findInput" placeholder="Search username or hash..." onkeydown="if(event.key==='Enter')findMe()">
+                <button onclick="findMe()">&rarr;</button>
+            </div>
+            <a href="https://discord.gg/mCkyz9UCCd" class="discord-link" target="_blank"><svg width="16" height="12" viewBox="0 0 71 55" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M60.1 4.9A58.5 58.5 0 0045.4.2a.2.2 0 00-.2.1 40.8 40.8 0 00-1.8 3.7 54 54 0 00-16.2 0A37.4 37.4 0 0025.4.3a.2.2 0 00-.2-.1A58.4 58.4 0 0010.5 4.9a.2.2 0 00-.1.1C1.5 18.7-.9 32.2.3 45.5v.1a58.8 58.8 0 0017.7 9a.2.2 0 00.3-.1 42 42 0 003.6-5.9.2.2 0 00-.1-.3 38.8 38.8 0 01-5.5-2.6.2.2 0 01 0-.4l1.1-.9a.2.2 0 01.2 0 42 42 0 0035.6 0 .2.2 0 01.2 0l1.1.9a.2.2 0 010 .4 36.4 36.4 0 01-5.5 2.6.2.2 0 00-.1.3 47.2 47.2 0 003.6 5.9.2.2 0 00.3.1 58.6 58.6 0 0017.7-9v-.1c1.4-15.2-2.4-28.4-10-40.1a.2.2 0 00-.1-.1zM23.7 37.3c-3.5 0-6.3-3.2-6.3-7s2.8-7 6.3-7 6.4 3.2 6.3 7-2.8 7-6.3 7zm23.3 0c-3.5 0-6.3-3.2-6.3-7s2.8-7 6.3-7 6.4 3.2 6.3 7-2.8 7-6.3 7z" fill="currentColor"/></svg>Discord</a>
+            <button id="themeToggle" onclick="toggleTheme()">dark mode</button>
+        </nav>
+        <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleMenu()" aria-label="Toggle menu">
+            <span></span><span></span><span></span>
+        </button>
+    </header>
+
+    <section class="landing-hero">
+        <h2 class="hero-typed" id="heroTyped"></h2>
+        <p>A desktop app that tracks your Claude Code token usage and ranks you on a global leaderboard.</p>
+        <div style="display:flex;gap:12px;justify-content:center;margin-top:20px;flex-wrap:wrap">
+            <a href="https://github.com/bicro/claude_rank/releases/latest/download/OtoDesktop-macOS.dmg" class="btn hero-download-btn" style="display:inline-flex;align-items:center;gap:8px;margin-top:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>Download for macOS</a>
+            <a href="https://github.com/bicro/claude_rank/releases/latest/download/OtoDesktop-Windows.msi" class="btn hero-download-btn" style="display:inline-flex;align-items:center;gap:8px;margin-top:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.48L3 12zm17-9v8.75l-10 .08V5.21L20 3zm-10 9.04l10 .08V21l-10-1.39V12.04zM3 12.49l6 .09v6.35l-6-1.17V12.49z"/></svg>Download for Windows</a>
+        </div>
+    </section>
+
+    <div id="hotUsersSection"></div>
+
+    <div style="max-width:1200px;margin:0 auto;padding:60px 24px 0">
+        <h2 style="font-size:20px;font-weight:700;padding-bottom:12px;border-bottom:1px solid #e0e0e0;margin-bottom:0">Global Rankings</h2>
+    </div>
+    <div id="topCategories" class="top-categories">
+        <div class="loading">Loading leaderboards</div>
+    </div>
+
+    <script type="module">
+        import { getLeaderboard, getHotUsers, formatNumber, formatCost, getCategoryLabel, getCategoryIcon, CATEGORIES, getTier } from './js/api.js';
+
+        async function loadLanding() {
+            const container = document.getElementById('topCategories');
+            const cards = [];
+
+            const results = await Promise.allSettled(
+                CATEGORIES.map(cat => getLeaderboard(cat, 'individual', 3, 0))
+            );
+
+            for (let i = 0; i < CATEGORIES.length; i++) {
+                const cat = CATEGORIES[i];
+                const result = results[i];
+                const label = getCategoryLabel(cat);
+                const icon = getCategoryIcon(cat);
+
+                let entriesHtml = '';
+                if (result.status === 'fulfilled' && result.value.entries.length > 0) {
+                    entriesHtml = result.value.entries.map((e, idx) => `
+                        <div class="top-entry">
+                            <div class="top-rank top-rank-${idx + 1}">${idx + 1}</div>
+                            <div class="top-entry-info">
+                                <div class="top-entry-name">
+                                    <a href="/profile.html?hash=${e.user_hash}">${e.username || 'Anonymous'}</a>
+                                </div>
+                                <div class="top-entry-value">${cat === 'cost' ? formatCost(e.value) : formatNumber(e.value)}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    entriesHtml = '<div class="top-entry"><div class="top-entry-info" style="color:var(--text-secondary)">No data yet</div></div>';
+                }
+
+                cards.push(`
+                    <div class="category-card">
+                        <div class="category-card-header">
+                            <h3>${icon} ${label}</h3>
+                            <a href="/leaderboard.html?category=${cat}">View all &rarr;</a>
+                        </div>
+                        ${entriesHtml}
+                    </div>
+                `);
+            }
+
+            container.innerHTML = cards.join('');
+        }
+
+        async function loadHotUsers() {
+            try {
+                const data = await getHotUsers(10);
+                if (!data.users || data.users.length === 0) return;
+                const container = document.getElementById('hotUsersSection');
+                const cards = data.users.map(u => {
+                    const tier = getTier(u.weighted_score);
+                    return `
+                        <div class="hot-user-card">
+                            <div class="hot-user-streak">\u{1f525} ${u.current_streak}d</div>
+                            <div class="hot-user-name">
+                                <a href="/profile.html?hash=${u.user_hash}">${u.username || 'Anonymous'}</a>
+                            </div>
+                            <div class="hot-user-meta">
+                                <span>${tier.icon}</span>
+                                <span>Lv.${u.level}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                container.innerHTML = `
+                    <section class="hot-users-section">
+                        <h3>\u{1f525} Hot Right Now</h3>
+                        <div class="hot-users-scroll">${cards}</div>
+                    </section>
+                `;
+            } catch (e) {
+                // Silent fail — hot users is optional
+            }
+        }
+
+        loadHotUsers();
+        loadLanding();
+
+        window.findMe = function() {
+            const val = document.getElementById('findInput').value.trim();
+            if (!val) return;
+            // If it looks like a UUID, go to profile by hash
+            if (val.includes('-') && val.length > 20) {
+                window.location.href = `/profile.html?hash=${encodeURIComponent(val)}`;
+            } else {
+                // Search by username — redirect to profile page which will handle lookup
+                window.location.href = `/profile.html?username=${encodeURIComponent(val)}`;
+            }
+        };
+    </script>
+    <script>
+        function toggleTheme() {
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            document.documentElement.setAttribute('data-theme', isDark ? '' : 'dark');
+            localStorage.setItem('theme', isDark ? 'light' : 'dark');
+            updateToggleLabel();
+        }
+        function updateToggleLabel() {
+            const btn = document.getElementById('themeToggle');
+            if (!btn) return;
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            btn.textContent = isDark ? 'light mode' : 'dark mode';
+        }
+        updateToggleLabel();
+    </script>
+    <script>
+        (function() {
+            const phrases = [
+                "Find out how much Anthropic money you're burning.",
+                "Competitive Claude Code is here.",
+                "Competitive vibe coding before GTA6",
+                "That's why I quit vibe coding...too many sweats",
+                "It's literally ranked vibe coding.",
+                "Prompt diff.",
+                "Mog your eng manager.",
+                "Token maxxing.",
+                "Ranked Claude queue.",
+                "Speak softly and carry a large context window.",
+                "Based and token-pilled.",
+                "10x Engineers HATE this site.",
+                "Join the technofeudalist arena.",
+                "Patch notes - Claude buffed again.",
+                "It's time to ride the K-curve.",
+                "What's your token elo?"
+            ];
+            const el = document.getElementById('heroTyped');
+            let phraseIdx = 0;
+            const typeSpeed = 50;
+            const deleteSpeed = 30;
+            const pauseAfterType = 10000;
+            const pauseAfterDelete = 800;
+
+            function type(text, i, cb) {
+                if (i <= text.length) {
+                    el.textContent = text.slice(0, i);
+                    el.style.animation = 'blink-caret 0.6s step-end infinite';
+                    setTimeout(() => type(text, i + 1, cb), typeSpeed);
+                } else {
+                    setTimeout(() => { el.style.animation = 'none'; el.style.borderRightColor = 'transparent'; }, 1000);
+                    setTimeout(cb, pauseAfterType);
+                }
+            }
+
+            function erase(cb) {
+                el.style.borderRightColor = '';
+                const text = el.textContent;
+                if (text.length > 0) {
+                    el.textContent = text.slice(0, -1);
+                    setTimeout(() => erase(cb), deleteSpeed);
+                } else {
+                    setTimeout(cb, pauseAfterDelete);
+                }
+            }
+
+            function loop() {
+                const phrase = phrases[phraseIdx];
+                type(phrase, 0, () => {
+                    erase(() => {
+                        phraseIdx = (phraseIdx + 1) % phrases.length;
+                        loop();
+                    });
+                });
+            }
+
+            loop();
+        })();
+    </script>
+    <script>
+        function toggleMenu() {
+            document.getElementById('headerNav').classList.toggle('open');
+            document.getElementById('hamburgerBtn').classList.toggle('open');
+        }
+        document.addEventListener('click', function(e) {
+            var nav = document.getElementById('headerNav');
+            var btn = document.getElementById('hamburgerBtn');
+            if (nav && nav.classList.contains('open') &&
+                !nav.contains(e.target) && !btn.contains(e.target)) {
+                nav.classList.remove('open');
+                btn.classList.remove('open');
+            }
+        });
+    </script>
+</body>
+</html>

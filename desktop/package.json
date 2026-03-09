@@ -1,0 +1,30 @@
+{
+  "name": "claude_rank",
+  "version": "0.1.0",
+  "description": "A global leaderboard system for tracking Claude API usage. Compete with other Claude users, earn badges, join teams, and climb the ranks.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bicro/claude_rank"
+  },
+  "keywords": [
+    "rank",
+    "ai",
+    "desktop",
+    "tauri",
+    "claude"
+  ],
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:mac": "bash scripts/build_mac.sh",
+    "build:windows": "tauri build --target x86_64-pc-windows-msvc"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/cli": "^2.10.0",
+    "acorn": "^8.15.0"
+  }
+}
