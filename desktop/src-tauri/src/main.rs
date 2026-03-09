@@ -323,7 +323,7 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
         "overlay",
         tauri::WebviewUrl::App("overlay.html".into()),
     )
-    .title("Oto Rankings")
+    .title("ClaudeRank")
     .visible(false)
     .transparent(true)
     .decorations(false)
@@ -555,7 +555,7 @@ fn main() {
         .manage(Arc::clone(&stats_points))
         .manage(Arc::clone(&stats_ranking))
         .setup(move |app| {
-            info!("=== Oto Rankings Widget Starting ===");
+            info!("=== ClaudeRank Widget Starting ===");
 
             // Create tray menu
             let toggle_item =
@@ -626,7 +626,7 @@ fn main() {
             tauri_plugin_log::Builder::new()
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::LogDir {
-                        file_name: Some("oto.log".into()),
+                        file_name: Some("clauderank.log".into()),
                     },
                 ))
                 .level(log::LevelFilter::Info)

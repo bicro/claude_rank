@@ -1,4 +1,4 @@
-id: org.flatpak.oto
+id: org.flatpak.clauderank
 runtime: org.freedesktop.Platform
 runtime-version: '25.08'
 sdk: org.freedesktop.Sdk

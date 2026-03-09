@@ -16,7 +16,7 @@ if DATABASE_URL:
         DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 else:
     # Local dev: use SQLite
-    DATABASE_URL = "sqlite+aiosqlite:///./oto_ranking.db"
+    DATABASE_URL = "sqlite+aiosqlite:///./clauderank.db"
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

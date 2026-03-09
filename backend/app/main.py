@@ -17,7 +17,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Oto Ranking API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="ClaudeRank API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,7 +43,7 @@ app.include_router(hot.router)
 
 @app.get("/api")
 async def root():
-    return {"service": "Oto Ranking API", "version": "1.0.0"}
+    return {"service": "ClaudeRank API", "version": "1.0.0"}
 
 # Serve the static website (must be after API routes)
 # Works from both local dev (backend/app/main.py → ../../website) and repo root
