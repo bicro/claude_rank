@@ -16,10 +16,15 @@ pub struct MetricsEngine {
 
 impl MetricsEngine {
     pub fn new() -> Self {
-        Self {
-            data: DashboardData::default(),
-            tracker: JsonlTracker::new(),
+        let mut tracker = JsonlTracker::new();
+        let mut data = DashboardData::default();
+
+        // Load cached stats immediately for instant UI display
+        if let Some(cached_stats) = tracker.load_cache() {
+            data.stats = cached_stats;
         }
+
+        Self { data, tracker }
     }
 
     pub fn refresh(&mut self) {
