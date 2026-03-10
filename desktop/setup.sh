@@ -1,5 +1,5 @@
 #!/bin/bash
-# Oto Desktop - Developer Setup
+# ClaudeRank Desktop - Developer Setup
 # Platforms: macOS, Linux, WSL (Windows users: use WSL)
 
 set -e
@@ -29,7 +29,7 @@ ARCH=$(uname -m | sed 's/arm64/aarch64/;s/x86_64/x86_64/')
 [[ -f "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"
 [[ -d "$HOME/.bun/bin" ]] && export PATH="$HOME/.bun/bin:$PATH"
 
-echo -e "\n${BLUE}Oto Desktop Setup${NC} ($OS $ARCH)\n"
+echo -e "\n${BLUE}ClaudeRank Desktop Setup${NC} ($OS $ARCH)\n"
 
 # Check Rust
 if command -v rustc &>/dev/null; then

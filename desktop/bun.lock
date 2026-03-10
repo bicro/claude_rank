@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "oto-pure",
+      "name": "clauderank",
       "devDependencies": {
         "@tauri-apps/api": "^2.9.0",
         "@tauri-apps/cli": "^2.10.0",

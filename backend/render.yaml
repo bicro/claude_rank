@@ -1,16 +1,16 @@
 services:
   - type: web
-    name: oto-ranking-api
+    name: clauderank-api
     runtime: python
     buildCommand: pip install -r backend/requirements.txt
     startCommand: cd backend && gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: oto-ranking-db
+          name: clauderank-db
           property: connectionString
 
 databases:
-  - name: oto-ranking-db
+  - name: clauderank-db
     plan: free
-    databaseName: oto_ranking
+    databaseName: clauderank
