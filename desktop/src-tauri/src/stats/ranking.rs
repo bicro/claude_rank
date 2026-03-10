@@ -11,8 +11,8 @@ use super::parser::StatsCache;
 use super::points::PointsState;
 
 fn ranking_api_base() -> String {
-    std::env::var("ranking_api_base()")
-        .unwrap_or_else(|_| "https://claude-rank.onrender.com".to_string())
+    std::env::var("RANKING_API_BASE")
+        .unwrap_or_else(|_| "https://clauderank.com".to_string())
 }
 const SYNC_THROTTLE_SECS: u64 = 300; // 5 minutes
 
