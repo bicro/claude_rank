@@ -53,6 +53,8 @@ pub struct SyncSettings {
     pub model_names: bool,
     #[serde(default = "default_true")]
     pub hour_activity: bool,
+    #[serde(default = "default_true")]
+    pub concurrency_activity: bool,
 }
 
 fn default_true() -> bool {
@@ -70,6 +72,7 @@ fn default_sync_settings() -> SyncSettings {
         daily_breakdown: true,
         model_names: true,
         hour_activity: true,
+        concurrency_activity: true,
     }
 }
 
@@ -86,6 +89,8 @@ pub(crate) struct SyncPayload {
     daily_activity: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     hour_counts: Option<HashMap<String, u64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    concurrency_histogram: Option<HashMap<String, HashMap<u32, u32>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     prompt_hashes: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -224,6 +229,13 @@ impl RankingEngine {
             None
         };
 
+        // Concurrency histogram
+        let concurrency_histogram = if settings.concurrency_activity {
+            Some(stats.concurrency_histogram.clone())
+        } else {
+            None
+        };
+
         SyncPayload {
             user_hash: self.config.user_hash.clone(),
             sync_settings: settings.clone(),
@@ -231,6 +243,7 @@ impl RankingEngine {
             token_breakdown,
             daily_activity,
             hour_counts,
+            concurrency_histogram,
             prompt_hashes: None, // Populated from sessions if enabled
             prompts: None,       // Populated from sessions if enabled
             tool_names: None,    // Could be populated from stats

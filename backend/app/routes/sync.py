@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db, DATABASE_URL
-from app.models import User, UserMetrics, MetricsHistory, MetricsHourly
+from app.models import User, UserMetrics, MetricsHistory, MetricsHourly, ConcurrencyHistogram
 from app.services.ranking import compute_weighted_score
 from app.services.badge_engine import (
     evaluate_milestone_badges,
@@ -66,6 +66,7 @@ class SyncRequest(BaseModel):
     token_breakdown: Optional[Dict] = None
     daily_activity: Optional[List] = None
     hour_counts: Optional[Dict] = None
+    concurrency_histogram: Optional[Dict[str, Dict[str, int]]] = None
     prompt_hashes: Optional[List[str]] = None
     prompts: Optional[List[str]] = None
     tool_names: Optional[List[str]] = None
@@ -217,6 +218,39 @@ async def sync_metrics(req: SyncRequest, db: AsyncSession = Depends(get_db)):
                     snapshot_date=entry_date,
                     daily_messages=msg_count,
                     daily_tool_calls=tool_count,
+                ))
+
+    # Persist concurrency_histogram: per-hour session concurrency
+    if req.concurrency_histogram:
+        import json
+        for hour_key, histogram in req.concurrency_histogram.items():
+            try:
+                if ':' in hour_key:
+                    # Format: "2026-03-05:14" → parse date and hour
+                    parts = hour_key.rsplit(':', 1)
+                    d = date.fromisoformat(parts[0])
+                    h = int(parts[1])
+                    snapshot_hour = datetime(d.year, d.month, d.day, h, 0, 0)
+                else:
+                    continue
+            except (ValueError, TypeError):
+                continue
+            if not (0 <= h <= 23) or not histogram:
+                continue
+            histogram_json = json.dumps(histogram)
+            concurrency_stmt = select(ConcurrencyHistogram).where(
+                ConcurrencyHistogram.user_hash == req.user_hash,
+                ConcurrencyHistogram.snapshot_hour == snapshot_hour,
+            )
+            concurrency_result = await db.execute(concurrency_stmt)
+            existing_concurrency = concurrency_result.scalar_one_or_none()
+            if existing_concurrency:
+                existing_concurrency.histogram = histogram_json
+            else:
+                db.add(ConcurrencyHistogram(
+                    user_hash=req.user_hash,
+                    snapshot_hour=snapshot_hour,
+                    histogram=histogram_json,
                 ))
 
     await db.flush()

@@ -29,6 +29,9 @@ pub struct StatsCache {
     pub hour_counts: HashMap<String, u64>,
     #[serde(default)]
     pub total_speculation_time_saved_ms: u64,
+    /// Concurrency histogram: Key is "YYYY-MM-DD:HH", Value is {session_count: minutes_with_that_count}
+    #[serde(default)]
+    pub concurrency_histogram: HashMap<String, HashMap<u32, u32>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -218,6 +218,14 @@
                             ${rankDisplay(ranks.tools)}
                         </div>
                         <div class="stat-card">
+                            <div class="label">Max Concurrent</div>
+                            <div class="value">${m.max_concurrent || '\u2014'}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Concurrent Mins</div>
+                            <div class="value">${m.concurrent_mins > 0 ? m.concurrent_mins + 'm' : '\u2014'}</div>
+                        </div>
+                        <div class="stat-card">
                             <div class="label">Weighted Score</div>
                             <div class="value">${m.weighted_score.toFixed(1)}</div>
                             ${rankDisplay(ranks.weighted)}

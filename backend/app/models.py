@@ -117,3 +117,14 @@ class UserBadge(Base):
 
     user: Mapped["User"] = relationship(back_populates="badges")
     badge: Mapped["Badge"] = relationship()
+
+
+class ConcurrencyHistogram(Base):
+    __tablename__ = "concurrency_histogram"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_hash: Mapped[str] = mapped_column(String(36), ForeignKey("users.user_hash"))
+    snapshot_hour: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    histogram: Mapped[str] = mapped_column(Text)  # JSON: {"1": 20, "2": 30}
+
+    __table_args__ = (UniqueConstraint("user_hash", "snapshot_hour"),)

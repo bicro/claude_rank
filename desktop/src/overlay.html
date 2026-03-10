@@ -234,6 +234,8 @@
     <div class="stat-card"><div class="label">Messages</div><div class="value" id="statMessages">&mdash;</div></div>
     <div class="stat-card"><div class="label">Sessions</div><div class="value" id="statSessions">&mdash;</div></div>
     <div class="stat-card"><div class="label">Tool Calls</div><div class="value" id="statTools">&mdash;</div></div>
+    <div class="stat-card"><div class="label">Max Concurrent</div><div class="value" id="statMaxConcurrent">&mdash;</div></div>
+    <div class="stat-card"><div class="label">Concurrent Mins</div><div class="value" id="statConcurrentMins">&mdash;</div></div>
     <div class="stat-card" style="grid-column: span 2">
       <div class="label">Est. Cost</div>
       <div class="value" id="statCost">&mdash;</div>
@@ -252,6 +254,7 @@
         <button class="active" data-range="1h">1H</button>
         <button data-range="1d">1D</button>
         <button data-range="1w">1W</button>
+        <button data-range="cc">CC</button>
       </div>
     </div>
     <div class="activity-grid" id="activityGrid"></div>
@@ -650,11 +653,78 @@ function renderWeekly(dailyActivity) {
   summary.textContent = activeWeeks + ' active week' + (activeWeeks !== 1 ? 's' : '');
 }
 
+function renderConcurrency(concurrencyHistogram) {
+  const grid = document.getElementById('activityGrid');
+  const summary = document.getElementById('activitySummary');
+  const today = new Date().toISOString().split('T')[0];
+
+  // Build 24-hour data with peak concurrency for today
+  const hourData = new Array(24).fill(null).map(() => ({ peak: 0, histogram: {} }));
+
+  for (const [key, histogram] of Object.entries(concurrencyHistogram || {})) {
+    const colonIdx = key.lastIndexOf(':');
+    if (colonIdx === -1) continue;
+    const datePart = key.substring(0, colonIdx);
+    const h = parseInt(key.substring(colonIdx + 1), 10);
+    if (datePart === today && h >= 0 && h < 24) {
+      // Find peak concurrency and store histogram
+      let peak = 0;
+      for (const [concurrency, minutes] of Object.entries(histogram)) {
+        const c = parseInt(concurrency, 10);
+        if (c > peak) peak = c;
+      }
+      hourData[h] = { peak, histogram };
+    }
+  }
+
+  // Color levels based on peak concurrency
+  // Level 0: No activity, Level 1: 1 session, Level 2: 2 sessions, Level 3: 3-4 sessions, Level 4: 5+ sessions
+  function getConcurrencyLevel(peak) {
+    if (peak === 0) return 0;
+    if (peak === 1) return 1;
+    if (peak === 2) return 2;
+    if (peak <= 4) return 3;
+    return 4;
+  }
+
+  grid.style.gridTemplateRows = 'repeat(4, 10px)';
+  grid.style.gridTemplateColumns = 'repeat(6, 10px)';
+  grid.style.gridAutoFlow = 'column';
+
+  grid.innerHTML = hourData.map((data, h) => {
+    const period = h < 12 ? 'AM' : 'PM';
+    const displayH = h % 12 === 0 ? 12 : h % 12;
+
+    // Build tooltip with histogram breakdown
+    let tooltip = displayH + ' ' + period + ': ';
+    if (data.peak === 0) {
+      tooltip += 'No activity';
+    } else {
+      const parts = [];
+      for (const [concurrency, minutes] of Object.entries(data.histogram)) {
+        parts.push(concurrency + ' session' + (concurrency === '1' ? '' : 's') + ' (' + minutes + 'm)');
+      }
+      tooltip += parts.join(', ');
+    }
+
+    return '<div class="activity-tile" data-level="' + getConcurrencyLevel(data.peak) + '" title="' + tooltip + '"></div>';
+  }).join('');
+
+  // Find max peak for today
+  const maxPeak = Math.max(...hourData.map(d => d.peak));
+  if (maxPeak > 0) {
+    summary.textContent = 'Peak: ' + maxPeak + ' concurrent session' + (maxPeak !== 1 ? 's' : '') + ' today';
+  } else {
+    summary.textContent = 'No concurrent sessions today';
+  }
+}
+
 function renderActivityGrid() {
   if (!lastStatsData) return;
   if (currentRange === '1h') renderHour(lastStatsData.hourCounts || {});
   else if (currentRange === '1d') renderDaily(lastStatsData.dailyActivity || []);
-  else renderWeekly(lastStatsData.dailyActivity || []);
+  else if (currentRange === '1w') renderWeekly(lastStatsData.dailyActivity || []);
+  else if (currentRange === 'cc') renderConcurrency(lastStatsData.concurrencyHistogram || {});
 }
 
 const PRICING = [
@@ -702,6 +772,27 @@ function updateStats(data) {
   document.getElementById('statSessions').textContent = fmt(s.totalSessions);
   document.getElementById('statTools').textContent = fmt(totalTools);
   document.getElementById('statCost').textContent = fmtCost(estimateCost(s.modelUsage));
+
+  // Compute concurrency stats for past day
+  const today = new Date().toISOString().split('T')[0];
+  let maxConcurrent = 0;
+  let concurrentMins = 0;
+
+  for (const [key, histogram] of Object.entries(s.concurrencyHistogram || {})) {
+    const colonIdx = key.lastIndexOf(':');
+    if (colonIdx === -1) continue;
+    const datePart = key.substring(0, colonIdx);
+    if (datePart !== today) continue;
+
+    for (const [sessions, minutes] of Object.entries(histogram)) {
+      const sessionCount = parseInt(sessions, 10);
+      if (sessionCount > maxConcurrent) maxConcurrent = sessionCount;
+      if (sessionCount > 1) concurrentMins += minutes;
+    }
+  }
+
+  document.getElementById('statMaxConcurrent').textContent = maxConcurrent || '\u2014';
+  document.getElementById('statConcurrentMins').textContent = concurrentMins > 0 ? concurrentMins + 'm' : '\u2014';
 
   lastStatsData = s;
   renderActivityGrid();

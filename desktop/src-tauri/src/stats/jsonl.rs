@@ -462,6 +462,108 @@ fn parse_jsonl_file(path: &PathBuf, is_main: bool) -> SessionStats {
     stats
 }
 
+// ── Concurrency Histogram ──
+
+fn compute_concurrency_histogram(sessions: &[&SessionStats]) -> HashMap<String, HashMap<u32, u32>> {
+    use chrono::{Duration, NaiveDateTime, TimeZone};
+
+    let mut histogram: HashMap<String, HashMap<u32, u32>> = HashMap::new();
+
+    // Only consider main sessions (exclude subagents)
+    let main_sessions: Vec<_> = sessions
+        .iter()
+        .filter(|s| s.is_main)
+        .filter_map(|s| {
+            let first = s.first_timestamp.as_ref()?;
+            let last = s.last_timestamp.as_ref()?;
+            let first_dt = first.parse::<DateTime<Utc>>().ok()?;
+            let last_dt = last.parse::<DateTime<Utc>>().ok()?;
+            Some((first_dt, last_dt))
+        })
+        .collect();
+
+    if main_sessions.is_empty() {
+        return histogram;
+    }
+
+    // Find the range of hours we need to process (limit to last 7 days)
+    let now = Utc::now();
+    let seven_days_ago = now - Duration::days(7);
+
+    // Collect all unique hours with activity
+    let mut hours_with_activity: BTreeSet<String> = BTreeSet::new();
+    for (first_dt, last_dt) in &main_sessions {
+        // Skip sessions entirely before 7 days ago
+        if *last_dt < seven_days_ago {
+            continue;
+        }
+
+        let start = if *first_dt < seven_days_ago {
+            seven_days_ago
+        } else {
+            *first_dt
+        };
+        let end = *last_dt;
+
+        // Iterate through each hour the session spans
+        let mut current = start.with_minute(0).unwrap().with_second(0).unwrap().with_nanosecond(0).unwrap();
+        while current <= end {
+            let hour_key = format!("{}:{}", current.format("%Y-%m-%d"), current.hour());
+            hours_with_activity.insert(hour_key);
+            current = current + Duration::hours(1);
+        }
+    }
+
+    // For each hour, compute concurrency for each minute
+    for hour_key in hours_with_activity {
+        let parts: Vec<&str> = hour_key.rsplitn(2, ':').collect();
+        if parts.len() != 2 {
+            continue;
+        }
+        let hour: u32 = match parts[0].parse() {
+            Ok(h) => h,
+            Err(_) => continue,
+        };
+        let date_str = parts[1];
+
+        // Parse hour start time
+        let hour_start = match NaiveDateTime::parse_from_str(
+            &format!("{} {:02}:00:00", date_str, hour),
+            "%Y-%m-%d %H:%M:%S",
+        ) {
+            Ok(dt) => Utc.from_utc_datetime(&dt),
+            Err(_) => continue,
+        };
+
+        let mut minute_counts: HashMap<u32, u32> = HashMap::new();
+
+        // For each of the 60 minutes in this hour
+        for minute in 0..60u32 {
+            let minute_start = hour_start + Duration::minutes(minute as i64);
+            let minute_end = minute_start + Duration::minutes(1);
+
+            // Count sessions active during this minute
+            let concurrent = main_sessions
+                .iter()
+                .filter(|(first_dt, last_dt)| {
+                    // Session is active if its range overlaps with [minute_start, minute_end)
+                    *first_dt < minute_end && *last_dt >= minute_start
+                })
+                .count() as u32;
+
+            if concurrent > 0 {
+                *minute_counts.entry(concurrent).or_insert(0) += 1;
+            }
+        }
+
+        if !minute_counts.is_empty() {
+            histogram.insert(hour_key, minute_counts);
+        }
+    }
+
+    histogram
+}
+
 // ── Aggregation ──
 
 fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
@@ -638,6 +740,9 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
         None
     };
 
+    // Compute concurrency histogram
+    let concurrency_histogram = compute_concurrency_histogram(sessions);
+
     StatsCache {
         version: 1,
         last_computed_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
@@ -650,5 +755,6 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
         first_session_date: first_date,
         hour_counts,
         total_speculation_time_saved_ms: 0,
+        concurrency_histogram,
     }
 }

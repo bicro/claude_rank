@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from better_profanity import profanity
 
 from app.db import get_db
-from app.models import User, UserMetrics, UserBadge, Badge, MetricsHistory, MetricsHourly
+from app.models import User, UserMetrics, UserBadge, Badge, MetricsHistory, MetricsHourly, ConcurrencyHistogram
 from app.services.ranking import get_user_ranks_with_percentiles, compute_tier
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -77,6 +77,8 @@ async def get_user_by_username(username: str, db: AsyncSession = Depends(get_db)
 
 @router.get("/{user_hash}")
 async def get_user_profile(user_hash: str, db: AsyncSession = Depends(get_db)):
+    import json
+
     user = await db.get(User, user_hash)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -105,6 +107,38 @@ async def get_user_profile(user_hash: str, db: AsyncSession = Depends(get_db)):
         for ub, badge in result.all()
     ]
 
+    # Get concurrency stats for today
+    today = date.today()
+    today_start = datetime(today.year, today.month, today.day, 0, 0, 0)
+    today_end = datetime(today.year, today.month, today.day, 23, 59, 59)
+
+    concurrency_stmt = (
+        select(ConcurrencyHistogram)
+        .where(
+            and_(
+                ConcurrencyHistogram.user_hash == user_hash,
+                ConcurrencyHistogram.snapshot_hour >= today_start,
+                ConcurrencyHistogram.snapshot_hour <= today_end,
+            )
+        )
+    )
+    concurrency_result = await db.execute(concurrency_stmt)
+    concurrency_rows = concurrency_result.scalars().all()
+
+    max_concurrent = 0
+    concurrent_mins = 0
+    for row in concurrency_rows:
+        try:
+            histogram = json.loads(row.histogram) if row.histogram else {}
+            for sessions_str, minutes in histogram.items():
+                session_count = int(sessions_str)
+                if session_count > max_concurrent:
+                    max_concurrent = session_count
+                if session_count > 1:
+                    concurrent_mins += minutes
+        except (json.JSONDecodeError, ValueError):
+            continue
+
     return {
         "user_hash": user.user_hash,
         "username": user.username,
@@ -121,6 +155,8 @@ async def get_user_profile(user_hash: str, db: AsyncSession = Depends(get_db)):
             "total_points": metrics.total_points if metrics else 0,
             "level": metrics.level if metrics else 0,
             "last_synced": metrics.last_synced.isoformat() if metrics else None,
+            "max_concurrent": max_concurrent,
+            "concurrent_mins": concurrent_mins,
         },
         "ranks": ranks,
         "tier": tier,
