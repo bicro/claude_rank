@@ -111,6 +111,8 @@ jobs:
     needs: [build-macos, build-windows]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
     steps:
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
