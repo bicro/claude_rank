@@ -106,3 +106,42 @@ jobs:
           name: clauderank-windows-msi
           path: desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
           if-no-files-found: warn
+
+  release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: clauderank-macos-dmg
+          path: ./artifacts
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: clauderank-windows-msi
+          path: ./artifacts
+
+      - name: Rename artifacts for release
+        run: |
+          mv ./artifacts/*.dmg ./artifacts/ClaudeRank-macOS.dmg
+          mv ./artifacts/*.msi ./artifacts/ClaudeRank-Windows.msi
+
+      - name: Create or Update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest Build
+          body: |
+            Automated build from main branch.
+            Commit: ${{ github.sha }}
+          files: |
+            ./artifacts/ClaudeRank-macOS.dmg
+            ./artifacts/ClaudeRank-Windows.msi
+          draft: false
+          prerelease: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
