@@ -32,6 +32,15 @@ pub struct StatsCache {
     /// Concurrency histogram: Key is "YYYY-MM-DD:HH", Value is {session_count: minutes_with_that_count}
     #[serde(default)]
     pub concurrency_histogram: HashMap<String, HashMap<u32, u32>>,
+    /// Total session time across all sessions (seconds)
+    #[serde(default)]
+    pub total_session_time_secs: u64,
+    /// Total active time (excluding idle gaps) across all sessions (seconds)
+    #[serde(default)]
+    pub total_active_time_secs: u64,
+    /// Total idle time across all sessions (seconds)
+    #[serde(default)]
+    pub total_idle_time_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -107,6 +116,15 @@ pub struct SessionEntry {
     pub git_branch: Option<String>,
     #[serde(default)]
     pub project_path: Option<String>,
+    /// Total duration of this session in seconds
+    #[serde(default)]
+    pub duration_secs: u64,
+    /// Active time (excluding idle gaps) in seconds
+    #[serde(default)]
+    pub active_secs: u64,
+    /// Idle time in seconds
+    #[serde(default)]
+    pub idle_secs: u64,
 }
 
 // ── Helpers ──

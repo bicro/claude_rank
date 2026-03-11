@@ -56,6 +56,10 @@ class UserMetrics(Base):
     level: Mapped[int] = mapped_column(BigInteger, default=0)
     estimated_spend: Mapped[float] = mapped_column(Float, default=0.0)
     last_synced: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Session duration tracking
+    total_session_time_secs: Mapped[int] = mapped_column(BigInteger, default=0)
+    total_active_time_secs: Mapped[int] = mapped_column(BigInteger, default=0)
+    total_idle_time_secs: Mapped[int] = mapped_column(BigInteger, default=0)
 
     user: Mapped["User"] = relationship(back_populates="metrics")
 

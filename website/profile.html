@@ -33,7 +33,7 @@
     <div id="profileContent"><div class="loading">Loading profile</div></div>
 
     <script type="module">
-        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserHeatmap, getUserHourlyHeatmap, formatNumber, getCategoryLabel, getTier } from './js/api.js';
+        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserHeatmap, getUserHourlyHeatmap, getUserConcurrency, formatNumber, getCategoryLabel, getTier } from './js/api.js';
 
         const params = new URLSearchParams(window.location.search);
         const userHash = params.get('hash');
@@ -247,6 +247,28 @@
                         </div>
                     </div>
 
+                    <div class="burn-clock-container-full">
+                        <div class="burn-clock-header-full">
+                            <h3>Session Burn Clock (24h)</h3>
+                            <button class="copy-burn-btn" id="copyConcurrency">Copy</button>
+                        </div>
+                        <div class="burn-clock-wrapper">
+                            <div class="burn-clock-svg-container" id="burnClockContainer">
+                                <svg class="burn-clock-svg" id="burnClock" viewBox="0 0 320 320"></svg>
+                                <div class="burn-clock-center" id="burnClockCenter">
+                                    <div class="burn-clock-peak">0</div>
+                                    <div class="burn-clock-peak-label">Peak</div>
+                                </div>
+                            </div>
+                            <div class="burn-clock-legend">
+                                <span class="legend-item"><div class="legend-dot" style="background:#CC581C"></div>Low</span>
+                                <span class="legend-item"><div class="legend-dot" style="background:#E89860"></div>Medium</span>
+                                <span class="legend-item"><div class="legend-dot" style="background:#FCF0E4"></div>High</span>
+                            </div>
+                            <div class="copy-feedback" id="concurrencyFeedback">Copied to clipboard!</div>
+                        </div>
+                    </div>
+
                     ${history.length > 0 ? `
                     <div class="chart-container">
                         <h3>Token Growth (Last 30 Days)</h3>
@@ -296,6 +318,208 @@
 
                 // Load default view (1W)
                 loadHeatmapView('1w');
+
+                // Load and render burn clock visualization
+                let burnClockData = [];
+                try {
+                    const concurrencyData = await getUserConcurrency(hash);
+                    renderBurnClock(concurrencyData, profile.username);
+                } catch (e) {
+                    console.error('Failed to load concurrency data:', e);
+                }
+
+                // Burn clock rendering functions
+                function processHourlyData(concurrencyHistogram) {
+                    const now = new Date();
+
+                    const hourlyData = [];
+                    for (let i = 0; i < 24; i++) {
+                        const offsetHours = (23 - i);
+
+                        // Calculate the actual date/time for this hour slot
+                        const slotDate = new Date(now.getTime() - offsetHours * 60 * 60 * 1000);
+
+                        // Use UTC for the key (matches backend storage format)
+                        const utcHour = slotDate.getUTCHours();
+                        const dateKey = slotDate.toISOString().split('T')[0]; // UTC date
+                        const key = dateKey + ':' + utcHour;
+
+                        // Keep local hour for display
+                        const targetHour = slotDate.getHours();
+
+                        // Handle both histogram format and simple peak format from API
+                        const histogramOrPeak = concurrencyHistogram[key];
+                        const sessions = [];
+
+                        if (typeof histogramOrPeak === 'object') {
+                            // Full histogram format
+                            for (let n = 1; n <= 7; n++) {
+                                let totalMins = 0;
+                                for (const [conc, mins] of Object.entries(histogramOrPeak)) {
+                                    if (parseInt(conc, 10) >= n) totalMins += mins;
+                                }
+                                if (totalMins > 0) {
+                                    const seed = (targetHour * 7 + n * 13) % 17;
+                                    const variation = 0.85 + (seed / 17) * 0.15;
+                                    const intensity = Math.min((totalMins / 60) * variation, 1);
+                                    sessions.push({ index: n, intensity, minutes: totalMins });
+                                }
+                            }
+                        } else if (typeof histogramOrPeak === 'number' && histogramOrPeak > 0) {
+                            // Simple peak format - create synthetic sessions
+                            for (let n = 1; n <= histogramOrPeak; n++) {
+                                const seed = (targetHour * 7 + n * 13) % 17;
+                                const intensity = 0.5 + (seed / 17) * 0.5;
+                                sessions.push({ index: n, intensity, minutes: 30 });
+                            }
+                        }
+
+                        hourlyData.push({
+                            hour: targetHour,
+                            sessions,
+                            isCurrent: offsetHours === 0,
+                            date: slotDate // Store for tooltip
+                        });
+                    }
+                    return hourlyData;
+                }
+
+                function getBurnColor(intensity) {
+                    const r1 = 204, g1 = 88, b1 = 28;
+                    const r2 = 252, g2 = 240, b2 = 228;
+                    const r = Math.round(r1 + (r2 - r1) * intensity);
+                    const g = Math.round(g1 + (g2 - g1) * intensity);
+                    const b = Math.round(b1 + (b2 - b1) * intensity);
+                    return `rgb(${r},${g},${b})`;
+                }
+
+                function annularSector(cx, cy, r1, r2, a0, a1) {
+                    const toRad = Math.PI / 180;
+                    const cos0 = Math.cos(a0 * toRad), sin0 = Math.sin(a0 * toRad);
+                    const cos1 = Math.cos(a1 * toRad), sin1 = Math.sin(a1 * toRad);
+
+                    const x1 = cx + r1 * cos0, y1 = cy + r1 * sin0;
+                    const x2 = cx + r2 * cos0, y2 = cy + r2 * sin0;
+                    const x3 = cx + r2 * cos1, y3 = cy + r2 * sin1;
+                    const x4 = cx + r1 * cos1, y4 = cy + r1 * sin1;
+
+                    const largeArc = (a1 - a0) > 180 ? 1 : 0;
+
+                    return `M ${x1} ${y1} L ${x2} ${y2} A ${r2} ${r2} 0 ${largeArc} 1 ${x3} ${y3} L ${x4} ${y4} A ${r1} ${r1} 0 ${largeArc} 0 ${x1} ${y1} Z`;
+                }
+
+                function formatHour(h) {
+                    const period = h < 12 ? 'AM' : 'PM';
+                    const displayH = h % 12 === 0 ? 12 : h % 12;
+                    return displayH + ' ' + period;
+                }
+
+                function formatDateHour(date) {
+                    const h = date.getHours();
+                    const period = h < 12 ? 'AM' : 'PM';
+                    const displayH = h % 12 === 0 ? 12 : h % 12;
+                    const dateStr = date.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
+                    return dateStr + ', ' + displayH + ' ' + period;
+                }
+
+                function renderBurnClock(concurrencyHistogram, username) {
+                    const svg = document.getElementById('burnClock');
+                    const centerEl = document.getElementById('burnClockCenter');
+                    if (!svg) return;
+
+                    const hourlyData = processHourlyData(concurrencyHistogram);
+                    burnClockData = hourlyData;
+
+                    const cx = 160, cy = 160;
+                    const baseRadius = 50;
+                    const pillWidth = 10;
+                    const pillGap = 4;
+                    const maxRings = 7;
+
+                    let svgContent = '';
+                    let maxSessions = 0;
+
+                    // Draw center circle
+                    svgContent += `<circle cx="${cx}" cy="${cy}" r="${baseRadius - 6}" fill="rgba(204,88,28,0.08)" />`;
+
+                    // Cardinal labels
+                    const cardinals = [
+                        { angle: -90, label: '12am' },
+                        { angle: 0, label: '6am' },
+                        { angle: 90, label: '12pm' },
+                        { angle: 180, label: '6pm' }
+                    ];
+                    const labelRadius = cx - 10;
+                    cardinals.forEach(c => {
+                        const toRad = Math.PI / 180;
+                        const x = cx + labelRadius * Math.cos(c.angle * toRad);
+                        const y = cy + labelRadius * Math.sin(c.angle * toRad);
+                        svgContent += `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" fill="#888" font-size="10" font-family="inherit">${c.label}</text>`;
+                    });
+
+                    // Draw hour slices
+                    for (let i = 0; i < 24; i++) {
+                        const data = hourlyData[i];
+                        const startAngle = -90 + (i * 15);
+                        const endAngle = startAngle + 13;
+
+                        if (data.sessions.length > maxSessions) {
+                            maxSessions = data.sessions.length;
+                        }
+
+                        for (const session of data.sessions) {
+                            if (session.index > maxRings) continue;
+
+                            const r1 = baseRadius + (session.index - 1) * (pillWidth + pillGap);
+                            const r2 = r1 + pillWidth;
+                            const color = getBurnColor(session.intensity);
+
+                            const path = annularSector(cx, cy, r1, r2, startAngle, endAngle);
+                            const tooltipText = formatDateHour(data.date) + ': ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '');
+                            svgContent += `<path class="burn-pill" d="${path}" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}">
+                                <title>${tooltipText}</title>
+                            </path>`;
+                        }
+
+                        // Current hour marker
+                        if (data.isCurrent && data.sessions.length > 0) {
+                            const outerR = baseRadius + Math.min(data.sessions.length, maxRings) * (pillWidth + pillGap);
+                            const midAngle = startAngle + 6.5;
+                            const toRad = Math.PI / 180;
+                            const markerX = cx + (outerR + 6) * Math.cos(midAngle * toRad);
+                            const markerY = cy + (outerR + 6) * Math.sin(midAngle * toRad);
+                            svgContent += `<circle cx="${markerX}" cy="${markerY}" r="3" fill="#CC581C" />`;
+                        }
+                    }
+
+                    svg.innerHTML = svgContent;
+
+                    // Update center badge
+                    if (centerEl) {
+                        centerEl.querySelector('.burn-clock-peak').textContent = maxSessions;
+                    }
+
+                    // Setup copy button
+                    const copyBtn = document.getElementById('copyConcurrency');
+                    if (copyBtn) {
+                        copyBtn.onclick = () => {
+                            const emojis = burnClockData.map(d => {
+                                const count = d.sessions.length;
+                                if (count === 0) return '🔴';
+                                if (count === 1) return '🟠';
+                                if (count === 2) return '🟡';
+                                return '⚪';
+                            }).join('');
+
+                            const text = `${username || 'Anonymous'}'s ClaudeRank 24h\n${emojis}\nPeak: ${maxSessions} sessions | clauderank.com`;
+
+                            navigator.clipboard.writeText(text);
+                            const fb = document.getElementById('concurrencyFeedback');
+                            fb.classList.add('show');
+                            setTimeout(() => fb.classList.remove('show'), 2000);
+                        };
+                    }
+                }
 
                 if (history.length > 0) {
                     const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));

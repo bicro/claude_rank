@@ -108,6 +108,9 @@ struct SyncTotals {
     current_streak: u64,
     total_points: u64,
     level: u64,
+    total_session_time_secs: u64,
+    total_active_time_secs: u64,
+    total_idle_time_secs: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -190,6 +193,9 @@ impl RankingEngine {
             current_streak: points_state.current_streak,
             total_points: points_state.total_points,
             level: points_state.level,
+            total_session_time_secs: stats.total_session_time_secs,
+            total_active_time_secs: stats.total_active_time_secs,
+            total_idle_time_secs: stats.total_idle_time_secs,
         };
 
         // Token breakdown per model

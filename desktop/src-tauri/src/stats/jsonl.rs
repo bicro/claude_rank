@@ -7,6 +7,9 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+/// Idle threshold: gaps longer than 5 minutes between messages are considered idle time
+const IDLE_THRESHOLD_SECS: i64 = 300;
+
 // ── Cache persistence structs ──
 
 #[derive(Serialize, Deserialize, Default)]
@@ -83,6 +86,11 @@ struct SessionStats {
     project_path: Option<String>,
     first_timestamp: Option<String>,
     last_timestamp: Option<String>,
+    // Idle time tracking
+    total_duration_secs: u64,
+    active_duration_secs: u64,
+    total_idle_secs: u64,
+    idle_segment_count: u32,
 }
 
 // Need Debug for AssistantEntry since SessionStats derives Debug
@@ -215,6 +223,9 @@ impl JsonlTracker {
                     modified: s.last_timestamp.clone(),
                     git_branch: s.git_branch.clone(),
                     project_path: s.project_path.clone(),
+                    duration_secs: s.total_duration_secs,
+                    active_secs: s.active_duration_secs,
+                    idle_secs: s.total_idle_secs,
                 }
             })
             .collect();
@@ -334,6 +345,47 @@ fn find_all_jsonl_files() -> Vec<(PathBuf, bool)> {
     }
 
     results
+}
+
+// ── Idle Time Computation ──
+
+/// Compute idle time for a session by finding gaps > IDLE_THRESHOLD_SECS between consecutive messages
+fn compute_session_idle_time(stats: &mut SessionStats) {
+    if stats.all_timestamps.len() < 2 {
+        stats.total_duration_secs = 0;
+        stats.active_duration_secs = 0;
+        stats.total_idle_secs = 0;
+        stats.idle_segment_count = 0;
+        return;
+    }
+
+    // Sort timestamps
+    let mut sorted_timestamps = stats.all_timestamps.clone();
+    sorted_timestamps.sort();
+
+    let first_ts = sorted_timestamps.first().unwrap();
+    let last_ts = sorted_timestamps.last().unwrap();
+    let total_duration = (*last_ts - *first_ts).num_seconds().max(0) as u64;
+
+    let mut total_idle: i64 = 0;
+    let mut idle_segments: u32 = 0;
+
+    // Find gaps > IDLE_THRESHOLD_SECS between consecutive messages
+    for i in 1..sorted_timestamps.len() {
+        let gap = (sorted_timestamps[i] - sorted_timestamps[i - 1]).num_seconds();
+        if gap > IDLE_THRESHOLD_SECS {
+            total_idle += gap;
+            idle_segments += 1;
+        }
+    }
+
+    let idle_secs = total_idle.max(0) as u64;
+    let active_secs = total_duration.saturating_sub(idle_secs);
+
+    stats.total_duration_secs = total_duration;
+    stats.total_idle_secs = idle_secs;
+    stats.active_duration_secs = active_secs;
+    stats.idle_segment_count = idle_segments;
 }
 
 // ── Parsing ──
@@ -459,6 +511,9 @@ fn parse_jsonl_file(path: &PathBuf, is_main: bool) -> SessionStats {
         }
     }
 
+    // Compute idle time for this session
+    compute_session_idle_time(&mut stats);
+
     stats
 }
 
@@ -579,9 +634,18 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
     let mut first_date: Option<String> = None;
     let mut longest = LongestSession::default();
 
+    // Idle/active time totals (main sessions only)
+    let mut total_session_time_secs: u64 = 0;
+    let mut total_active_time_secs: u64 = 0;
+    let mut total_idle_time_secs: u64 = 0;
+
     for (idx, session) in sessions.iter().enumerate() {
         if session.is_main {
             total_sessions += 1;
+            // Sum idle/active time for main sessions
+            total_session_time_secs += session.total_duration_secs;
+            total_active_time_secs += session.active_duration_secs;
+            total_idle_time_secs += session.total_idle_secs;
         }
 
         // ── User messages ──
@@ -756,5 +820,8 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
         hour_counts,
         total_speculation_time_saved_ms: 0,
         concurrency_histogram,
+        total_session_time_secs,
+        total_active_time_secs,
+        total_idle_time_secs,
     }
 }

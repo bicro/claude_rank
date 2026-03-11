@@ -57,6 +57,9 @@ class SyncTotals(BaseModel):
     current_streak: int = 0
     total_points: int = 0
     level: int = 0
+    total_session_time_secs: int = 0
+    total_active_time_secs: int = 0
+    total_idle_time_secs: int = 0
 
 
 class SyncRequest(BaseModel):
@@ -115,6 +118,9 @@ async def sync_metrics(req: SyncRequest, db: AsyncSession = Depends(get_db)):
         existing_metrics.total_points = req.totals.total_points
         existing_metrics.level = req.totals.level
         existing_metrics.last_synced = now
+        existing_metrics.total_session_time_secs = req.totals.total_session_time_secs
+        existing_metrics.total_active_time_secs = req.totals.total_active_time_secs
+        existing_metrics.total_idle_time_secs = req.totals.total_idle_time_secs
     else:
         db.add(UserMetrics(
             user_hash=req.user_hash,
@@ -129,6 +135,9 @@ async def sync_metrics(req: SyncRequest, db: AsyncSession = Depends(get_db)):
             total_points=req.totals.total_points,
             level=req.totals.level,
             last_synced=now,
+            total_session_time_secs=req.totals.total_session_time_secs,
+            total_active_time_secs=req.totals.total_active_time_secs,
+            total_idle_time_secs=req.totals.total_idle_time_secs,
         ))
 
     # Upsert daily snapshot

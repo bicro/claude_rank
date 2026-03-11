@@ -98,3 +98,7 @@ export async function getUserHeatmap(userHash, days = 365) {
 export async function getUserHourlyHeatmap(userHash, hours = 24) {
     return apiFetch(`/api/users/${userHash}/heatmap/hourly?hours=${hours}`);
 }
+
+export async function getUserConcurrency(userHash) {
+    return apiFetch(`/api/users/${userHash}/concurrency`);
+}

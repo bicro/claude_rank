@@ -354,3 +354,46 @@ async def get_user_heatmap(
             d["intensity"] = 0
 
     return heatmap
+
+
+@router.get("/{user_hash}/concurrency")
+async def get_user_concurrency(user_hash: str, hours: int = Query(12, ge=1, le=24), db: AsyncSession = Depends(get_db)):
+    """
+    Return per-hour peak concurrency data for the last N hours.
+    Returns: { "YYYY-MM-DD:HH": peak_concurrent_sessions, ... }
+    """
+    import json
+
+    now = datetime.utcnow()
+    start_time = now - timedelta(hours=hours)
+
+    stmt = (
+        select(ConcurrencyHistogram)
+        .where(
+            and_(
+                ConcurrencyHistogram.user_hash == user_hash,
+                ConcurrencyHistogram.snapshot_hour >= start_time,
+            )
+        )
+    )
+    result = await db.execute(stmt)
+    rows = result.scalars().all()
+
+    # Return per-hour peak concurrency
+    per_hour = {}
+    for row in rows:
+        try:
+            histogram = json.loads(row.histogram) if row.histogram else {}
+            # Find peak concurrency for this hour
+            peak = 0
+            for sessions_str, minutes in histogram.items():
+                s = int(sessions_str)
+                if s > peak:
+                    peak = s
+            # Format key as "YYYY-MM-DD:HH"
+            hour_key = f"{row.snapshot_hour.strftime('%Y-%m-%d')}:{row.snapshot_hour.hour}"
+            per_hour[hour_key] = peak
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+    return per_hour

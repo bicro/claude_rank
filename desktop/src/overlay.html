@@ -135,17 +135,6 @@
     font-weight: 600;
   }
 
-  .stats-row {
-    display: grid; grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-  .stat-card {
-    background: rgba(255,255,255,0.04);
-    border-radius: 10px; padding: 10px 12px;
-  }
-  .stat-card .label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-  .stat-card .value { font-size: 20px; font-weight: 700; color: #fff; margin-top: 2px; }
-
   .leaderboard {
     flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;
   }
@@ -176,20 +165,61 @@
   .no-drag { -webkit-app-region: no-drag; app-region: no-drag; }
   .loading { color: #555; font-size: 12px; text-align: center; padding: 20px 0; }
 
-  .activity-section { margin-top: 2px; }
-  .activity-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-  .activity-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-  .activity-toggle { display: flex; gap: 2px; background: rgba(255,255,255,0.04); border-radius: 6px; padding: 2px; }
-  .activity-toggle button { background: none; border: none; color: #666; font-size: 10px; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-weight: 600; }
-  .activity-toggle button.active { background: #6366f1; color: #fff; }
-  .activity-grid { display: grid; gap: 2px; justify-content: center; }
-  .activity-tile { width: 10px; height: 10px; border-radius: 2px; }
-  .activity-tile[data-level="0"] { background: rgba(255,255,255,0.04); }
-  .activity-tile[data-level="1"] { background: rgba(99,102,241,0.25); }
-  .activity-tile[data-level="2"] { background: rgba(99,102,241,0.50); }
-  .activity-tile[data-level="3"] { background: rgba(99,102,241,0.75); }
-  .activity-tile[data-level="4"] { background: #6366f1; }
-  .activity-summary { font-size: 10px; color: #666; margin-top: 4px; text-align: center; }
+  /* Burn Clock Visualization */
+  .burn-clock-section { margin-top: 4px; }
+  .burn-clock-header {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+  }
+  .copy-btn {
+    background: rgba(255,255,255,0.08); border: none; color: #888;
+    font-size: 10px; padding: 2px 8px; border-radius: 4px; cursor: pointer;
+    text-transform: none; letter-spacing: 0;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .copy-feedback {
+    font-size: 10px; color: #4ade80; text-align: center; margin-top: 4px;
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .copy-feedback.show { opacity: 1; }
+  .burn-clock-container {
+    position: relative;
+    width: 180px;
+    height: 180px;
+    margin: 8px auto;
+  }
+  .burn-clock { width: 100%; height: 100%; }
+  .burn-clock-center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+  }
+  .burn-clock-center .center-tokens {
+    font-size: 14px; font-weight: 700; color: #fff;
+    line-height: 1.2;
+  }
+  .burn-clock-center .center-cost {
+    font-size: 10px; color: #a5b4fc;
+    font-weight: 600;
+  }
+  .burn-pill { cursor: default; transition: opacity 0.15s; }
+  .burn-pill:hover { opacity: 1 !important; }
+  .burn-clock-tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.9);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 10;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+  }
+  .burn-clock-tooltip.show { opacity: 1; }
 </style>
 </head>
 <body>
@@ -229,36 +259,25 @@
     </div>
   </div>
 
-  <div class="stats-row">
-    <div class="stat-card"><div class="label">Tokens</div><div class="value" id="statTokens">&mdash;</div></div>
-    <div class="stat-card"><div class="label">Messages</div><div class="value" id="statMessages">&mdash;</div></div>
-    <div class="stat-card"><div class="label">Sessions</div><div class="value" id="statSessions">&mdash;</div></div>
-    <div class="stat-card"><div class="label">Tool Calls</div><div class="value" id="statTools">&mdash;</div></div>
-    <div class="stat-card"><div class="label">Max Concurrent</div><div class="value" id="statMaxConcurrent">&mdash;</div></div>
-    <div class="stat-card"><div class="label">Concurrent Mins</div><div class="value" id="statConcurrentMins">&mdash;</div></div>
-    <div class="stat-card" style="grid-column: span 2">
-      <div class="label">Est. Cost</div>
-      <div class="value" id="statCost">&mdash;</div>
+  <div class="burn-clock-section">
+    <div class="burn-clock-header">
+      <span>Session Burn Clock (24h)</span>
+      <button class="copy-btn" id="copyConcurrency" title="Copy to clipboard">Copy</button>
     </div>
+    <div class="burn-clock-container" id="burnClockContainer">
+      <svg class="burn-clock" id="burnClock" viewBox="0 0 180 180"></svg>
+      <div class="burn-clock-center">
+        <div class="center-tokens" id="statTokens">&mdash;</div>
+        <div class="center-cost" id="statCost">&mdash;</div>
+      </div>
+      <div class="burn-clock-tooltip" id="burnClockTooltip"></div>
+    </div>
+    <div class="copy-feedback" id="concurrencyFeedback">Copied!</div>
   </div>
 
   <div class="lb-header">Leaderboard</div>
   <div class="leaderboard" id="leaderboard">
     <div class="loading">Loading leaderboard...</div>
-  </div>
-
-  <div class="activity-section">
-    <div class="activity-header">
-      <span class="activity-label">Activity</span>
-      <div class="activity-toggle">
-        <button class="active" data-range="1h">1H</button>
-        <button data-range="1d">1D</button>
-        <button data-range="1w">1W</button>
-        <button data-range="cc">CC</button>
-      </div>
-    </div>
-    <div class="activity-grid" id="activityGrid"></div>
-    <div class="activity-summary" id="activitySummary"></div>
   </div>
 
   <div class="footer">
@@ -506,226 +525,201 @@ function escHtml(s) {
   return d.innerHTML;
 }
 
-// --- Activity tile grid ---
-let currentRange = '1h';
-let lastStatsData = null;
+let lastBurnClockData = [];
 
-document.querySelector('.activity-toggle').addEventListener('click', (e) => {
-  const btn = e.target.closest('button[data-range]');
-  if (!btn) return;
-  currentRange = btn.dataset.range;
-  document.querySelectorAll('.activity-toggle button').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  renderActivityGrid();
+// Process backend concurrency histogram into hourly format
+function processHourlyData(concurrencyHistogram) {
+  const now = new Date();
+
+  const hourlyData = [];
+  for (let i = 0; i < 24; i++) {
+    // Go back from current hour
+    const offsetHours = (23 - i);
+
+    // Calculate the actual date/time for this hour slot
+    const slotDate = new Date(now.getTime() - offsetHours * 60 * 60 * 1000);
+
+    // Use UTC for the key (matches backend storage format)
+    const utcHour = slotDate.getUTCHours();
+    const dateKey = slotDate.toISOString().split('T')[0]; // UTC date
+    const key = dateKey + ':' + utcHour;
+
+    // Keep local hour for display
+    const targetHour = slotDate.getHours();
+
+    const histogram = concurrencyHistogram[key] || {};
+    const sessions = [];
+
+    // Derive intensity from session duration for each concurrency level
+    for (let n = 1; n <= 5; n++) {
+      let totalMins = 0;
+      for (const [conc, mins] of Object.entries(histogram)) {
+        if (parseInt(conc, 10) >= n) totalMins += mins;
+      }
+      if (totalMins > 0) {
+        // Intensity = fraction of hour active, with seeded variation
+        const seed = (targetHour * 7 + n * 13) % 17;
+        const variation = 0.85 + (seed / 17) * 0.15;
+        const intensity = Math.min((totalMins / 60) * variation, 1);
+        sessions.push({ index: n, intensity, minutes: totalMins });
+      }
+    }
+
+    hourlyData.push({
+      hour: targetHour,
+      sessions,
+      isCurrent: offsetHours === 0,
+      histogram,
+      date: slotDate // Store the actual date for tooltip
+    });
+  }
+  return hourlyData;
+}
+
+// Get burn color from intensity (0=orange, 1=white)
+function getBurnColor(intensity) {
+  // Orange (#CC581C) → White (#FCF0E4) gradient
+  const r1 = 204, g1 = 88, b1 = 28;
+  const r2 = 252, g2 = 240, b2 = 228;
+  const r = Math.round(r1 + (r2 - r1) * intensity);
+  const g = Math.round(g1 + (g2 - g1) * intensity);
+  const b = Math.round(b1 + (b2 - b1) * intensity);
+  return `rgb(${r},${g},${b})`;
+}
+
+// Draw annular sector (pill shape) - returns SVG path string
+function annularSector(cx, cy, r1, r2, a0, a1) {
+  const toRad = Math.PI / 180;
+  const cos0 = Math.cos(a0 * toRad), sin0 = Math.sin(a0 * toRad);
+  const cos1 = Math.cos(a1 * toRad), sin1 = Math.sin(a1 * toRad);
+
+  const x1 = cx + r1 * cos0, y1 = cy + r1 * sin0;
+  const x2 = cx + r2 * cos0, y2 = cy + r2 * sin0;
+  const x3 = cx + r2 * cos1, y3 = cy + r2 * sin1;
+  const x4 = cx + r1 * cos1, y4 = cy + r1 * sin1;
+
+  const largeArc = (a1 - a0) > 180 ? 1 : 0;
+
+  return `M ${x1} ${y1}
+          L ${x2} ${y2}
+          A ${r2} ${r2} 0 ${largeArc} 1 ${x3} ${y3}
+          L ${x4} ${y4}
+          A ${r1} ${r1} 0 ${largeArc} 0 ${x1} ${y1}
+          Z`;
+}
+
+function renderBurnClock(concurrencyHistogram) {
+  const svg = document.getElementById('burnClock');
+  const tooltip = document.getElementById('burnClockTooltip');
+  const container = document.getElementById('burnClockContainer');
+  if (!svg) return;
+
+  const hourlyData = processHourlyData(concurrencyHistogram);
+  lastBurnClockData = hourlyData;
+
+  const cx = 90, cy = 90;
+  const baseRadius = 36;
+  const pillWidth = 5;
+  const pillGap = 2;
+  const maxRings = 5;
+
+  let svgContent = '';
+
+  // Draw center circle (decorative)
+  svgContent += `<circle cx="${cx}" cy="${cy}" r="${baseRadius - 4}" fill="rgba(255,255,255,0.05)" />`;
+
+  // Draw hour slices
+  for (let i = 0; i < 24; i++) {
+    const data = hourlyData[i];
+    // Clock starts at top (12 o'clock = -90°), goes clockwise
+    const startAngle = -90 + (i * 15);
+    const endAngle = startAngle + 14; // 1° gap between hours
+
+    // Draw each concurrent session as a ring
+    for (const session of data.sessions) {
+      if (session.index > maxRings) continue;
+
+      const r1 = baseRadius + (session.index - 1) * (pillWidth + pillGap);
+      const r2 = r1 + pillWidth;
+      const color = getBurnColor(session.intensity);
+
+      const path = annularSector(cx, cy, r1, r2, startAngle, endAngle);
+      const tooltipText = formatDateHour(data.date) + ': ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '');
+      svgContent += `<path class="burn-pill" d="${path}" fill="${color}"
+                     data-hour="${data.hour}" data-sessions="${data.sessions.length}"
+                     data-tooltip="${tooltipText}" />`;
+    }
+
+    // Current hour indicator
+    if (data.isCurrent && data.sessions.length > 0) {
+      const outerR = baseRadius + Math.min(data.sessions.length, maxRings) * (pillWidth + pillGap);
+      const midAngle = startAngle + 7;
+      const toRad = Math.PI / 180;
+      const markerX = cx + (outerR + 4) * Math.cos(midAngle * toRad);
+      const markerY = cy + (outerR + 4) * Math.sin(midAngle * toRad);
+      svgContent += `<circle cx="${markerX}" cy="${markerY}" r="2" fill="#fff" />`;
+    }
+  }
+
+  svg.innerHTML = svgContent;
+
+  // Add hover tooltips
+  svg.querySelectorAll('.burn-pill').forEach(pill => {
+    pill.addEventListener('mouseenter', (e) => {
+      const text = e.target.getAttribute('data-tooltip');
+      tooltip.textContent = text;
+      tooltip.classList.add('show');
+    });
+    pill.addEventListener('mousemove', (e) => {
+      const rect = container.getBoundingClientRect();
+      tooltip.style.left = (e.clientX - rect.left + 10) + 'px';
+      tooltip.style.top = (e.clientY - rect.top - 20) + 'px';
+    });
+    pill.addEventListener('mouseleave', () => {
+      tooltip.classList.remove('show');
+    });
+  });
+}
+
+function formatHour(h) {
+  const period = h < 12 ? 'AM' : 'PM';
+  const displayH = h % 12 === 0 ? 12 : h % 12;
+  return displayH + ' ' + period;
+}
+
+function formatDateHour(date) {
+  const h = date.getHours();
+  const period = h < 12 ? 'AM' : 'PM';
+  const displayH = h % 12 === 0 ? 12 : h % 12;
+  const dateStr = date.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
+  return dateStr + ', ' + displayH + ' ' + period;
+}
+
+function generateConcurrencyShareText() {
+  if (!lastBurnClockData.length) return '';
+
+  // Map session count to emoji: 0=🔴, 1=🟠, 2=🟡, 3+=⚪
+  const emojis = lastBurnClockData.map(d => {
+    const count = d.sessions.length;
+    if (count === 0) return '🔴';
+    if (count === 1) return '🟠';
+    if (count === 2) return '🟡';
+    return '⚪';
+  }).join('');
+
+  const maxSessions = Math.max(...lastBurnClockData.map(d => d.sessions.length));
+
+  return `ClaudeRank 24h\n${emojis}\nPeak: ${maxSessions} sessions | clauderank.com`;
+}
+
+document.getElementById('copyConcurrency').addEventListener('click', () => {
+  const text = generateConcurrencyShareText();
+  if (!text) return;
+  navigator.clipboard.writeText(text);
+  const fb = document.getElementById('concurrencyFeedback');
+  fb.classList.add('show');
+  setTimeout(() => fb.classList.remove('show'), 1500);
 });
-
-function calculateThresholds(counts) {
-  const nonZero = counts.filter(c => c > 0).sort((a, b) => a - b);
-  if (nonZero.length === 0) return [0, 0, 0, 0];
-  const q1 = nonZero[Math.floor(nonZero.length * 0.25)] || nonZero[0];
-  const q2 = nonZero[Math.floor(nonZero.length * 0.5)] || q1;
-  const q3 = nonZero[Math.floor(nonZero.length * 0.75)] || q2;
-  return [1, q1, q2, q3];
-}
-
-function getLevel(count, thresholds) {
-  if (count === 0) return 0;
-  if (count <= thresholds[1]) return 1;
-  if (count <= thresholds[2]) return 2;
-  if (count <= thresholds[3]) return 3;
-  return 4;
-}
-
-function getOverlayMaxCols() {
-  const grid = document.getElementById('activityGrid');
-  const w = grid.clientWidth;
-  if (w <= 0) return 15;
-  return Math.floor((w + 2) / (10 + 2));
-}
-
-function renderHour(hourCounts) {
-  const grid = document.getElementById('activityGrid');
-  const summary = document.getElementById('activitySummary');
-  const today = new Date().toISOString().split('T')[0];
-  const counts = new Array(24).fill(0);
-  for (const [key, val] of Object.entries(hourCounts)) {
-    const colonIdx = key.lastIndexOf(':');
-    if (colonIdx === -1) {
-      // Old format fallback
-      const h = parseInt(key, 10);
-      if (h >= 0 && h < 24) counts[h] += val;
-    } else {
-      // New format: filter to today
-      const datePart = key.substring(0, colonIdx);
-      const h = parseInt(key.substring(colonIdx + 1), 10);
-      if (datePart === today && h >= 0 && h < 24) counts[h] += val;
-    }
-  }
-  const thresholds = calculateThresholds(counts);
-  grid.style.gridTemplateRows = 'repeat(4, 10px)';
-  grid.style.gridTemplateColumns = 'repeat(6, 10px)';
-  grid.style.gridAutoFlow = 'column';
-  grid.innerHTML = counts.map((c, h) => {
-    const period = h < 12 ? 'AM' : 'PM';
-    const displayH = h % 12 === 0 ? 12 : h % 12;
-    return '<div class="activity-tile" data-level="' + getLevel(c, thresholds) + '" title="' + displayH + ' ' + period + ': ' + c + ' msgs"></div>';
-  }).join('');
-  const activeHours = counts.filter(c => c > 0).length;
-  summary.textContent = activeHours + ' active hour' + (activeHours !== 1 ? 's' : '') + ' today';
-}
-
-function renderDaily(dailyActivity) {
-  const grid = document.getElementById('activityGrid');
-  const summary = document.getElementById('activitySummary');
-  const today = new Date();
-  const maxCols = getOverlayMaxCols();
-  const maxTiles = maxCols * 4;
-  const actMap = {};
-  for (const e of (dailyActivity || [])) actMap[e.date] = e.messageCount || 0;
-  const allDates = Object.keys(actMap).sort();
-  const numDays = allDates.length > 0 ? Math.ceil((today - new Date(allDates[0])) / 86400000) + 1 : 30;
-  const days = [];
-  for (let i = numDays - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split('T')[0];
-    days.push({ date: dateStr, count: actMap[dateStr] || 0, dayLabel: d.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' }) });
-  }
-  const trimmed = days.length > maxTiles ? days.slice(-maxTiles) : days;
-  const totalSlots = Math.ceil(trimmed.length / 4) * 4;
-  const padCount = totalSlots - trimmed.length;
-  const counts = trimmed.map(d => d.count);
-  const thresholds = calculateThresholds(counts);
-  const numGridCols = Math.ceil(totalSlots / 4);
-  grid.style.gridTemplateRows = 'repeat(4, 10px)';
-  grid.style.gridTemplateColumns = 'repeat(' + numGridCols + ', 10px)';
-  grid.style.gridAutoFlow = 'column';
-  let html = '';
-  for (let i = 0; i < padCount; i++) html += '<div class="activity-tile" data-level="0"></div>';
-  html += trimmed.map(d =>
-    '<div class="activity-tile" data-level="' + getLevel(d.count, thresholds) + '" title="' + d.dayLabel + ': ' + d.count + ' msgs"></div>'
-  ).join('');
-  grid.innerHTML = html;
-  const activeDays = counts.filter(c => c > 0).length;
-  summary.textContent = activeDays + ' active day' + (activeDays !== 1 ? 's' : '');
-}
-
-function renderWeekly(dailyActivity) {
-  const grid = document.getElementById('activityGrid');
-  const summary = document.getElementById('activitySummary');
-  const today = new Date();
-  const maxCols = getOverlayMaxCols();
-  const maxTiles = maxCols * 4;
-  const actMap = {};
-  for (const e of (dailyActivity || [])) actMap[e.date] = e.messageCount || 0;
-  const allDates = Object.keys(actMap).sort();
-  const numDays = allDates.length > 0 ? Math.ceil((today - new Date(allDates[0])) / 86400000) + 1 : 30;
-  const days = [];
-  for (let i = numDays - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    days.push({ date: d.toISOString().split('T')[0], count: actMap[d.toISOString().split('T')[0]] || 0 });
-  }
-  // Aggregate into weeks
-  const weeks = [];
-  for (let i = 0; i < days.length; i += 7) {
-    const chunk = days.slice(i, i + 7);
-    const total = chunk.reduce((s, d) => s + d.count, 0);
-    const startDate = new Date(chunk[0].date);
-    weeks.push({ count: total, weekLabel: 'Week of ' + startDate.toLocaleDateString('en', { month: 'short', day: 'numeric' }) });
-  }
-  const trimmed = weeks.length > maxTiles ? weeks.slice(-maxTiles) : weeks;
-  const totalSlots = Math.ceil(trimmed.length / 4) * 4;
-  const padCount = totalSlots - trimmed.length;
-  const counts = trimmed.map(w => w.count);
-  const thresholds = calculateThresholds(counts);
-  const numGridCols = Math.ceil(totalSlots / 4);
-  grid.style.gridTemplateRows = 'repeat(4, 10px)';
-  grid.style.gridTemplateColumns = 'repeat(' + numGridCols + ', 10px)';
-  grid.style.gridAutoFlow = 'column';
-  let html = '';
-  for (let i = 0; i < padCount; i++) html += '<div class="activity-tile" data-level="0"></div>';
-  html += trimmed.map(w =>
-    '<div class="activity-tile" data-level="' + getLevel(w.count, thresholds) + '" title="' + w.weekLabel + ': ' + w.count + ' msgs"></div>'
-  ).join('');
-  grid.innerHTML = html;
-  const activeWeeks = counts.filter(c => c > 0).length;
-  summary.textContent = activeWeeks + ' active week' + (activeWeeks !== 1 ? 's' : '');
-}
-
-function renderConcurrency(concurrencyHistogram) {
-  const grid = document.getElementById('activityGrid');
-  const summary = document.getElementById('activitySummary');
-  const today = new Date().toISOString().split('T')[0];
-
-  // Build 24-hour data with peak concurrency for today
-  const hourData = new Array(24).fill(null).map(() => ({ peak: 0, histogram: {} }));
-
-  for (const [key, histogram] of Object.entries(concurrencyHistogram || {})) {
-    const colonIdx = key.lastIndexOf(':');
-    if (colonIdx === -1) continue;
-    const datePart = key.substring(0, colonIdx);
-    const h = parseInt(key.substring(colonIdx + 1), 10);
-    if (datePart === today && h >= 0 && h < 24) {
-      // Find peak concurrency and store histogram
-      let peak = 0;
-      for (const [concurrency, minutes] of Object.entries(histogram)) {
-        const c = parseInt(concurrency, 10);
-        if (c > peak) peak = c;
-      }
-      hourData[h] = { peak, histogram };
-    }
-  }
-
-  // Color levels based on peak concurrency
-  // Level 0: No activity, Level 1: 1 session, Level 2: 2 sessions, Level 3: 3-4 sessions, Level 4: 5+ sessions
-  function getConcurrencyLevel(peak) {
-    if (peak === 0) return 0;
-    if (peak === 1) return 1;
-    if (peak === 2) return 2;
-    if (peak <= 4) return 3;
-    return 4;
-  }
-
-  grid.style.gridTemplateRows = 'repeat(4, 10px)';
-  grid.style.gridTemplateColumns = 'repeat(6, 10px)';
-  grid.style.gridAutoFlow = 'column';
-
-  grid.innerHTML = hourData.map((data, h) => {
-    const period = h < 12 ? 'AM' : 'PM';
-    const displayH = h % 12 === 0 ? 12 : h % 12;
-
-    // Build tooltip with histogram breakdown
-    let tooltip = displayH + ' ' + period + ': ';
-    if (data.peak === 0) {
-      tooltip += 'No activity';
-    } else {
-      const parts = [];
-      for (const [concurrency, minutes] of Object.entries(data.histogram)) {
-        parts.push(concurrency + ' session' + (concurrency === '1' ? '' : 's') + ' (' + minutes + 'm)');
-      }
-      tooltip += parts.join(', ');
-    }
-
-    return '<div class="activity-tile" data-level="' + getConcurrencyLevel(data.peak) + '" title="' + tooltip + '"></div>';
-  }).join('');
-
-  // Find max peak for today
-  const maxPeak = Math.max(...hourData.map(d => d.peak));
-  if (maxPeak > 0) {
-    summary.textContent = 'Peak: ' + maxPeak + ' concurrent session' + (maxPeak !== 1 ? 's' : '') + ' today';
-  } else {
-    summary.textContent = 'No concurrent sessions today';
-  }
-}
-
-function renderActivityGrid() {
-  if (!lastStatsData) return;
-  if (currentRange === '1h') renderHour(lastStatsData.hourCounts || {});
-  else if (currentRange === '1d') renderDaily(lastStatsData.dailyActivity || []);
-  else if (currentRange === '1w') renderWeekly(lastStatsData.dailyActivity || []);
-  else if (currentRange === 'cc') renderConcurrency(lastStatsData.concurrencyHistogram || {});
-}
 
 const PRICING = [
   { match: 'opus-4-6',  input: 5,    output: 25,   cacheRead: 0.50, cacheWrite: 6.25 },
@@ -765,37 +759,11 @@ function updateStats(data) {
   const s = data.stats;
   const totalTokens = Object.values(s.modelUsage || {}).reduce((sum, m) =>
     sum + (m.inputTokens || 0) + (m.outputTokens || 0) + (m.cacheReadInputTokens || 0) + (m.cacheCreationInputTokens || 0), 0);
-  const totalTools = (s.dailyActivity || []).reduce((sum, d) => sum + (d.toolCallCount || 0), 0);
 
   document.getElementById('statTokens').textContent = fmt(totalTokens);
-  document.getElementById('statMessages').textContent = fmt(s.totalMessages);
-  document.getElementById('statSessions').textContent = fmt(s.totalSessions);
-  document.getElementById('statTools').textContent = fmt(totalTools);
   document.getElementById('statCost').textContent = fmtCost(estimateCost(s.modelUsage));
 
-  // Compute concurrency stats for past day
-  const today = new Date().toISOString().split('T')[0];
-  let maxConcurrent = 0;
-  let concurrentMins = 0;
-
-  for (const [key, histogram] of Object.entries(s.concurrencyHistogram || {})) {
-    const colonIdx = key.lastIndexOf(':');
-    if (colonIdx === -1) continue;
-    const datePart = key.substring(0, colonIdx);
-    if (datePart !== today) continue;
-
-    for (const [sessions, minutes] of Object.entries(histogram)) {
-      const sessionCount = parseInt(sessions, 10);
-      if (sessionCount > maxConcurrent) maxConcurrent = sessionCount;
-      if (sessionCount > 1) concurrentMins += minutes;
-    }
-  }
-
-  document.getElementById('statMaxConcurrent').textContent = maxConcurrent || '\u2014';
-  document.getElementById('statConcurrentMins').textContent = concurrentMins > 0 ? concurrentMins + 'm' : '\u2014';
-
-  lastStatsData = s;
-  renderActivityGrid();
+  renderBurnClock(s.concurrencyHistogram || {});
 }
 
 document.getElementById('btnHide').addEventListener('click', () => invoke('hide_overlay'));
