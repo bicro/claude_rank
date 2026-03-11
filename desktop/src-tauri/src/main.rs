@@ -5,6 +5,7 @@ mod stats;
 
 use serde::Serialize;
 use serde_json::json;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem};
@@ -216,9 +217,42 @@ pub struct AppState {
 // ============ Window Prefs Persistence ============
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct MonitorPosition {
+    x: f64,
+    y: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct WindowPrefs {
     width: u32,
     height: u32,
+    /// Per-monitor saved positions, keyed by monitor_key()
+    #[serde(default)]
+    positions: HashMap<String, MonitorPosition>,
+}
+
+/// Stable key for a monitor: name if available, otherwise origin coordinates.
+fn monitor_key(monitor: &tauri::Monitor) -> String {
+    if let Some(name) = monitor.name() {
+        if !name.is_empty() {
+            return name.to_string();
+        }
+    }
+    let p = monitor.position();
+    format!("{}x{}", p.x, p.y)
+}
+
+/// Find which monitor contains the given physical point.
+fn find_monitor_at(monitors: &[tauri::Monitor], px: f64, py: f64) -> Option<&tauri::Monitor> {
+    monitors.iter().find(|m| {
+        let mp = m.position();
+        let ms = m.size();
+        let mx = mp.x as f64;
+        let my = mp.y as f64;
+        let mw = ms.width as f64;
+        let mh = ms.height as f64;
+        px >= mx && px < mx + mw && py >= my && py < my + mh
+    })
 }
 
 fn window_prefs_path() -> PathBuf {
@@ -374,10 +408,9 @@ fn size_to_logical(s: &tauri::Size, scale: f64) -> (f64, f64) {
 /// All math is done in **logical** coordinates to avoid Retina scaling bugs.
 ///
 /// Priority:
-/// 1. Below tray icon (queried from stored TrayIcon handle) — always used when available
-/// 2. Bottom-right fallback (hotkey with no tray handle)
-///
-/// Saved prefs are used only for **size** restoration, not position.
+/// 1. Saved per-monitor position from user drag (if target monitor has one)
+/// 2. Below tray icon (queried from stored TrayIcon handle)
+/// 3. Bottom-right fallback
 fn position_overlay_window(window: &tauri::WebviewWindow, app: &AppHandle) {
     let state = app.state::<AppState>();
 
@@ -386,15 +419,16 @@ fn position_overlay_window(window: &tauri::WebviewWindow, app: &AppHandle) {
         .scale_factor()
         .unwrap_or(1.0);
 
-    // Restore saved size (but not position)
-    if let Some(prefs) = load_window_prefs() {
+    // Restore saved size
+    let prefs = load_window_prefs();
+    if let Some(ref prefs) = prefs {
         let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
             width: prefs.width,
             height: prefs.height,
         }));
     }
 
-    // Try to position below tray icon
+    // Determine which monitor the tray icon is on (used for saved-position lookup & anchoring)
     let tray_rect = state
         .tray_icon
         .lock()
@@ -402,6 +436,45 @@ fn position_overlay_window(window: &tauri::WebviewWindow, app: &AppHandle) {
         .as_ref()
         .and_then(|t| t.rect().ok().flatten());
 
+    // If we have a saved position for the target monitor, use it
+    if let Some(ref prefs) = prefs {
+        if !prefs.positions.is_empty() {
+            if let Ok(monitors) = window.available_monitors() {
+                // Target monitor = monitor containing the tray icon, or primary
+                let target_mon = tray_rect
+                    .as_ref()
+                    .and_then(|rect| {
+                        let (tx, ty) = position_to_logical(&rect.position, scale);
+                        monitors.iter().find(|m| {
+                            let mp = m.position();
+                            let ms = m.size();
+                            let mx = mp.x as f64 / scale;
+                            let my = mp.y as f64 / scale;
+                            let mw = ms.width as f64 / scale;
+                            let mh = ms.height as f64 / scale;
+                            tx >= mx && tx < mx + mw && ty >= my && ty < my + mh
+                        })
+                    })
+                    .or_else(|| monitors.first());
+
+                if let Some(mon) = target_mon {
+                    let key = monitor_key(mon);
+                    if let Some(saved) = prefs.positions.get(&key) {
+                        // Verify the saved position still lands on a real monitor
+                        if find_monitor_at(&monitors, saved.x, saved.y).is_some() {
+                            let _ = window.set_position(tauri::Position::Physical(
+                                tauri::PhysicalPosition { x: saved.x as i32, y: saved.y as i32 },
+                            ));
+                            info!("[position] Restored saved position for monitor '{}' ({:.0}, {:.0})", key, saved.x, saved.y);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Try to position below tray icon
     if let Some(rect) = tray_rect {
         let (tray_x, tray_y) = position_to_logical(&rect.position, scale);
         let (tray_w, tray_h) = size_to_logical(&rect.size, scale);
@@ -498,16 +571,42 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
     .build()
     .map_err(|e| format!("Failed to create overlay window: {}", e))?;
 
-    // Persist window size on resize (position always comes from tray icon)
+    // Persist window size and per-monitor position on resize/move
+    let app_for_events = app.clone();
     window.on_window_event(move |event| {
-        if let tauri::WindowEvent::Resized(size) = event {
-            // Skip zero-size events (e.g. minimize)
-            if size.width > 0 && size.height > 0 {
-                save_window_prefs(&WindowPrefs {
-                    width: size.width,
-                    height: size.height,
-                });
+        match event {
+            tauri::WindowEvent::Resized(size) => {
+                if size.width > 0 && size.height > 0 {
+                    let mut prefs = load_window_prefs().unwrap_or(WindowPrefs {
+                        width: size.width,
+                        height: size.height,
+                        positions: HashMap::new(),
+                    });
+                    prefs.width = size.width;
+                    prefs.height = size.height;
+                    save_window_prefs(&prefs);
+                }
             }
+            tauri::WindowEvent::Moved(pos) => {
+                if let Some(win) = app_for_events.get_webview_window("overlay") {
+                    if let Ok(monitors) = win.available_monitors() {
+                        if let Some(mon) = find_monitor_at(&monitors, pos.x as f64, pos.y as f64) {
+                            let key = monitor_key(mon);
+                            let mut prefs = load_window_prefs().unwrap_or(WindowPrefs {
+                                width: 380,
+                                height: 620,
+                                positions: HashMap::new(),
+                            });
+                            prefs.positions.insert(key, MonitorPosition {
+                                x: pos.x as f64,
+                                y: pos.y as f64,
+                            });
+                            save_window_prefs(&prefs);
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
     });
 
