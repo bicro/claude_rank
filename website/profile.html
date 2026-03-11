@@ -182,6 +182,10 @@
                     <div class="burn-clock-container-full">
                         <div class="burn-clock-header-full">
                             <h3>Session Burn Clock</h3>
+                            <div class="burn-clock-view-toggle">
+                                <button class="burn-clock-view-btn active" id="btnBurnV1">v1</button>
+                                <button class="burn-clock-view-btn" id="btnBurnV2">v2</button>
+                            </div>
                             <button class="copy-burn-btn" id="copyConcurrency">Copy</button>
                         </div>
                         <div class="burn-clock-wrapper">
@@ -191,6 +195,7 @@
                                     <div class="burn-clock-peak">0</div>
                                     <div class="burn-clock-peak-label">Peak</div>
                                 </div>
+                                <svg class="burn-clock-v2-svg" id="burnClockV2" viewBox="0 0 860 300" style="display:none"></svg>
                             </div>
                             <div class="burn-clock-day-nav" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:12px;">
                                 <button class="copy-burn-btn" id="dayPrev" style="font-size:16px;padding:4px 10px;" title="Previous day">&#9664;</button>
@@ -327,6 +332,8 @@
                 // Load and render burn clock visualization with day navigation
                 let burnClockData = [];
                 let burnDayOffset = 0;
+                let currentBurnView = 'v1';
+                let lastConcurrencyData = null;
 
                 function formatDateISO(d) { return d.toISOString().split('T')[0]; }
                 function dateForOffset(offset) {
@@ -351,7 +358,12 @@
 
                     try {
                         const concurrencyData = await getUserConcurrencyByDate(hash, dateStr);
-                        renderBurnClock(concurrencyData, profile.username);
+                        lastConcurrencyData = concurrencyData;
+                        if (currentBurnView === 'v2') {
+                            renderBurnClockV2(concurrencyData, profile.username);
+                        } else {
+                            renderBurnClock(concurrencyData, profile.username);
+                        }
                     } catch (e) {
                         console.error('Failed to load concurrency data:', e);
                     }
@@ -557,6 +569,117 @@
                         };
                     }
                 }
+
+                function renderBurnClockV2(concurrencyHistogram, username) {
+                    const svg = document.getElementById('burnClockV2');
+                    const centerEl = document.getElementById('burnClockCenter');
+                    if (!svg) return;
+
+                    const hourlyData = processHourlyData(concurrencyHistogram);
+                    burnClockData = hourlyData;
+
+                    const chartLeft = 30, chartRight = 830, chartTop = 10, chartBottom = 250;
+                    const barWidth = 31, barGap = 3;
+                    const segHeight = 30, segGap = 3, maxSegs = 7;
+                    let svgContent = '';
+                    let maxSessions = 0;
+
+                    for (let i = 0; i < 24; i++) {
+                        const data = hourlyData[i];
+                        const x = chartLeft + i * (barWidth + barGap);
+                        const hour12 = i === 0 ? '12 AM' : i < 12 ? i + ' AM' : i === 12 ? '12 PM' : (i - 12) + ' PM';
+                        const tooltipText = hour12 + ': ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '');
+
+                        if (data.sessions.length > maxSessions) {
+                            maxSessions = data.sessions.length;
+                        }
+
+                        for (const session of data.sessions) {
+                            if (session.index > maxSegs) continue;
+                            const segY = chartBottom - session.index * (segHeight + segGap);
+                            const color = getBurnColor(session.intensity);
+                            svgContent += '<rect class="burn-bar" x="' + x + '" y="' + segY + '" width="' + barWidth + '" height="' + segHeight + '" rx="4" ry="4" fill="' + color + '"><title>' + tooltipText + '</title></rect>';
+                        }
+
+                        if (data.isCurrent) {
+                            svgContent += '<rect x="' + x + '" y="' + (chartBottom + 5) + '" width="' + barWidth + '" height="4" rx="2" fill="#CC581C" />';
+                        }
+                    }
+
+                    const axisLabels = [
+                        { label: '12am', hour: 0 }, { label: '3am', hour: 3 },
+                        { label: '6am', hour: 6 },  { label: '9am', hour: 9 },
+                        { label: '12pm', hour: 12 }, { label: '3pm', hour: 15 },
+                        { label: '6pm', hour: 18 }, { label: '9pm', hour: 21 },
+                    ];
+                    for (const al of axisLabels) {
+                        const lx = chartLeft + al.hour * (barWidth + barGap) + barWidth / 2;
+                        svgContent += '<text x="' + lx + '" y="280" fill="#888" font-size="14" text-anchor="middle" dominant-baseline="central" font-weight="600" font-family="inherit">' + al.label + '</text>';
+                    }
+
+                    svg.innerHTML = svgContent;
+
+                    if (centerEl) {
+                        centerEl.querySelector('.burn-clock-peak').textContent = maxSessions;
+                    }
+
+                    const copyBtn = document.getElementById('copyConcurrency');
+                    if (copyBtn) {
+                        copyBtn.onclick = () => {
+                            const emojis = burnClockData.map(d => {
+                                const count = d.sessions.length;
+                                if (count === 0) return '\u{1f534}';
+                                if (count === 1) return '\u{1f7e0}';
+                                if (count === 2) return '\u{1f7e1}';
+                                return '\u26aa';
+                            }).join('');
+
+                            const text = (username || 'Anonymous') + "'s ClaudeRank 24h\n" + emojis + "\nPeak: " + maxSessions + " sessions | clauderank.com";
+
+                            navigator.clipboard.writeText(text);
+                            const fb = document.getElementById('concurrencyFeedback');
+                            fb.classList.add('show');
+                            setTimeout(() => fb.classList.remove('show'), 2000);
+                        };
+                    }
+                }
+
+                function setBurnView(view) {
+                    currentBurnView = view;
+                    const container = document.getElementById('burnClockContainer');
+                    const svgV1 = document.getElementById('burnClock');
+                    const centerEl = document.getElementById('burnClockCenter');
+                    const svgV2 = document.getElementById('burnClockV2');
+                    const btnV1 = document.getElementById('btnBurnV1');
+                    const btnV2 = document.getElementById('btnBurnV2');
+
+                    if (view === 'v2') {
+                        container.classList.add('v2');
+                        svgV1.style.display = 'none';
+                        centerEl.style.display = 'none';
+                        svgV2.style.display = '';
+                        btnV1.classList.remove('active');
+                        btnV2.classList.add('active');
+                    } else {
+                        container.classList.remove('v2');
+                        svgV1.style.display = '';
+                        centerEl.style.display = '';
+                        svgV2.style.display = 'none';
+                        btnV1.classList.add('active');
+                        btnV2.classList.remove('active');
+                    }
+
+                    if (lastConcurrencyData) {
+                        if (view === 'v2') {
+                            renderBurnClockV2(lastConcurrencyData, profile.username);
+                        } else {
+                            renderBurnClock(lastConcurrencyData, profile.username);
+                        }
+                    }
+                }
+
+                document.getElementById('btnBurnV1').addEventListener('click', () => setBurnView('v1'));
+                document.getElementById('btnBurnV2').addEventListener('click', () => setBurnView('v2'));
 
                 if (history.length > 0) {
                     const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
