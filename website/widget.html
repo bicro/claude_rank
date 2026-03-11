@@ -89,13 +89,13 @@
   /* Burn Clock */
   .burn-clock-section { margin-top: 4px; }
   .burn-clock-header {
-    display: flex; justify-content: space-between; align-items: center;
+    display: flex; align-items: center; gap: 6px;
     font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
   }
   .copy-btn {
     background: rgba(255,255,255,0.08); border: none; color: #888;
     font-size: 10px; padding: 2px 8px; border-radius: 4px; cursor: pointer;
-    text-transform: none; letter-spacing: 0;
+    text-transform: none; letter-spacing: 0; margin-left: auto;
   }
   .copy-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
   .copy-feedback {
@@ -122,6 +122,23 @@
     transition: opacity 0.15s;
   }
   .burn-clock-tooltip.show { opacity: 1; }
+  .view-toggle { display: flex; gap: 2px; margin-left: 8px; }
+  .view-toggle-btn {
+    background: rgba(255,255,255,0.08); border: none; color: #888;
+    font-size: 10px; padding: 2px 6px; border-radius: 3px; cursor: pointer;
+    text-transform: none; letter-spacing: 0; font-weight: 600;
+  }
+  .view-toggle-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .view-toggle-btn.active { background: #6366f1; color: #fff; }
+  .burn-clock-container.v2 { width: 320px; height: 140px; }
+  .burn-clock-v2 { width: 100%; height: 100%; }
+  .burn-clock-center-v2 {
+    text-align: center; margin-bottom: 4px;
+  }
+  .burn-clock-center-v2 .center-tokens { font-size: 14px; font-weight: 700; color: #fff; margin-right: 6px; }
+  .burn-clock-center-v2 .center-cost { font-size: 10px; color: #a5b4fc; font-weight: 600; }
+  .burn-bar { cursor: default; transition: opacity 0.15s; }
+  .burn-bar:hover { opacity: 1 !important; }
 
   /* Day navigation */
   .day-nav {
@@ -192,14 +209,23 @@
   <div class="burn-clock-section">
     <div class="burn-clock-header">
       <span id="burnClockTitle">Session Burn Clock</span>
+      <div class="view-toggle">
+        <button class="view-toggle-btn active" id="btnViewV1">v1</button>
+        <button class="view-toggle-btn" id="btnViewV2">v2</button>
+      </div>
       <button class="copy-btn" id="copyConcurrency" title="Copy to clipboard">Copy</button>
+    </div>
+    <div class="burn-clock-center-v2" id="burnClockCenterV2" style="display:none">
+      <span class="center-tokens" id="statTokensV2">&mdash;</span>
+      <span class="center-cost" id="statCostV2">&mdash;</span>
     </div>
     <div class="burn-clock-container" id="burnClockContainer">
       <svg class="burn-clock" id="burnClock" viewBox="0 0 180 180"></svg>
-      <div class="burn-clock-center">
+      <div class="burn-clock-center" id="burnClockCenterV1">
         <div class="center-tokens" id="statTokens">&mdash;</div>
         <div class="center-cost" id="statCost">&mdash;</div>
       </div>
+      <svg class="burn-clock-v2" id="burnClockV2" viewBox="0 0 320 120" style="display:none"></svg>
       <div class="burn-clock-tooltip" id="burnClockTooltip"></div>
     </div>
     <div class="day-nav">
@@ -238,6 +264,9 @@ let lastBurnClockData = [];
 let heatmapByDate = {}; // localDateStr → { tokens, messages, tool_calls }
 let totalTokens = 0;    // all-time total from profile
 let totalCost = 0;      // all-time cost from profile
+let currentView = 'v1';
+let lastMergedHistograms = {};
+let lastLocalDateStr = '';
 
 // ── Helpers ──
 function fmt(n) {
@@ -275,13 +304,15 @@ function updateCenterDisplay() {
   if (currentDateIndex < 0 || !activeDates[currentDateIndex]) return;
   const dayData = heatmapByDate[activeDates[currentDateIndex]];
   const dayTokens = dayData ? dayData.tokens : 0;
-  document.getElementById('statTokens').textContent = fmt(dayTokens);
+  const tokensText = fmt(dayTokens);
+  let costText = '\u2014';
   if (totalTokens > 0 && dayTokens > 0 && totalCost > 0) {
-    const dayCost = totalCost * (dayTokens / totalTokens);
-    document.getElementById('statCost').textContent = formatCost(dayCost);
-  } else {
-    document.getElementById('statCost').textContent = '\u2014';
+    costText = formatCost(totalCost * (dayTokens / totalTokens));
   }
+  document.getElementById('statTokens').textContent = tokensText;
+  document.getElementById('statCost').textContent = costText;
+  document.getElementById('statTokensV2').textContent = tokensText;
+  document.getElementById('statCostV2').textContent = costText;
 }
 
 // ── Tier helpers ──
@@ -391,6 +422,18 @@ function renderBurnClock(allHistograms, localDateStr) {
     }
   }
 
+  // Time labels at 4 cardinal positions
+  const labelRadius = 80;
+  const timeLabels = [
+    { label: '12a', x: cx, y: cy - labelRadius },
+    { label: '6a',  x: cx + labelRadius, y: cy },
+    { label: '12p', x: cx, y: cy + labelRadius },
+    { label: '6p',  x: cx - labelRadius, y: cy },
+  ];
+  for (const tl of timeLabels) {
+    svgContent += `<text x="${tl.x}" y="${tl.y}" fill="#555" font-size="8" text-anchor="middle" dominant-baseline="central" font-weight="600">${tl.label}</text>`;
+  }
+
   svg.innerHTML = svgContent;
 
   svg.querySelectorAll('.burn-pill').forEach(pill => {
@@ -406,6 +449,111 @@ function renderBurnClock(allHistograms, localDateStr) {
     pill.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
   });
 }
+
+// ── V2 bar chart rendering ──
+function renderBurnClockV2(allHistograms, localDateStr) {
+  const svg = document.getElementById('burnClockV2');
+  const tooltip = document.getElementById('burnClockTooltip');
+  const container = document.getElementById('burnClockContainer');
+  if (!svg) return;
+
+  const hourlyData = processHourlyData(allHistograms, localDateStr);
+  lastBurnClockData = hourlyData;
+
+  const chartLeft = 10, chartRight = 310, chartTop = 4, chartBottom = 100;
+  const chartWidth = chartRight - chartLeft;
+  const barWidth = 11.5, barGap = 1;
+  const segHeight = 18, segGap = 1, maxSegs = 5;
+  let svgContent = '';
+
+  for (let i = 0; i < 24; i++) {
+    const data = hourlyData[i];
+    const x = chartLeft + i * (barWidth + barGap);
+    const hour12 = i === 0 ? '12 AM' : i < 12 ? i + ' AM' : i === 12 ? '12 PM' : (i - 12) + ' PM';
+    const tooltipText = `${hour12}: ${data.sessions.length} session${data.sessions.length !== 1 ? 's' : ''}`;
+
+    for (const session of data.sessions) {
+      if (session.index > maxSegs) continue;
+      const segY = chartBottom - session.index * (segHeight + segGap);
+      const color = getBurnColor(session.intensity);
+      svgContent += `<rect class="burn-bar" x="${x}" y="${segY}" width="${barWidth}" height="${segHeight}" rx="2" ry="2" fill="${color}" data-tooltip="${tooltipText}" />`;
+    }
+
+    if (data.isCurrent) {
+      svgContent += `<rect x="${x}" y="${chartBottom + 3}" width="${barWidth}" height="2" rx="1" fill="#fff" />`;
+    }
+  }
+
+  // Time labels along the bottom axis
+  const axisLabels = [
+    { label: '12a', hour: 0 }, { label: '3a', hour: 3 },
+    { label: '6a', hour: 6 },  { label: '9a', hour: 9 },
+    { label: '12p', hour: 12 }, { label: '3p', hour: 15 },
+    { label: '6p', hour: 18 }, { label: '9p', hour: 21 },
+  ];
+  for (const al of axisLabels) {
+    const lx = chartLeft + al.hour * (barWidth + barGap) + barWidth / 2;
+    svgContent += `<text x="${lx}" y="115" fill="#555" font-size="8" text-anchor="middle" dominant-baseline="central" font-weight="600">${al.label}</text>`;
+  }
+
+  svg.innerHTML = svgContent;
+
+  svg.querySelectorAll('.burn-bar').forEach(bar => {
+    bar.addEventListener('mouseenter', (e) => {
+      tooltip.textContent = e.target.getAttribute('data-tooltip');
+      tooltip.classList.add('show');
+    });
+    bar.addEventListener('mousemove', (e) => {
+      const rect = container.getBoundingClientRect();
+      tooltip.style.left = (e.clientX - rect.left + 10) + 'px';
+      tooltip.style.top = (e.clientY - rect.top - 20) + 'px';
+    });
+    bar.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
+  });
+}
+
+// ── View toggle ──
+function setView(view) {
+  currentView = view;
+  const container = document.getElementById('burnClockContainer');
+  const svgV1 = document.getElementById('burnClock');
+  const centerV1 = document.getElementById('burnClockCenterV1');
+  const svgV2 = document.getElementById('burnClockV2');
+  const centerV2 = document.getElementById('burnClockCenterV2');
+  const btnV1 = document.getElementById('btnViewV1');
+  const btnV2 = document.getElementById('btnViewV2');
+
+  if (view === 'v2') {
+    container.classList.add('v2');
+    svgV1.style.display = 'none';
+    centerV1.style.display = 'none';
+    svgV2.style.display = '';
+    centerV2.style.display = '';
+    btnV1.classList.remove('active');
+    btnV2.classList.add('active');
+  } else {
+    container.classList.remove('v2');
+    svgV1.style.display = '';
+    centerV1.style.display = '';
+    svgV2.style.display = 'none';
+    centerV2.style.display = 'none';
+    btnV1.classList.add('active');
+    btnV2.classList.remove('active');
+  }
+  reRenderCurrentView();
+}
+
+function reRenderCurrentView() {
+  if (!lastLocalDateStr) return;
+  if (currentView === 'v2') {
+    renderBurnClockV2(lastMergedHistograms, lastLocalDateStr);
+  } else {
+    renderBurnClock(lastMergedHistograms, lastLocalDateStr);
+  }
+}
+
+document.getElementById('btnViewV1').addEventListener('click', () => setView('v1'));
+document.getElementById('btnViewV2').addEventListener('click', () => setView('v2'));
 
 // ── Day navigation ──
 async function loadActiveDates() {
@@ -472,8 +620,9 @@ async function loadDayByIndex(index) {
     // Fetch the UTC date(s) that cover this local day, then merge
     const utcDates = utcDatesForLocalDay(localDateStr);
     const results = await Promise.all(utcDates.map(d => getUserConcurrencyByDate(userHash, d)));
-    const merged = Object.assign({}, ...results);
-    renderBurnClock(merged, localDateStr);
+    lastMergedHistograms = Object.assign({}, ...results);
+    lastLocalDateStr = localDateStr;
+    reRenderCurrentView();
   } catch (e) {
     console.error('Failed to load concurrency data:', e);
   }
@@ -642,7 +791,10 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 async function copyBurnClockAsImage() {
-  const W = 340, H = 400, S = 2;
+  const isV2 = currentView === 'v2';
+  const W = isV2 ? 380 : 340;
+  const H = isV2 ? 320 : 400;
+  const S = 2;
   const canvas = document.createElement('canvas');
   canvas.width = W * S;
   canvas.height = H * S;
@@ -661,95 +813,170 @@ async function copyBurnClockAsImage() {
   const titleEl = document.getElementById('burnClockTitle');
   ctx.fillText(titleEl ? titleEl.textContent : 'Session Burn Clock', W / 2, 28);
 
-  // Draw burn clock SVG onto canvas at 240x240
-  const svgEl = document.getElementById('burnClock');
-  if (svgEl) {
-    const svgClone = svgEl.cloneNode(true);
-    svgClone.setAttribute('width', '240');
-    svgClone.setAttribute('height', '240');
-    const svgData = new XMLSerializer().serializeToString(svgClone);
-    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-    const svgUrl = URL.createObjectURL(svgBlob);
-    const img = new Image();
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-      img.src = svgUrl;
-    });
-    ctx.drawImage(img, (W - 240) / 2, 46, 240, 240);
-    URL.revokeObjectURL(svgUrl);
-  }
-
-  // Center stats (tokens + cost) over the SVG center
-  const svgCenterY = 46 + 120;
   const tokensEl = document.getElementById('statTokens');
   const costEl = document.getElementById('statCost');
   const tokensText = tokensEl ? tokensEl.textContent : '\u2014';
   const costText = costEl ? costEl.textContent : '\u2014';
 
-  ctx.fillStyle = '#fff';
-  ctx.font = '700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(tokensText, W / 2, svgCenterY - 2);
-
-  ctx.fillStyle = '#a5b4fc';
-  ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  ctx.fillText(costText, W / 2, svgCenterY + 16);
-
-  // Username + tier line
-  const usernameEl = document.getElementById('username');
-  const tierBadgeEl = document.getElementById('tierBadge');
-  const username = usernameEl ? usernameEl.childNodes[0].textContent.trim() : 'Anonymous';
-  const tierText = tierBadgeEl ? tierBadgeEl.textContent.trim() : '';
-  const tierColor = tierBadgeEl ? getComputedStyle(tierBadgeEl).color : '#cd7f32';
-
-  ctx.font = '600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  const userLine = username + '  \u00b7  ' + tierText;
-  // Measure parts to color them separately
-  const userWidth = ctx.measureText(username + '  \u00b7  ').width;
-  const tierWidth = ctx.measureText(tierText).width;
-  const totalWidth = userWidth + tierWidth;
-  const startX = (W - totalWidth) / 2;
-
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#fff';
-  ctx.fillText(username + '  \u00b7  ', startX, 306);
-  ctx.fillStyle = tierColor;
-  ctx.fillText(tierText, startX + userWidth, 306);
-
-  // Rank line
-  const rankEl = document.getElementById('rankNumber');
-  const rankText = rankEl ? rankEl.textContent.trim() : '';
-  if (rankText) {
-    ctx.fillStyle = '#888';
-    ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  if (isV2) {
+    // Tokens + cost inline above chart
+    ctx.fillStyle = '#fff';
+    ctx.font = '700 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(rankText, W / 2, 324);
+    ctx.fillText(tokensText, W / 2 - 30, 54);
+    ctx.fillStyle = '#a5b4fc';
+    ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(costText, W / 2 + 40, 54);
+
+    // Draw v2 SVG
+    const svgEl = document.getElementById('burnClockV2');
+    if (svgEl) {
+      const svgClone = svgEl.cloneNode(true);
+      svgClone.setAttribute('width', '340');
+      svgClone.setAttribute('height', '130');
+      const svgData = new XMLSerializer().serializeToString(svgClone);
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const svgUrl = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = svgUrl;
+      });
+      ctx.drawImage(img, (W - 340) / 2, 68, 340, 130);
+      URL.revokeObjectURL(svgUrl);
+    }
+
+    // Username + tier
+    const usernameEl = document.getElementById('username');
+    const tierBadgeEl = document.getElementById('tierBadge');
+    const username = usernameEl ? usernameEl.childNodes[0].textContent.trim() : 'Anonymous';
+    const tierText = tierBadgeEl ? tierBadgeEl.textContent.trim() : '';
+    const tierColor = tierBadgeEl ? getComputedStyle(tierBadgeEl).color : '#cd7f32';
+
+    ctx.font = '600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    const userWidth = ctx.measureText(username + '  \u00b7  ').width;
+    const tierWidth = ctx.measureText(tierText).width;
+    const totalW = userWidth + tierWidth;
+    const startX = (W - totalW) / 2;
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(username + '  \u00b7  ', startX, 224);
+    ctx.fillStyle = tierColor;
+    ctx.fillText(tierText, startX + userWidth, 224);
+
+    // Rank
+    const rankEl = document.getElementById('rankNumber');
+    const rankText = rankEl ? rankEl.textContent.trim() : '';
+    if (rankText) {
+      ctx.fillStyle = '#888';
+      ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(rankText, W / 2, 242);
+    }
+
+    // Watermark
+    const logoImg = new Image();
+    await new Promise((resolve) => {
+      logoImg.onload = resolve;
+      logoImg.onerror = resolve;
+      logoImg.src = 'images/logo.png';
+    });
+    const wmText = 'ClaudeRank';
+    ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    const wmTextWidth = ctx.measureText(wmText).width;
+    const logoSize = 14;
+    const wmTotalWidth = logoSize + 4 + wmTextWidth;
+    const wmX = W - 16;
+    const wmY = 290;
+    if (logoImg.naturalWidth) {
+      ctx.drawImage(logoImg, wmX - wmTotalWidth, wmY - logoSize + 2, logoSize, logoSize);
+    }
+    ctx.fillText(wmText, wmX, wmY);
+  } else {
+    // V1: existing radial logic
+    const svgEl = document.getElementById('burnClock');
+    if (svgEl) {
+      const svgClone = svgEl.cloneNode(true);
+      svgClone.setAttribute('width', '240');
+      svgClone.setAttribute('height', '240');
+      const svgData = new XMLSerializer().serializeToString(svgClone);
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const svgUrl = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = svgUrl;
+      });
+      ctx.drawImage(img, (W - 240) / 2, 46, 240, 240);
+      URL.revokeObjectURL(svgUrl);
+    }
+
+    // Center stats over SVG center
+    const svgCenterY = 46 + 120;
+    ctx.fillStyle = '#fff';
+    ctx.font = '700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(tokensText, W / 2, svgCenterY - 2);
+
+    ctx.fillStyle = '#a5b4fc';
+    ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(costText, W / 2, svgCenterY + 16);
+
+    // Username + tier line
+    const usernameEl = document.getElementById('username');
+    const tierBadgeEl = document.getElementById('tierBadge');
+    const username = usernameEl ? usernameEl.childNodes[0].textContent.trim() : 'Anonymous';
+    const tierText = tierBadgeEl ? tierBadgeEl.textContent.trim() : '';
+    const tierColor = tierBadgeEl ? getComputedStyle(tierBadgeEl).color : '#cd7f32';
+
+    ctx.font = '600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    const userWidth = ctx.measureText(username + '  \u00b7  ').width;
+    const tierWidth = ctx.measureText(tierText).width;
+    const totalW = userWidth + tierWidth;
+    const startX = (W - totalW) / 2;
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(username + '  \u00b7  ', startX, 306);
+    ctx.fillStyle = tierColor;
+    ctx.fillText(tierText, startX + userWidth, 306);
+
+    // Rank line
+    const rankEl = document.getElementById('rankNumber');
+    const rankText = rankEl ? rankEl.textContent.trim() : '';
+    if (rankText) {
+      ctx.fillStyle = '#888';
+      ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(rankText, W / 2, 324);
+    }
+
+    // Watermark with logo
+    const logoImg = new Image();
+    await new Promise((resolve) => {
+      logoImg.onload = resolve;
+      logoImg.onerror = resolve;
+      logoImg.src = 'images/logo.png';
+    });
+    const wmText = 'ClaudeRank';
+    ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    const wmTextWidth = ctx.measureText(wmText).width;
+    const logoSize = 14;
+    const wmTotalWidth = logoSize + 4 + wmTextWidth;
+    const wmX = W - 16;
+    const wmY = 370;
+    if (logoImg.naturalWidth) {
+      ctx.drawImage(logoImg, wmX - wmTotalWidth, wmY - logoSize + 2, logoSize, logoSize);
+    }
+    ctx.fillText(wmText, wmX, wmY);
   }
-
-  // Watermark with logo
-  const logoImg = new Image();
-  const logoLoaded = new Promise((resolve) => {
-    logoImg.onload = resolve;
-    logoImg.onerror = resolve; // proceed even if logo fails
-    logoImg.src = 'images/logo.png';
-  });
-  await logoLoaded;
-
-  const wmText = 'ClaudeRank';
-  ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  const wmTextWidth = ctx.measureText(wmText).width;
-  const logoSize = 14;
-  const wmTotalWidth = logoSize + 4 + wmTextWidth;
-  const wmX = W - 16;
-  const wmY = 370;
-
-  if (logoImg.naturalWidth) {
-    ctx.drawImage(logoImg, wmX - wmTotalWidth, wmY - logoSize + 2, logoSize, logoSize);
-  }
-  ctx.fillText(wmText, wmX, wmY);
 
   // Copy to clipboard
   const inIframe = window.parent !== window;
