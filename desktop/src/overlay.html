@@ -54,7 +54,8 @@
   .switch input:checked + .slider { background: #6366f1; }
   .switch input:checked + .slider::before { transform: translateX(14px); }
 
-  .drag-region { -webkit-app-region: drag; app-region: drag; }
+  .drag-region { cursor: grab; }
+  .drag-region:active { cursor: grabbing; }
   .no-drag { -webkit-app-region: no-drag; app-region: no-drag; }
 
   .widget-iframe {
@@ -88,6 +89,13 @@
 <script>
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
+const { getCurrentWindow } = window.__TAURI__.window;
+
+// ── Enable dragging via JS (CSS app-region:drag doesn't work with transparent frameless windows) ──
+document.querySelector('.drag-region').addEventListener('mousedown', (e) => {
+  if (e.button !== 0 || e.target.closest('.no-drag')) return;
+  getCurrentWindow().startDragging();
+});
 
 // ── Load identity and set iframe src ──
 (async () => {

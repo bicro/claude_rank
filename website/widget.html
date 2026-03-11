@@ -431,7 +431,7 @@ function renderBurnClock(allHistograms, localDateStr) {
     { label: '6p',  x: cx - labelRadius, y: cy },
   ];
   for (const tl of timeLabels) {
-    svgContent += `<text x="${tl.x}" y="${tl.y}" fill="#555" font-size="8" text-anchor="middle" dominant-baseline="central" font-weight="600">${tl.label}</text>`;
+    svgContent += `<text x="${tl.x}" y="${tl.y}" fill="#fff" font-size="8" text-anchor="middle" dominant-baseline="central" font-weight="600">${tl.label}</text>`;
   }
 
   svg.innerHTML = svgContent;
@@ -463,7 +463,7 @@ function renderBurnClockV2(allHistograms, localDateStr) {
   const chartLeft = 10, chartRight = 310, chartTop = 4, chartBottom = 100;
   const chartWidth = chartRight - chartLeft;
   const barWidth = 11.5, barGap = 1;
-  const segHeight = 18, segGap = 1, maxSegs = 5;
+  const segHeight = 11.5, segGap = 1, maxSegs = 5;
   let svgContent = '';
 
   for (let i = 0; i < 24; i++) {
@@ -493,7 +493,7 @@ function renderBurnClockV2(allHistograms, localDateStr) {
   ];
   for (const al of axisLabels) {
     const lx = chartLeft + al.hour * (barWidth + barGap) + barWidth / 2;
-    svgContent += `<text x="${lx}" y="115" fill="#555" font-size="8" text-anchor="middle" dominant-baseline="central" font-weight="600">${al.label}</text>`;
+    svgContent += `<text x="${lx}" y="115" fill="#fff" font-size="8" text-anchor="middle" dominant-baseline="central" font-weight="600">${al.label}</text>`;
   }
 
   svg.innerHTML = svgContent;

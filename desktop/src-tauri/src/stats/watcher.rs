@@ -1,10 +1,11 @@
+use super::cost;
 use super::metrics::MetricsEngine;
 use super::points::PointsEngine;
 use super::ranking::RankingEngine;
 use log::{error, info};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 pub struct FileWatcher;
 
@@ -21,6 +22,11 @@ impl FileWatcher {
             if m.data.stats.total_sessions > 0 {
                 info!("[stats-watcher] emitting cached stats immediately");
                 let _ = app.emit("metrics-updated", &m.data);
+
+                // Show cost in tray title immediately from cache
+                let total = cost::total_cost(&m.data.stats);
+                let label = cost::format_cost(total);
+                Self::update_tray_title(&app, &label);
             }
         }
 
@@ -95,6 +101,14 @@ impl FileWatcher {
         }
     }
 
+    fn update_tray_title(app: &AppHandle, label: &str) {
+        let state = app.state::<crate::AppState>();
+        let guard = state.tray_icon.lock().unwrap();
+        if let Some(tray) = guard.as_ref() {
+            let _ = tray.set_title(Some(label));
+        }
+    }
+
     fn refresh(
         app: &AppHandle,
         metrics: &Arc<Mutex<MetricsEngine>>,
@@ -105,6 +119,12 @@ impl FileWatcher {
         let stats = if let Ok(mut m) = metrics.lock() {
             m.refresh();
             let _ = app.emit("metrics-updated", &m.data);
+
+            // Update tray icon title with total cost
+            let total = cost::total_cost(&m.data.stats);
+            let label = cost::format_cost(total);
+            Self::update_tray_title(app, &label);
+
             Some(m.data.stats.clone())
         } else {
             None

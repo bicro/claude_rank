@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod cost;
 pub mod jsonl;
 pub mod metrics;
 pub mod parser;

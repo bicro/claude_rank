@@ -503,7 +503,7 @@
                         const toRad = Math.PI / 180;
                         const x = cx + labelRadius * Math.cos(c.angle * toRad);
                         const y = cy + labelRadius * Math.sin(c.angle * toRad);
-                        svgContent += `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" fill="#888" font-size="10" font-family="inherit">${c.label}</text>`;
+                        svgContent += `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="10" font-family="inherit">${c.label}</text>`;
                     });
 
                     // Draw hour slices
@@ -580,7 +580,7 @@
 
                     const chartLeft = 30, chartRight = 830, chartTop = 10, chartBottom = 250;
                     const barWidth = 31, barGap = 3;
-                    const segHeight = 30, segGap = 3, maxSegs = 7;
+                    const segHeight = 31, segGap = 3, maxSegs = 7;
                     let svgContent = '';
                     let maxSessions = 0;
 
@@ -614,7 +614,7 @@
                     ];
                     for (const al of axisLabels) {
                         const lx = chartLeft + al.hour * (barWidth + barGap) + barWidth / 2;
-                        svgContent += '<text x="' + lx + '" y="280" fill="#888" font-size="14" text-anchor="middle" dominant-baseline="central" font-weight="600" font-family="inherit">' + al.label + '</text>';
+                        svgContent += '<text x="' + lx + '" y="280" fill="currentColor" font-size="14" text-anchor="middle" dominant-baseline="central" font-weight="600" font-family="inherit">' + al.label + '</text>';
                     }
 
                     svg.innerHTML = svgContent;

@@ -5,9 +5,10 @@ mod stats;
 
 use serde::Serialize;
 use serde_json::json;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder};
 use tauri::{command, AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
@@ -209,6 +210,38 @@ async fn open_overlay_devtools(app: tauri::AppHandle) -> Result<(), String> {
 pub struct AppState {
     pub overlay_visible: Mutex<bool>,
     pub toggle_menu_item: Mutex<Option<MenuItem<tauri::Wry>>>,
+    pub tray_icon: Mutex<Option<TrayIcon<tauri::Wry>>>,
+}
+
+// ============ Window Prefs Persistence ============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WindowPrefs {
+    width: u32,
+    height: u32,
+}
+
+fn window_prefs_path() -> PathBuf {
+    let dir = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".vaibfu");
+    std::fs::create_dir_all(&dir).ok();
+    dir.join("window_prefs.json")
+}
+
+fn load_window_prefs() -> Option<WindowPrefs> {
+    let path = window_prefs_path();
+    let data = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&data).ok()
+}
+
+fn save_window_prefs(prefs: &WindowPrefs) {
+    let path = window_prefs_path();
+    if let Ok(json) = serde_json::to_string_pretty(prefs) {
+        if let Err(e) = std::fs::write(&path, json) {
+            error!("[window_prefs] Failed to save: {}", e);
+        }
+    }
 }
 
 // ============ Overlay Window ============
@@ -320,6 +353,126 @@ fn configure_overlay(_window: &tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+/// Convert a `dpi::Position` to logical (f64) coordinates.
+fn position_to_logical(pos: &tauri::Position, scale: f64) -> (f64, f64) {
+    match pos {
+        tauri::Position::Logical(l) => (l.x, l.y),
+        tauri::Position::Physical(p) => (p.x as f64 / scale, p.y as f64 / scale),
+    }
+}
+
+/// Convert a `dpi::Size` to logical (f64) dimensions.
+fn size_to_logical(s: &tauri::Size, scale: f64) -> (f64, f64) {
+    match s {
+        tauri::Size::Logical(l) => (l.width, l.height),
+        tauri::Size::Physical(p) => (p.width as f64 / scale, p.height as f64 / scale),
+    }
+}
+
+/// Position the overlay window anchored below the tray icon (macOS popover style).
+///
+/// All math is done in **logical** coordinates to avoid Retina scaling bugs.
+///
+/// Priority:
+/// 1. Below tray icon (queried from stored TrayIcon handle) — always used when available
+/// 2. Bottom-right fallback (hotkey with no tray handle)
+///
+/// Saved prefs are used only for **size** restoration, not position.
+fn position_overlay_window(window: &tauri::WebviewWindow, app: &AppHandle) {
+    let state = app.state::<AppState>();
+
+    // Get scale factor for coordinate conversions
+    let scale = window
+        .scale_factor()
+        .unwrap_or(1.0);
+
+    // Restore saved size (but not position)
+    if let Some(prefs) = load_window_prefs() {
+        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+            width: prefs.width,
+            height: prefs.height,
+        }));
+    }
+
+    // Try to position below tray icon
+    let tray_rect = state
+        .tray_icon
+        .lock()
+        .unwrap()
+        .as_ref()
+        .and_then(|t| t.rect().ok().flatten());
+
+    if let Some(rect) = tray_rect {
+        let (tray_x, tray_y) = position_to_logical(&rect.position, scale);
+        let (tray_w, tray_h) = size_to_logical(&rect.size, scale);
+
+        if let Ok(window_phys) = window.outer_size() {
+            let ww = window_phys.width as f64 / scale;
+            let wh = window_phys.height as f64 / scale;
+
+            // Center horizontally under the tray icon, place directly below it
+            let mut x = tray_x + (tray_w / 2.0) - (ww / 2.0);
+            let mut y = tray_y + tray_h;
+
+            // On non-macOS, tray is at bottom — place window above the icon
+            #[cfg(not(target_os = "macos"))]
+            {
+                y = tray_y - wh;
+            }
+
+            // Clamp to screen bounds using the monitor the tray is on
+            if let Ok(monitors) = window.available_monitors() {
+                // Find the monitor that contains the tray icon
+                let tray_monitor = monitors.iter().find(|m| {
+                    let mp = m.position();
+                    let ms = m.size();
+                    let mx = mp.x as f64 / scale;
+                    let my = mp.y as f64 / scale;
+                    let mw = ms.width as f64 / scale;
+                    let mh = ms.height as f64 / scale;
+                    tray_x >= mx && tray_x < mx + mw && tray_y >= my && tray_y < my + mh
+                });
+
+                if let Some(monitor) = tray_monitor {
+                    let sp = monitor.position();
+                    let ss = monitor.size();
+                    let sx = sp.x as f64 / scale;
+                    let sy = sp.y as f64 / scale;
+                    let sw = ss.width as f64 / scale;
+                    let sh = ss.height as f64 / scale;
+                    x = x.max(sx).min(sx + sw - ww);
+                    y = y.max(sy).min(sy + sh - wh);
+
+                    let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition {
+                        x,
+                        y,
+                    }));
+                    info!("[position] Anchored below tray icon ({:.0}, {:.0}) scale={}", x, y, scale);
+                    return;
+                }
+            }
+        }
+    }
+
+    // Fallback: bottom-right of screen
+    if let Ok(Some(monitor)) = window.current_monitor() {
+        let ss = monitor.size();
+        let sp = monitor.position();
+        if let Ok(window_phys) = window.outer_size() {
+            let sx = sp.x as f64 / scale;
+            let sy = sp.y as f64 / scale;
+            let sw = ss.width as f64 / scale;
+            let sh = ss.height as f64 / scale;
+            let ww = window_phys.width as f64 / scale;
+            let wh = window_phys.height as f64 / scale;
+            let x = sx + sw - ww;
+            let y = sy + sh - wh;
+            let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+            info!("[position] Bottom-right fallback ({:.0}, {:.0})", x, y);
+        }
+    }
+}
+
 fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
     if let Some(window) = app.get_webview_window("overlay") {
         return Ok(window);
@@ -328,7 +481,7 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
     let width = 380.0;
     let height = 620.0;
 
-    tauri::WebviewWindowBuilder::new(
+    let window = tauri::WebviewWindowBuilder::new(
         app,
         "overlay",
         tauri::WebviewUrl::App("overlay.html".into()),
@@ -343,7 +496,22 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
     .inner_size(width, height)
     .resizable(true)
     .build()
-    .map_err(|e| format!("Failed to create overlay window: {}", e))
+    .map_err(|e| format!("Failed to create overlay window: {}", e))?;
+
+    // Persist window size on resize (position always comes from tray icon)
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::Resized(size) = event {
+            // Skip zero-size events (e.g. minimize)
+            if size.width > 0 && size.height > 0 {
+                save_window_prefs(&WindowPrefs {
+                    width: size.width,
+                    height: size.height,
+                });
+            }
+        }
+    });
+
+    Ok(window)
 }
 
 fn get_overlay_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
@@ -356,17 +524,7 @@ async fn do_show_overlay(
 ) -> Result<(), String> {
     let window = ensure_overlay_window(&app)?;
     configure_overlay(&window)?;
-
-    if let Ok(Some(monitor)) = window.current_monitor() {
-        let screen_size = monitor.size();
-        let screen_pos = monitor.position();
-        if let Ok(window_size) = window.outer_size() {
-            let taskbar_offset = get_windows_taskbar_height();
-            let x = screen_pos.x + (screen_size.width as i32) - (window_size.width as i32);
-            let y = screen_pos.y + (screen_size.height as i32) - (window_size.height as i32) - taskbar_offset;
-            let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
-        }
-    }
+    position_overlay_window(&window, &app);
 
     window.show().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())?;
@@ -438,18 +596,7 @@ fn toggle_overlay_sync(app: &AppHandle) {
         }
     } else if let Ok(window) = ensure_overlay_window(app) {
         let _ = configure_overlay(&window);
-
-        if let Ok(Some(monitor)) = window.current_monitor() {
-            let screen_size = monitor.size();
-            let screen_pos = monitor.position();
-            if let Ok(window_size) = window.outer_size() {
-                let taskbar_offset = get_windows_taskbar_height();
-                let x = screen_pos.x + (screen_size.width as i32) - (window_size.width as i32);
-                let y = screen_pos.y + (screen_size.height as i32) - (window_size.height as i32) - taskbar_offset;
-                let _ = window
-                    .set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
-            }
-        }
+        position_overlay_window(&window, app);
 
         let _ = window.show();
         let _ = window.set_focus();
@@ -465,17 +612,7 @@ fn toggle_overlay_sync(app: &AppHandle) {
 fn show_overlay_sync(app: &AppHandle) -> Result<(), String> {
     let window = ensure_overlay_window(app)?;
     configure_overlay(&window)?;
-
-    if let Ok(Some(monitor)) = window.current_monitor() {
-        let screen_size = monitor.size();
-        let screen_pos = monitor.position();
-        if let Ok(window_size) = window.outer_size() {
-            let taskbar_offset = get_windows_taskbar_height();
-            let x = screen_pos.x + (screen_size.width as i32) - (window_size.width as i32);
-            let y = screen_pos.y + (screen_size.height as i32) - (window_size.height as i32) - taskbar_offset;
-            let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
-        }
-    }
+    position_overlay_window(&window, app);
 
     let _ = window.show();
     let _ = window.set_focus();
@@ -616,8 +753,14 @@ fn main() {
 
             let menu = Menu::with_items(app, &[&toggle_item, &quit_item])?;
 
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
+            let tray_png = image::load_from_memory(include_bytes!("../icons/tray-icon.png"))
+                .expect("failed to decode tray icon PNG");
+            let tray_rgba = tray_png.to_rgba8();
+            let (tw, th) = (tray_rgba.width(), tray_rgba.height());
+            let tray_icon_img = tauri::image::Image::new_owned(tray_rgba.into_raw(), tw, th);
+
+            let tray = TrayIconBuilder::new()
+                .icon(tray_icon_img)
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(move |_app, event| {
@@ -643,6 +786,9 @@ fn main() {
                 })
                 .build(app)?;
 
+            // Store tray icon handle so we can query its rect() for positioning
+            *state.tray_icon.lock().unwrap() = Some(tray);
+
             // Register global shortcut (Alt+Space on Windows/macOS, Super+Space on Linux)
             #[cfg(target_os = "linux")]
             let shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::Space);
@@ -653,9 +799,6 @@ fn main() {
                 return Err(e.into());
             }
             info!("[shortcut] registered Alt/Super+Space successfully");
-
-            // Show overlay on launch
-            let _ = show_overlay_sync(app.handle());
 
             // Start stats file watcher
             stats::watcher::FileWatcher::start(
