@@ -9,11 +9,13 @@ use std::time::SystemTime;
 
 /// Idle threshold: gaps longer than 5 minutes between messages are considered idle time
 const IDLE_THRESHOLD_SECS: i64 = 300;
+const CACHE_VERSION: u32 = 2;
 
 // ── Cache persistence structs ──
 
 #[derive(Serialize, Deserialize, Default)]
 struct PersistedCache {
+    cache_version: Option<u32>,
     stats: StatsCache,
     file_metadata: HashMap<String, FileMetadata>,
 }
@@ -131,6 +133,14 @@ impl JsonlTracker {
         let data = std::fs::read_to_string(&path).ok()?;
         let persisted: PersistedCache = serde_json::from_str(&data).ok()?;
 
+        if persisted.cache_version != Some(CACHE_VERSION) {
+            info!(
+                "[jsonl] cache version mismatch (found {:?}, expected {}), discarding stale cache",
+                persisted.cache_version, CACHE_VERSION
+            );
+            return None;
+        }
+
         // Pre-populate file_states from cached metadata
         for (path_str, meta) in persisted.file_metadata {
             let path = PathBuf::from(path_str);
@@ -179,6 +189,7 @@ impl JsonlTracker {
         }
 
         let persisted = PersistedCache {
+            cache_version: Some(CACHE_VERSION),
             stats: self.cached_stats.clone(),
             file_metadata,
         };
@@ -541,23 +552,10 @@ fn compute_concurrency_histogram(sessions: &[&SessionStats]) -> HashMap<String, 
         return histogram;
     }
 
-    // Find the range of hours we need to process (limit to last 7 days)
-    let now = Utc::now();
-    let seven_days_ago = now - Duration::days(7);
-
     // Collect all unique hours with activity
     let mut hours_with_activity: BTreeSet<String> = BTreeSet::new();
     for (first_dt, last_dt) in &main_sessions {
-        // Skip sessions entirely before 7 days ago
-        if *last_dt < seven_days_ago {
-            continue;
-        }
-
-        let start = if *first_dt < seven_days_ago {
-            seven_days_ago
-        } else {
-            *first_dt
-        };
+        let start = *first_dt;
         let end = *last_dt;
 
         // Iterate through each hour the session spans

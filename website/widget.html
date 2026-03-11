@@ -235,6 +235,9 @@ if (!userHash) {
 let activeDates = []; // sorted list of YYYY-MM-DD strings with activity (+ today)
 let currentDateIndex = -1; // index into activeDates, -1 = not loaded yet
 let lastBurnClockData = [];
+let heatmapByDate = {}; // localDateStr → { tokens, messages, tool_calls }
+let totalTokens = 0;    // all-time total from profile
+let totalCost = 0;      // all-time cost from profile
 
 // ── Helpers ──
 function fmt(n) {
@@ -265,6 +268,20 @@ function utcDatesForLocalDay(localDateStr) {
     dates.add(t.toISOString().split('T')[0]);
   }
   return [...dates];
+}
+
+// ── Center display helper ──
+function updateCenterDisplay() {
+  if (currentDateIndex < 0 || !activeDates[currentDateIndex]) return;
+  const dayData = heatmapByDate[activeDates[currentDateIndex]];
+  const dayTokens = dayData ? dayData.tokens : 0;
+  document.getElementById('statTokens').textContent = fmt(dayTokens);
+  if (totalTokens > 0 && dayTokens > 0 && totalCost > 0) {
+    const dayCost = totalCost * (dayTokens / totalTokens);
+    document.getElementById('statCost').textContent = formatCost(dayCost);
+  } else {
+    document.getElementById('statCost').textContent = '\u2014';
+  }
 }
 
 // ── Tier helpers ──
@@ -397,14 +414,36 @@ async function loadActiveDates() {
     // Heatmap dates are UTC; convert to local dates (a UTC date's activity
     // could appear on the same or adjacent local date depending on timezone)
     const localDates = new Set();
+    // Build per-local-date token/message sums from UTC heatmap data
+    const localTokens = {};
+    const localMessages = {};
     for (const d of heatmap.filter(d => d.activity > 0)) {
       const utcStart = new Date(d.date + 'T00:00:00Z');
       const utcEnd = new Date(d.date + 'T23:59:59Z');
-      localDates.add(localDateISO(utcStart));
-      localDates.add(localDateISO(utcEnd));
+      const localStart = localDateISO(utcStart);
+      const localEnd = localDateISO(utcEnd);
+      localDates.add(localStart);
+      localDates.add(localEnd);
+      // Attribute tokens to the local date that contains most of the UTC day
+      // (simple approach: add to both, the overlap is small)
+      localTokens[localStart] = (localTokens[localStart] || 0) + (d.tokens || 0);
+      localMessages[localStart] = (localMessages[localStart] || 0) + (d.messages || 0);
+      if (localEnd !== localStart) {
+        localTokens[localEnd] = (localTokens[localEnd] || 0);
+        localMessages[localEnd] = (localMessages[localEnd] || 0);
+      }
     }
-    localDates.add(localDateISO(new Date()));
-    activeDates = [...localDates].sort();
+    const todayStr = localDateISO(new Date());
+    localDates.add(todayStr);
+    activeDates = [...localDates].filter(d => d <= todayStr).sort();
+    // Store for center display
+    heatmapByDate = {};
+    for (const ld of activeDates) {
+      heatmapByDate[ld] = {
+        tokens: localTokens[ld] || 0,
+        messages: localMessages[ld] || 0,
+      };
+    }
   } catch (e) {
     console.error('Failed to load heatmap:', e);
     activeDates = [localDateISO(new Date())];
@@ -425,6 +464,9 @@ async function loadDayByIndex(index) {
   document.getElementById('dayLabel').textContent = formatDateLabelFromStr(localDateStr);
   document.getElementById('dayNext').disabled = (index >= activeDates.length - 1);
   document.getElementById('dayPrev').disabled = (index <= 0);
+
+  // Update center with daily tokens/cost
+  updateCenterDisplay();
 
   try {
     // Fetch the UTC date(s) that cover this local day, then merge
@@ -478,12 +520,12 @@ async function loadProfile() {
         '#' + rank + (percentile ? ' \u00b7 Top ' + percentile + '%' : ' globally');
     }
 
-    // Tokens/cost in center
-    document.getElementById('statTokens').textContent = fmt(m.total_tokens);
-    const cost = m.estimated_spend;
-    if (cost != null && cost > 0) {
-      document.getElementById('statCost').textContent = formatCost(cost);
-    }
+    // Store all-time totals for proportional daily cost estimation
+    totalTokens = m.total_tokens || 0;
+    totalCost = m.estimated_spend || 0;
+
+    // Re-render center with updated totals (daily values, never all-time)
+    updateCenterDisplay();
 
     // Link
     document.getElementById('linkFull').href = '/profile.html?hash=' + userHash;

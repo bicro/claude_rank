@@ -78,6 +78,7 @@ class MetricsHistory(Base):
     weighted_score: Mapped[float] = mapped_column(Float, default=0.0)
     daily_messages: Mapped[int] = mapped_column(BigInteger, default=0)
     daily_tool_calls: Mapped[int] = mapped_column(BigInteger, default=0)
+    daily_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
 
     __table_args__ = (UniqueConstraint("user_hash", "snapshot_date"),)
 

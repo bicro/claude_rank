@@ -221,9 +221,33 @@ impl RankingEngine {
             None
         };
 
-        // Daily activity
+        // Daily activity — enrich with tokenCount from daily_model_tokens
         let daily_activity = if settings.daily_breakdown {
-            serde_json::to_value(&stats.daily_activity).ok()
+            // Build a date→total_tokens lookup from daily_model_tokens
+            let daily_token_totals: HashMap<&str, u64> = stats
+                .daily_model_tokens
+                .iter()
+                .map(|dmt| {
+                    let total: u64 = dmt.tokens_by_model.values().sum();
+                    (dmt.date.as_str(), total)
+                })
+                .collect();
+
+            let enriched: Vec<serde_json::Value> = stats
+                .daily_activity
+                .iter()
+                .map(|da| {
+                    let token_count = daily_token_totals.get(da.date.as_str()).copied().unwrap_or(0);
+                    serde_json::json!({
+                        "date": da.date,
+                        "messageCount": da.message_count,
+                        "sessionCount": da.session_count,
+                        "toolCallCount": da.tool_call_count,
+                        "tokenCount": token_count,
+                    })
+                })
+                .collect();
+            serde_json::to_value(&enriched).ok()
         } else {
             None
         };

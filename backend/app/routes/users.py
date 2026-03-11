@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, and_
@@ -278,7 +278,9 @@ async def get_user_heatmap(
     user_hash: str, days: int = Query(365, ge=1, le=730), db: AsyncSession = Depends(get_db)
 ):
     today = date.today()
-    start_date = today - timedelta(days=days)
+    today_utc = datetime.now(timezone.utc).date()
+    end_date = max(today, today_utc)
+    start_date = end_date - timedelta(days=days)
 
     stmt = (
         select(MetricsHistory)
@@ -300,13 +302,16 @@ async def get_user_heatmap(
     heatmap = []
     prev = None
     current = start_date
-    while current <= today:
+    while current <= end_date:
         snap = snap_map.get(current)
         if snap and getattr(snap, "daily_messages", 0) > 0:
             # Direct per-day counts from daily_activity sync
             messages = snap.daily_messages
             tool_calls = getattr(snap, "daily_tool_calls", 0) or 0
-            tokens = 0
+            tokens = getattr(snap, "daily_tokens", 0) or 0
+            # Fall back to cumulative delta if daily_tokens not yet populated
+            if tokens == 0 and prev:
+                tokens = max(0, snap.total_tokens - prev.total_tokens)
             activity = messages
         elif snap and prev:
             tokens = max(0, snap.total_tokens - prev.total_tokens)
@@ -382,12 +387,10 @@ async def get_user_concurrency(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
 
-        # Clamp to 7 days back (use UTC since data is stored in UTC)
+        # Clamp future dates (use UTC since data is stored in UTC)
         today = datetime.utcnow().date()
         if target_date > today:
             target_date = today
-        if target_date < today - timedelta(days=7):
-            raise HTTPException(status_code=400, detail="Date must be within the last 7 days")
 
         day_start = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0)
         day_end = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59)

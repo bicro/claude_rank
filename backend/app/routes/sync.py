@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, List, Dict
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -102,7 +102,7 @@ async def sync_metrics(req: SyncRequest, db: AsyncSession = Depends(get_db)):
     estimated_spend = estimate_cost(req.token_breakdown) if req.token_breakdown else 0.0
 
     now = datetime.utcnow()
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
 
     # Upsert user_metrics
     existing_metrics = await db.get(UserMetrics, req.user_hash)
@@ -210,7 +210,8 @@ async def sync_metrics(req: SyncRequest, db: AsyncSession = Depends(get_db)):
                 continue
             msg_count = entry.get("messageCount", 0) or 0
             tool_count = entry.get("toolCallCount", 0) or 0
-            if msg_count <= 0 and tool_count <= 0:
+            token_count = entry.get("tokenCount", 0) or 0
+            if msg_count <= 0 and tool_count <= 0 and token_count <= 0:
                 continue
             day_stmt = select(MetricsHistory).where(
                 MetricsHistory.user_hash == req.user_hash,
@@ -221,12 +222,14 @@ async def sync_metrics(req: SyncRequest, db: AsyncSession = Depends(get_db)):
             if existing_day:
                 existing_day.daily_messages = msg_count
                 existing_day.daily_tool_calls = tool_count
+                existing_day.daily_tokens = token_count
             else:
                 db.add(MetricsHistory(
                     user_hash=req.user_hash,
                     snapshot_date=entry_date,
                     daily_messages=msg_count,
                     daily_tool_calls=tool_count,
+                    daily_tokens=token_count,
                 ))
 
     # Persist concurrency_histogram: per-hour session concurrency
