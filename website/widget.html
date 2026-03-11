@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaudeRank Widget</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: transparent;
+    color: #e0e0e0;
+    overflow-x: hidden;
+    user-select: none;
+  }
+  .panel {
+    background: rgba(18, 18, 24, 0.95);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 100vh;
+  }
+
+  /* User bar */
+  .user-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px;
+  }
+  .user-bar .username {
+    font-weight: 600; font-size: 14px; color: #fff;
+    cursor: pointer; border-bottom: 1px dashed transparent;
+    padding: 1px 0;
+  }
+  .user-bar .username:hover { border-bottom-color: rgba(255,255,255,0.3); }
+  .user-bar .username .pencil { font-size: 11px; color: #666; margin-left: 4px; opacity: 0; transition: opacity 0.15s; }
+  .user-bar .username:hover .pencil { opacity: 1; }
+  .username-edit-row { display: flex; align-items: center; gap: 4px; }
+  .user-bar .username-input {
+    font-weight: 600; font-size: 14px; color: #fff;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(99,102,241,0.5);
+    border-radius: 4px; padding: 1px 4px; outline: none;
+    font-family: inherit; width: 120px;
+  }
+  .user-bar .username-input.invalid { border-color: #ef4444; }
+  .btn-save-username {
+    background: #6366f1; border: none; color: #fff; font-size: 11px;
+    padding: 2px 8px; border-radius: 4px; cursor: pointer; font-weight: 600;
+  }
+  .btn-save-username:hover { background: #818cf8; }
+  .username-error { font-size: 10px; color: #ef4444; margin-top: 2px; display: none; }
+  .username-feedback {
+    font-size: 10px; color: #4ade80; margin-top: 2px;
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .username-feedback.show { opacity: 1; }
+  .username-prompt {
+    font-size: 11px; color: #a5b4fc; margin-bottom: 4px; display: none;
+  }
+  .username-prompt.show { display: block; }
+  .user-bar .hash {
+    font-size: 11px; color: #666; font-family: monospace;
+    cursor: pointer;
+  }
+  .user-bar .hash:hover { color: #999; }
+  .hash-feedback {
+    font-size: 10px; color: #4ade80; margin-left: 4px;
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .hash-feedback.show { opacity: 1; }
+  .rank-info {
+    margin-left: auto;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  }
+  .tier-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 12px;
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .tier-bronze   { background: rgba(205,127,50,0.15);  color: #cd7f32; }
+  .tier-silver   { background: rgba(192,192,192,0.15);  color: #c0c0c0; }
+  .tier-gold     { background: rgba(255,215,0,0.15);    color: #ffd700; }
+  .tier-platinum { background: rgba(229,228,226,0.15);  color: #e5e4e2; }
+  .tier-diamond  { background: rgba(185,242,255,0.15);  color: #b9f2ff; }
+  .rank-number { font-size: 10px; color: #666; font-weight: 600; }
+
+  /* Burn Clock */
+  .burn-clock-section { margin-top: 4px; }
+  .burn-clock-header {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+  }
+  .copy-btn {
+    background: rgba(255,255,255,0.08); border: none; color: #888;
+    font-size: 10px; padding: 2px 8px; border-radius: 4px; cursor: pointer;
+    text-transform: none; letter-spacing: 0;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .copy-feedback {
+    font-size: 10px; color: #4ade80; text-align: center; margin-top: 4px;
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .copy-feedback.show { opacity: 1; }
+  .burn-clock-container {
+    position: relative; width: 180px; height: 180px; margin: 8px auto;
+  }
+  .burn-clock { width: 100%; height: 100%; }
+  .burn-clock-center {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); text-align: center; pointer-events: none;
+  }
+  .burn-clock-center .center-tokens { font-size: 14px; font-weight: 700; color: #fff; line-height: 1.2; }
+  .burn-clock-center .center-cost { font-size: 10px; color: #a5b4fc; font-weight: 600; }
+  .burn-pill { cursor: default; transition: opacity 0.15s; }
+  .burn-pill:hover { opacity: 1 !important; }
+  .burn-clock-tooltip {
+    position: absolute; background: rgba(0,0,0,0.9); color: #fff;
+    padding: 4px 8px; border-radius: 4px; font-size: 10px;
+    opacity: 0; pointer-events: none; z-index: 10; white-space: nowrap;
+    transition: opacity 0.15s;
+  }
+  .burn-clock-tooltip.show { opacity: 1; }
+
+  /* Day navigation */
+  .day-nav {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px; margin-top: 6px;
+  }
+  .day-nav-btn {
+    background: rgba(255,255,255,0.08); border: none; color: #888;
+    font-size: 14px; width: 24px; height: 24px; border-radius: 6px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .day-nav-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .day-nav-btn:disabled { opacity: 0.3; cursor: default; }
+  .day-nav-label {
+    font-size: 12px; color: #ccc; font-weight: 600; min-width: 80px; text-align: center;
+  }
+
+  /* Leaderboard */
+  .leaderboard {
+    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;
+  }
+  .leaderboard::-webkit-scrollbar { width: 4px; }
+  .leaderboard::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  .lb-header { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .lb-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 10px; border-radius: 8px; font-size: 13px;
+  }
+  .lb-row:hover { background: rgba(255,255,255,0.04); }
+  .lb-row.me { background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); }
+  .lb-rank { width: 24px; text-align: center; font-weight: 700; color: #888; }
+  .lb-rank.gold { color: #fbbf24; }
+  .lb-rank.silver { color: #94a3b8; }
+  .lb-rank.bronze { color: #d97706; }
+  .lb-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-score { font-weight: 600; color: #a5b4fc; font-variant-numeric: tabular-nums; }
+
+  /* Footer */
+  .footer { text-align: center; padding-top: 4px; }
+  .footer a { color: #6366f1; text-decoration: none; font-size: 12px; }
+  .footer a:hover { text-decoration: underline; }
+  .loading { color: #555; font-size: 12px; text-align: center; padding: 20px 0; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="user-bar">
+    <div>
+      <div class="username" id="username" title="Click to edit">Loading...<span class="pencil">&#9998;</span></div>
+      <div class="username-prompt" id="usernamePrompt">What alias would you like to go by?</div>
+      <div class="username-edit-row" id="usernameEditRow" style="display:none">
+        <input class="username-input" id="usernameInput" maxlength="20" placeholder="3-20 chars, a-z 0-9 _">
+        <button class="btn-save-username" id="btnSaveUsername">Save</button>
+      </div>
+      <div class="username-error" id="usernameError"></div>
+      <div class="username-feedback" id="usernameFeedback">Saved!</div>
+      <div>
+        <span class="hash" id="userHash" title="Click to copy full ID">...</span>
+        <span class="hash-feedback" id="hashFeedback">Copied!</span>
+      </div>
+    </div>
+    <div class="rank-info">
+      <div class="tier-badge tier-bronze" id="tierBadge">&#129380; Bronze</div>
+      <div class="rank-number" id="rankNumber">#&mdash;</div>
+    </div>
+  </div>
+
+  <div class="burn-clock-section">
+    <div class="burn-clock-header">
+      <span id="burnClockTitle">Session Burn Clock</span>
+      <button class="copy-btn" id="copyConcurrency" title="Copy to clipboard">Copy</button>
+    </div>
+    <div class="burn-clock-container" id="burnClockContainer">
+      <svg class="burn-clock" id="burnClock" viewBox="0 0 180 180"></svg>
+      <div class="burn-clock-center">
+        <div class="center-tokens" id="statTokens">&mdash;</div>
+        <div class="center-cost" id="statCost">&mdash;</div>
+      </div>
+      <div class="burn-clock-tooltip" id="burnClockTooltip"></div>
+    </div>
+    <div class="day-nav">
+      <button class="day-nav-btn" id="dayPrev" title="Previous day">&#9664;</button>
+      <span class="day-nav-label" id="dayLabel">Today</span>
+      <button class="day-nav-btn" id="dayNext" title="Next day" disabled>&#9654;</button>
+    </div>
+    <div class="copy-feedback" id="concurrencyFeedback">Copied!</div>
+  </div>
+
+  <div class="lb-header">Leaderboard</div>
+  <div class="leaderboard" id="leaderboard">
+    <div class="loading">Loading leaderboard...</div>
+  </div>
+
+  <div class="footer">
+    <a id="linkFull" href="#" target="_blank">View full rankings &rarr;</a>
+  </div>
+</div>
+
+<script type="module">
+import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, getLeaderboard, formatNumber, formatCost, getTier } from './js/api.js';
+
+const params = new URLSearchParams(window.location.search);
+const userHash = params.get('h');
+
+if (!userHash) {
+  document.querySelector('.panel').innerHTML = '<div class="loading">Missing ?h=USER_HASH</div>';
+  throw new Error('No user hash');
+}
+
+// ── State ──
+let activeDates = []; // sorted list of YYYY-MM-DD strings with activity (+ today)
+let currentDateIndex = -1; // index into activeDates, -1 = not loaded yet
+let lastBurnClockData = [];
+
+// ── Helpers ──
+function fmt(n) {
+  if (n == null) return '\u2014';
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return n.toLocaleString();
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '?';
+  return d.innerHTML;
+}
+
+function localDateISO(d) {
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
+// Return the UTC date string(s) needed to cover all 24 local hours of a local date
+function utcDatesForLocalDay(localDateStr) {
+  const localMidnight = new Date(localDateStr + 'T00:00:00');
+  const dates = new Set();
+  for (let h = 0; h < 24; h++) {
+    const t = new Date(localMidnight.getTime() + h * 3600000);
+    dates.add(t.toISOString().split('T')[0]);
+  }
+  return [...dates];
+}
+
+// ── Tier helpers ──
+const TIERS = [
+  { id: 'bronze',   name: 'Bronze',   icon: '\u{1f944}', min: 0 },
+  { id: 'silver',   name: 'Silver',   icon: '\u{1fa99}', min: 50 },
+  { id: 'gold',     name: 'Gold',     icon: '\u{1f3c6}', min: 200 },
+  { id: 'platinum', name: 'Platinum', icon: '\u{1f48e}', min: 500 },
+  { id: 'diamond',  name: 'Diamond',  icon: '\u{2b50}',  min: 1000 },
+];
+
+function getTierFromScore(score) {
+  for (let i = TIERS.length - 1; i >= 0; i--) {
+    if (score >= TIERS[i].min) return TIERS[i];
+  }
+  return TIERS[0];
+}
+
+// ── Burn clock rendering ──
+// localDateStr is YYYY-MM-DD in user's local timezone.
+// allHistograms contains UTC-keyed data ("YYYY-MM-DD:H").
+// We map each local hour to its corresponding UTC key.
+function processHourlyData(allHistograms, localDateStr) {
+  const hourlyData = [];
+  const localMidnight = new Date(localDateStr + 'T00:00:00');
+  const now = new Date();
+  const isToday = localDateStr === localDateISO(now);
+
+  for (let h = 0; h < 24; h++) {
+    const t = new Date(localMidnight.getTime() + h * 3600000);
+    const utcDate = t.toISOString().split('T')[0];
+    const utcHour = t.getUTCHours();
+    const key = utcDate + ':' + utcHour;
+
+    const histogram = allHistograms[key] || {};
+    const sessions = [];
+
+    for (let n = 1; n <= 5; n++) {
+      let totalMins = 0;
+      for (const [conc, mins] of Object.entries(histogram)) {
+        if (parseInt(conc, 10) >= n) totalMins += mins;
+      }
+      if (totalMins > 0) {
+        const seed = (h * 7 + n * 13) % 17;
+        const variation = 0.85 + (seed / 17) * 0.15;
+        const intensity = Math.min((totalMins / 60) * variation, 1);
+        sessions.push({ index: n, intensity, minutes: totalMins });
+      }
+    }
+
+    const isCurrent = isToday && h === now.getHours();
+    hourlyData.push({ hour: h, sessions, isCurrent, histogram });
+  }
+  return hourlyData;
+}
+
+function getBurnColor(intensity) {
+  const r1 = 204, g1 = 88, b1 = 28;
+  const r2 = 252, g2 = 240, b2 = 228;
+  return `rgb(${Math.round(r1 + (r2 - r1) * intensity)},${Math.round(g1 + (g2 - g1) * intensity)},${Math.round(b1 + (b2 - b1) * intensity)})`;
+}
+
+function annularSector(cx, cy, r1, r2, a0, a1) {
+  const toRad = Math.PI / 180;
+  const cos0 = Math.cos(a0 * toRad), sin0 = Math.sin(a0 * toRad);
+  const cos1 = Math.cos(a1 * toRad), sin1 = Math.sin(a1 * toRad);
+  const x1 = cx + r1 * cos0, y1 = cy + r1 * sin0;
+  const x2 = cx + r2 * cos0, y2 = cy + r2 * sin0;
+  const x3 = cx + r2 * cos1, y3 = cy + r2 * sin1;
+  const x4 = cx + r1 * cos1, y4 = cy + r1 * sin1;
+  const largeArc = (a1 - a0) > 180 ? 1 : 0;
+  return `M ${x1} ${y1} L ${x2} ${y2} A ${r2} ${r2} 0 ${largeArc} 1 ${x3} ${y3} L ${x4} ${y4} A ${r1} ${r1} 0 ${largeArc} 0 ${x1} ${y1} Z`;
+}
+
+function renderBurnClock(allHistograms, localDateStr) {
+  const svg = document.getElementById('burnClock');
+  const tooltip = document.getElementById('burnClockTooltip');
+  const container = document.getElementById('burnClockContainer');
+  if (!svg) return;
+
+  const hourlyData = processHourlyData(allHistograms, localDateStr);
+  lastBurnClockData = hourlyData;
+
+  const cx = 90, cy = 90, baseRadius = 36, pillWidth = 5, pillGap = 2, maxRings = 5;
+  let svgContent = `<circle cx="${cx}" cy="${cy}" r="${baseRadius - 4}" fill="rgba(255,255,255,0.05)" />`;
+
+  for (let i = 0; i < 24; i++) {
+    const data = hourlyData[i];
+    const startAngle = -90 + (i * 15);
+    const endAngle = startAngle + 14;
+
+    for (const session of data.sessions) {
+      if (session.index > maxRings) continue;
+      const r1 = baseRadius + (session.index - 1) * (pillWidth + pillGap);
+      const r2 = r1 + pillWidth;
+      const color = getBurnColor(session.intensity);
+      const hour12 = i === 0 ? '12 AM' : i < 12 ? i + ' AM' : i === 12 ? '12 PM' : (i - 12) + ' PM';
+      const tooltipText = `${hour12}: ${data.sessions.length} session${data.sessions.length !== 1 ? 's' : ''}`;
+      svgContent += `<path class="burn-pill" d="${annularSector(cx, cy, r1, r2, startAngle, endAngle)}" fill="${color}" data-tooltip="${tooltipText}" />`;
+    }
+
+    if (data.isCurrent && data.sessions.length > 0) {
+      const outerR = baseRadius + Math.min(data.sessions.length, maxRings) * (pillWidth + pillGap);
+      const midAngle = startAngle + 7;
+      const toRad = Math.PI / 180;
+      svgContent += `<circle cx="${cx + (outerR + 4) * Math.cos(midAngle * toRad)}" cy="${cy + (outerR + 4) * Math.sin(midAngle * toRad)}" r="2" fill="#fff" />`;
+    }
+  }
+
+  svg.innerHTML = svgContent;
+
+  svg.querySelectorAll('.burn-pill').forEach(pill => {
+    pill.addEventListener('mouseenter', (e) => {
+      tooltip.textContent = e.target.getAttribute('data-tooltip');
+      tooltip.classList.add('show');
+    });
+    pill.addEventListener('mousemove', (e) => {
+      const rect = container.getBoundingClientRect();
+      tooltip.style.left = (e.clientX - rect.left + 10) + 'px';
+      tooltip.style.top = (e.clientY - rect.top - 20) + 'px';
+    });
+    pill.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
+  });
+}
+
+// ── Day navigation ──
+async function loadActiveDates() {
+  try {
+    const heatmap = await getUserHeatmap(userHash, 30);
+    // Heatmap dates are UTC; convert to local dates (a UTC date's activity
+    // could appear on the same or adjacent local date depending on timezone)
+    const localDates = new Set();
+    for (const d of heatmap.filter(d => d.activity > 0)) {
+      const utcStart = new Date(d.date + 'T00:00:00Z');
+      const utcEnd = new Date(d.date + 'T23:59:59Z');
+      localDates.add(localDateISO(utcStart));
+      localDates.add(localDateISO(utcEnd));
+    }
+    localDates.add(localDateISO(new Date()));
+    activeDates = [...localDates].sort();
+  } catch (e) {
+    console.error('Failed to load heatmap:', e);
+    activeDates = [localDateISO(new Date())];
+  }
+}
+
+function formatDateLabelFromStr(dateStr) {
+  if (dateStr === localDateISO(new Date())) return 'Today';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+}
+
+async function loadDayByIndex(index) {
+  if (index < 0 || index >= activeDates.length) return;
+  currentDateIndex = index;
+  const localDateStr = activeDates[index];
+
+  document.getElementById('dayLabel').textContent = formatDateLabelFromStr(localDateStr);
+  document.getElementById('dayNext').disabled = (index >= activeDates.length - 1);
+  document.getElementById('dayPrev').disabled = (index <= 0);
+
+  try {
+    // Fetch the UTC date(s) that cover this local day, then merge
+    const utcDates = utcDatesForLocalDay(localDateStr);
+    const results = await Promise.all(utcDates.map(d => getUserConcurrencyByDate(userHash, d)));
+    const merged = Object.assign({}, ...results);
+    renderBurnClock(merged, localDateStr);
+  } catch (e) {
+    console.error('Failed to load concurrency data:', e);
+  }
+}
+
+document.getElementById('dayPrev').addEventListener('click', () => {
+  if (currentDateIndex > 0) loadDayByIndex(currentDateIndex - 1);
+});
+document.getElementById('dayNext').addEventListener('click', () => {
+  if (currentDateIndex < activeDates.length - 1) loadDayByIndex(currentDateIndex + 1);
+});
+
+// ── Load user profile ──
+async function loadProfile() {
+  try {
+    const data = await getUserProfile(userHash);
+
+    // Username
+    const usernameEl = document.getElementById('username');
+    if (data.username) {
+      usernameEl.innerHTML = escHtml(data.username) + '<span class="pencil">&#9998;</span>';
+    } else {
+      usernameEl.innerHTML = 'Anonymous<span class="pencil">&#9998;</span>';
+      document.getElementById('usernamePrompt').classList.add('show');
+    }
+
+    // Hash
+    document.getElementById('userHash').textContent = userHash.substring(0, 8) + '...';
+
+    // Tier
+    const m = data.metrics || {};
+    const tier = getTierFromScore(m.weighted_score || 0);
+    const tierBadge = document.getElementById('tierBadge');
+    tierBadge.className = 'tier-badge tier-' + tier.id;
+    tierBadge.textContent = tier.icon + ' ' + tier.name;
+
+    // Rank
+    const ranks = data.ranks || {};
+    const weightedRank = ranks.weighted;
+    if (weightedRank) {
+      const rank = weightedRank.rank || weightedRank;
+      const percentile = weightedRank.percentile;
+      document.getElementById('rankNumber').textContent =
+        '#' + rank + (percentile ? ' \u00b7 Top ' + percentile + '%' : ' globally');
+    }
+
+    // Tokens/cost in center
+    document.getElementById('statTokens').textContent = fmt(m.total_tokens);
+    const cost = m.estimated_spend;
+    if (cost != null && cost > 0) {
+      document.getElementById('statCost').textContent = formatCost(cost);
+    }
+
+    // Link
+    document.getElementById('linkFull').href = '/profile.html?hash=' + userHash;
+  } catch (e) {
+    console.error('Failed to load profile:', e);
+  }
+}
+
+// ── Username editing ──
+const usernameDisplay = document.getElementById('username');
+const usernameInput = document.getElementById('usernameInput');
+const usernameEditRow = document.getElementById('usernameEditRow');
+const usernameError = document.getElementById('usernameError');
+const usernameFeedback = document.getElementById('usernameFeedback');
+const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+
+function showUsernameEdit() {
+  const current = usernameDisplay.textContent.replace('\u270E', '').trim();
+  usernameInput.value = current === 'Anonymous' ? '' : current;
+  usernameDisplay.style.display = 'none';
+  usernameEditRow.style.display = 'flex';
+  usernameError.style.display = 'none';
+  usernameInput.classList.remove('invalid');
+  usernameInput.focus();
+  usernameInput.select();
+}
+
+function hideUsernameEdit() {
+  usernameEditRow.style.display = 'none';
+  usernameDisplay.style.display = 'block';
+  usernameError.style.display = 'none';
+  usernameInput.classList.remove('invalid');
+  document.getElementById('usernamePrompt').classList.remove('show');
+}
+
+usernameDisplay.addEventListener('click', showUsernameEdit);
+
+usernameInput.addEventListener('input', () => {
+  const val = usernameInput.value.trim();
+  if (!val || val.length < 3 || val.length > 20 || !usernameRegex.test(val)) {
+    usernameInput.classList.add('invalid');
+  } else {
+    usernameInput.classList.remove('invalid');
+    usernameError.style.display = 'none';
+  }
+});
+
+let savingUsername = false;
+async function saveUsername() {
+  if (savingUsername) return;
+  const val = usernameInput.value.trim();
+  if (!val || val.length < 3 || val.length > 20 || !usernameRegex.test(val)) {
+    usernameInput.classList.add('invalid');
+    usernameError.textContent = 'Must be 3-20 chars, a-z 0-9 _';
+    usernameError.style.display = 'block';
+    return;
+  }
+  savingUsername = true;
+  try {
+    const resp = await fetch(`/api/users/${userHash}/username`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: val }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.detail || 'Failed to save');
+    }
+    usernameDisplay.innerHTML = escHtml(val) + '<span class="pencil">&#9998;</span>';
+    hideUsernameEdit();
+    usernameFeedback.classList.add('show');
+    setTimeout(() => usernameFeedback.classList.remove('show'), 1500);
+  } catch (e) {
+    usernameError.textContent = e.message;
+    usernameError.style.display = 'block';
+  } finally {
+    savingUsername = false;
+  }
+}
+
+document.getElementById('btnSaveUsername').addEventListener('click', (e) => { e.preventDefault(); saveUsername(); });
+usernameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); saveUsername(); }
+  if (e.key === 'Escape') { hideUsernameEdit(); }
+});
+document.addEventListener('click', (e) => {
+  if (usernameEditRow.style.display === 'flex' &&
+      !usernameEditRow.contains(e.target) && !usernameDisplay.contains(e.target)) {
+    hideUsernameEdit();
+  }
+});
+
+// ── Copy hash ──
+document.getElementById('userHash').addEventListener('click', () => {
+  navigator.clipboard.writeText(userHash);
+  const fb = document.getElementById('hashFeedback');
+  fb.classList.add('show');
+  setTimeout(() => fb.classList.remove('show'), 1500);
+});
+
+// ── Copy burn clock as image ──
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+async function copyBurnClockAsImage() {
+  const W = 340, H = 400, S = 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = W * S;
+  canvas.height = H * S;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(S, S);
+
+  // Background
+  roundRect(ctx, 0, 0, W, H, 16);
+  ctx.fillStyle = '#121218';
+  ctx.fill();
+
+  // Title
+  ctx.fillStyle = '#888';
+  ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  const titleEl = document.getElementById('burnClockTitle');
+  ctx.fillText(titleEl ? titleEl.textContent : 'Session Burn Clock', W / 2, 28);
+
+  // Draw burn clock SVG onto canvas at 240x240
+  const svgEl = document.getElementById('burnClock');
+  if (svgEl) {
+    const svgClone = svgEl.cloneNode(true);
+    svgClone.setAttribute('width', '240');
+    svgClone.setAttribute('height', '240');
+    const svgData = new XMLSerializer().serializeToString(svgClone);
+    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = svgUrl;
+    });
+    ctx.drawImage(img, (W - 240) / 2, 46, 240, 240);
+    URL.revokeObjectURL(svgUrl);
+  }
+
+  // Center stats (tokens + cost) over the SVG center
+  const svgCenterY = 46 + 120;
+  const tokensEl = document.getElementById('statTokens');
+  const costEl = document.getElementById('statCost');
+  const tokensText = tokensEl ? tokensEl.textContent : '\u2014';
+  const costText = costEl ? costEl.textContent : '\u2014';
+
+  ctx.fillStyle = '#fff';
+  ctx.font = '700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(tokensText, W / 2, svgCenterY - 2);
+
+  ctx.fillStyle = '#a5b4fc';
+  ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.fillText(costText, W / 2, svgCenterY + 16);
+
+  // Username + tier line
+  const usernameEl = document.getElementById('username');
+  const tierBadgeEl = document.getElementById('tierBadge');
+  const username = usernameEl ? usernameEl.childNodes[0].textContent.trim() : 'Anonymous';
+  const tierText = tierBadgeEl ? tierBadgeEl.textContent.trim() : '';
+  const tierColor = tierBadgeEl ? getComputedStyle(tierBadgeEl).color : '#cd7f32';
+
+  ctx.font = '600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  const userLine = username + '  \u00b7  ' + tierText;
+  // Measure parts to color them separately
+  const userWidth = ctx.measureText(username + '  \u00b7  ').width;
+  const tierWidth = ctx.measureText(tierText).width;
+  const totalWidth = userWidth + tierWidth;
+  const startX = (W - totalWidth) / 2;
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(username + '  \u00b7  ', startX, 306);
+  ctx.fillStyle = tierColor;
+  ctx.fillText(tierText, startX + userWidth, 306);
+
+  // Rank line
+  const rankEl = document.getElementById('rankNumber');
+  const rankText = rankEl ? rankEl.textContent.trim() : '';
+  if (rankText) {
+    ctx.fillStyle = '#888';
+    ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(rankText, W / 2, 324);
+  }
+
+  // Watermark with logo
+  const logoImg = new Image();
+  const logoLoaded = new Promise((resolve) => {
+    logoImg.onload = resolve;
+    logoImg.onerror = resolve; // proceed even if logo fails
+    logoImg.src = 'images/logo.png';
+  });
+  await logoLoaded;
+
+  const wmText = 'ClaudeRank';
+  ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  const wmTextWidth = ctx.measureText(wmText).width;
+  const logoSize = 14;
+  const wmTotalWidth = logoSize + 4 + wmTextWidth;
+  const wmX = W - 16;
+  const wmY = 370;
+
+  if (logoImg.naturalWidth) {
+    ctx.drawImage(logoImg, wmX - wmTotalWidth, wmY - logoSize + 2, logoSize, logoSize);
+  }
+  ctx.fillText(wmText, wmX, wmY);
+
+  // Copy to clipboard
+  const inIframe = window.parent !== window;
+  if (inIframe) {
+    const base64 = canvas.toDataURL('image/png').split(',')[1];
+    window.parent.postMessage({ type: 'copy-image', base64 }, '*');
+  } else {
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+  }
+}
+
+document.getElementById('copyConcurrency').addEventListener('click', async () => {
+  try {
+    await copyBurnClockAsImage();
+    const fb = document.getElementById('concurrencyFeedback');
+    fb.classList.add('show');
+    setTimeout(() => fb.classList.remove('show'), 1500);
+  } catch (err) {
+    console.error('Image copy failed, falling back to text:', err);
+    // Text fallback
+    if (!lastBurnClockData.length) return;
+    const emojis = lastBurnClockData.map(d => {
+      const count = d.sessions.length;
+      if (count === 0) return '\u{1f534}';
+      if (count === 1) return '\u{1f7e0}';
+      if (count === 2) return '\u{1f7e1}';
+      return '\u26aa';
+    }).join('');
+    const maxSessions = Math.max(...lastBurnClockData.map(d => d.sessions.length));
+    const text = `ClaudeRank 24h\n${emojis}\nPeak: ${maxSessions} sessions | clauderank.com`;
+    navigator.clipboard.writeText(text);
+    const fb = document.getElementById('concurrencyFeedback');
+    fb.classList.add('show');
+    setTimeout(() => fb.classList.remove('show'), 1500);
+  }
+});
+
+// ── Leaderboard ──
+async function loadLeaderboard() {
+  try {
+    const data = await getLeaderboard('weighted', 'individual', 10, 0);
+    const entries = data.entries || [];
+    const container = document.getElementById('leaderboard');
+    if (!entries.length) {
+      container.innerHTML = '<div class="loading">No entries yet</div>';
+      return;
+    }
+    container.innerHTML = entries.map((e, i) => {
+      const rank = i + 1;
+      const rankClass = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
+      const isMe = e.user_hash === userHash;
+      return `<div class="lb-row ${isMe ? 'me' : ''}">
+        <div class="lb-rank ${rankClass}">${rank}</div>
+        <div class="lb-name">${escHtml(e.username || 'User #' + rank)}</div>
+        <div class="lb-score">${fmt(e.value)}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    console.error('Failed to load leaderboard:', e);
+    document.getElementById('leaderboard').innerHTML = '<div class="loading">Failed to load</div>';
+  }
+}
+
+// ── Init ──
+loadProfile();
+loadActiveDates().then(() => {
+  // Start on the last (most recent) date, which is today or the latest active day
+  loadDayByIndex(activeDates.length - 1);
+});
+loadLeaderboard();
+setInterval(() => { loadLeaderboard(); loadProfile(); }, 120000);
+</script>
+</body>
+</html>

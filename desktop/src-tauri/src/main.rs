@@ -60,6 +60,16 @@ fn ranking_api_base() -> String {
         .unwrap_or_else(|_| "https://claude-rank.onrender.com".to_string())
 }
 
+fn widget_base() -> String {
+    std::env::var("WIDGET_BASE")
+        .unwrap_or_else(|_| "https://clauderank.com".to_string())
+}
+
+#[command]
+fn get_widget_base() -> String {
+    widget_base()
+}
+
 #[command]
 async fn get_leaderboard() -> Result<Vec<LeaderboardEntry>, String> {
     let client = reqwest::Client::builder()
@@ -507,6 +517,29 @@ fn reload_overlay(app: AppHandle) -> Result<(), String> {
     }
 }
 
+#[command]
+fn copy_image_to_clipboard(image_base64: String) -> Result<(), String> {
+    use arboard::{Clipboard, ImageData};
+    use base64::Engine;
+
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&image_base64)
+        .map_err(|e| format!("Base64 decode error: {}", e))?;
+    let img = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
+        .map_err(|e| format!("PNG decode error: {}", e))?;
+    let rgba = img.to_rgba8();
+    let (w, h) = (rgba.width() as usize, rgba.height() as usize);
+    let mut clipboard = Clipboard::new().map_err(|e| format!("Clipboard error: {}", e))?;
+    clipboard
+        .set_image(ImageData {
+            width: w,
+            height: h,
+            bytes: rgba.into_raw().into(),
+        })
+        .map_err(|e| format!("Clipboard write error: {}", e))?;
+    Ok(())
+}
+
 // ============ Env ============
 
 fn load_dotenv() {
@@ -660,6 +693,7 @@ fn main() {
             toggle_overlay,
             get_overlay_visible,
             reload_overlay,
+            copy_image_to_clipboard,
             log_from_frontend,
             quit_app,
             get_autostart_enabled,
@@ -680,6 +714,7 @@ fn main() {
             stats::ranking::leave_team,
             stats::ranking::get_my_ranking,
             stats::ranking::open_ranking_website,
+            get_widget_base,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

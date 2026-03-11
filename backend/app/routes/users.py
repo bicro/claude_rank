@@ -157,6 +157,7 @@ async def get_user_profile(user_hash: str, db: AsyncSession = Depends(get_db)):
             "last_synced": metrics.last_synced.isoformat() if metrics else None,
             "max_concurrent": max_concurrent,
             "concurrent_mins": concurrent_mins,
+            "estimated_spend": metrics.estimated_spend if metrics else 0,
         },
         "ranks": ranks,
         "tier": tier,
@@ -357,12 +358,67 @@ async def get_user_heatmap(
 
 
 @router.get("/{user_hash}/concurrency")
-async def get_user_concurrency(user_hash: str, hours: int = Query(12, ge=1, le=24), db: AsyncSession = Depends(get_db)):
+async def get_user_concurrency(
+    user_hash: str,
+    hours: int = Query(None, ge=1, le=24),
+    query_date: str = Query(None, alias="date"),
+    db: AsyncSession = Depends(get_db),
+):
     """
-    Return per-hour peak concurrency data for the last N hours.
-    Returns: { "YYYY-MM-DD:HH": peak_concurrent_sessions, ... }
+    Return per-hour concurrency data.
+
+    If `date` param is provided (YYYY-MM-DD), returns full histograms for that
+    UTC date: { "YYYY-MM-DD:HH": {"1": 20, "2": 30}, ... }
+
+    Otherwise falls back to legacy behaviour: last N `hours` of peak
+    concurrency: { "YYYY-MM-DD:HH": peak, ... }
     """
     import json
+
+    if query_date is not None:
+        # ── date-based: full 24h histogram for the given UTC date ──
+        try:
+            target_date = date.fromisoformat(query_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+
+        # Clamp to 7 days back (use UTC since data is stored in UTC)
+        today = datetime.utcnow().date()
+        if target_date > today:
+            target_date = today
+        if target_date < today - timedelta(days=7):
+            raise HTTPException(status_code=400, detail="Date must be within the last 7 days")
+
+        day_start = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0)
+        day_end = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59)
+
+        stmt = (
+            select(ConcurrencyHistogram)
+            .where(
+                and_(
+                    ConcurrencyHistogram.user_hash == user_hash,
+                    ConcurrencyHistogram.snapshot_hour >= day_start,
+                    ConcurrencyHistogram.snapshot_hour <= day_end,
+                )
+            )
+        )
+        result = await db.execute(stmt)
+        rows = result.scalars().all()
+
+        per_hour = {}
+        for row in rows:
+            try:
+                histogram = json.loads(row.histogram) if row.histogram else {}
+                hour_key = f"{row.snapshot_hour.strftime('%Y-%m-%d')}:{row.snapshot_hour.hour}"
+                per_hour[hour_key] = histogram
+            except (json.JSONDecodeError, ValueError):
+                continue
+
+        return per_hour
+
+    # ── legacy: last N hours of peak concurrency ──
+    if hours is None:
+        hours = 12
 
     now = datetime.utcnow()
     start_time = now - timedelta(hours=hours)
@@ -379,18 +435,15 @@ async def get_user_concurrency(user_hash: str, hours: int = Query(12, ge=1, le=2
     result = await db.execute(stmt)
     rows = result.scalars().all()
 
-    # Return per-hour peak concurrency
     per_hour = {}
     for row in rows:
         try:
             histogram = json.loads(row.histogram) if row.histogram else {}
-            # Find peak concurrency for this hour
             peak = 0
             for sessions_str, minutes in histogram.items():
                 s = int(sessions_str)
                 if s > peak:
                     peak = s
-            # Format key as "YYYY-MM-DD:HH"
             hour_key = f"{row.snapshot_hour.strftime('%Y-%m-%d')}:{row.snapshot_hour.hour}"
             per_hour[hour_key] = peak
         except (json.JSONDecodeError, ValueError):

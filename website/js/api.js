@@ -102,3 +102,7 @@ export async function getUserHourlyHeatmap(userHash, hours = 24) {
 export async function getUserConcurrency(userHash) {
     return apiFetch(`/api/users/${userHash}/concurrency`);
 }
+
+export async function getUserConcurrencyByDate(userHash, dateStr) {
+    return apiFetch(`/api/users/${userHash}/concurrency?date=${dateStr}`);
+}

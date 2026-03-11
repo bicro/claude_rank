@@ -33,7 +33,7 @@
     <div id="profileContent"><div class="loading">Loading profile</div></div>
 
     <script type="module">
-        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserHeatmap, getUserHourlyHeatmap, getUserConcurrency, formatNumber, getCategoryLabel, getTier } from './js/api.js';
+        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserHeatmap, getUserHourlyHeatmap, getUserConcurrency, getUserConcurrencyByDate, formatNumber, getCategoryLabel, getTier } from './js/api.js';
 
         const params = new URLSearchParams(window.location.search);
         const userHash = params.get('hash');
@@ -249,7 +249,7 @@
 
                     <div class="burn-clock-container-full">
                         <div class="burn-clock-header-full">
-                            <h3>Session Burn Clock (24h)</h3>
+                            <h3>Session Burn Clock</h3>
                             <button class="copy-burn-btn" id="copyConcurrency">Copy</button>
                         </div>
                         <div class="burn-clock-wrapper">
@@ -259,6 +259,11 @@
                                     <div class="burn-clock-peak">0</div>
                                     <div class="burn-clock-peak-label">Peak</div>
                                 </div>
+                            </div>
+                            <div class="burn-clock-day-nav" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:12px;">
+                                <button class="copy-burn-btn" id="dayPrev" style="font-size:16px;padding:4px 10px;" title="Previous day">&#9664;</button>
+                                <span id="dayLabel" style="font-size:13px;font-weight:600;min-width:90px;text-align:center;">Today</span>
+                                <button class="copy-burn-btn" id="dayNext" style="font-size:16px;padding:4px 10px;" title="Next day" disabled>&#9654;</button>
                             </div>
                             <div class="burn-clock-legend">
                                 <span class="legend-item"><div class="legend-dot" style="background:#CC581C"></div>Low</span>
@@ -319,66 +324,98 @@
                 // Load default view (1W)
                 loadHeatmapView('1w');
 
-                // Load and render burn clock visualization
+                // Load and render burn clock visualization with day navigation
                 let burnClockData = [];
-                try {
-                    const concurrencyData = await getUserConcurrency(hash);
-                    renderBurnClock(concurrencyData, profile.username);
-                } catch (e) {
-                    console.error('Failed to load concurrency data:', e);
+                let burnDayOffset = 0;
+
+                function formatDateISO(d) { return d.toISOString().split('T')[0]; }
+                function dateForOffset(offset) {
+                    const d = new Date();
+                    d.setDate(d.getDate() + offset);
+                    return d;
                 }
+                function formatDayLabel(offset) {
+                    if (offset === 0) return 'Today';
+                    const d = dateForOffset(offset);
+                    return d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+                }
+
+                async function loadBurnClockDay(offset) {
+                    burnDayOffset = offset;
+                    const targetDate = dateForOffset(offset);
+                    const dateStr = formatDateISO(targetDate);
+
+                    document.getElementById('dayLabel').textContent = formatDayLabel(offset);
+                    document.getElementById('dayNext').disabled = (offset >= 0);
+                    document.getElementById('dayPrev').disabled = (offset <= -6);
+
+                    try {
+                        const concurrencyData = await getUserConcurrencyByDate(hash, dateStr);
+                        renderBurnClock(concurrencyData, profile.username);
+                    } catch (e) {
+                        console.error('Failed to load concurrency data:', e);
+                    }
+                }
+
+                document.getElementById('dayPrev').addEventListener('click', () => {
+                    if (burnDayOffset > -6) loadBurnClockDay(burnDayOffset - 1);
+                });
+                document.getElementById('dayNext').addEventListener('click', () => {
+                    if (burnDayOffset < 0) loadBurnClockDay(burnDayOffset + 1);
+                });
+
+                loadBurnClockDay(0);
 
                 // Burn clock rendering functions
                 function processHourlyData(concurrencyHistogram) {
-                    const now = new Date();
+                    // Date-based: iterate over UTC hours 0-23 for the target date
+                    // Determine the target date from the first key in the histogram
+                    const keys = Object.keys(concurrencyHistogram);
+                    let targetDateStr = null;
+                    if (keys.length > 0) {
+                        targetDateStr = keys[0].split(':')[0];
+                    } else {
+                        targetDateStr = new Date().toISOString().split('T')[0];
+                    }
 
                     const hourlyData = [];
-                    for (let i = 0; i < 24; i++) {
-                        const offsetHours = (23 - i);
+                    const now = new Date();
+                    const todayStr = now.toISOString().split('T')[0];
 
-                        // Calculate the actual date/time for this hour slot
-                        const slotDate = new Date(now.getTime() - offsetHours * 60 * 60 * 1000);
-
-                        // Use UTC for the key (matches backend storage format)
-                        const utcHour = slotDate.getUTCHours();
-                        const dateKey = slotDate.toISOString().split('T')[0]; // UTC date
-                        const key = dateKey + ':' + utcHour;
-
-                        // Keep local hour for display
-                        const targetHour = slotDate.getHours();
-
-                        // Handle both histogram format and simple peak format from API
+                    for (let h = 0; h < 24; h++) {
+                        const key = targetDateStr + ':' + h;
                         const histogramOrPeak = concurrencyHistogram[key];
                         const sessions = [];
 
-                        if (typeof histogramOrPeak === 'object') {
-                            // Full histogram format
+                        if (typeof histogramOrPeak === 'object' && histogramOrPeak !== null) {
                             for (let n = 1; n <= 7; n++) {
                                 let totalMins = 0;
                                 for (const [conc, mins] of Object.entries(histogramOrPeak)) {
                                     if (parseInt(conc, 10) >= n) totalMins += mins;
                                 }
                                 if (totalMins > 0) {
-                                    const seed = (targetHour * 7 + n * 13) % 17;
+                                    const seed = (h * 7 + n * 13) % 17;
                                     const variation = 0.85 + (seed / 17) * 0.15;
                                     const intensity = Math.min((totalMins / 60) * variation, 1);
                                     sessions.push({ index: n, intensity, minutes: totalMins });
                                 }
                             }
                         } else if (typeof histogramOrPeak === 'number' && histogramOrPeak > 0) {
-                            // Simple peak format - create synthetic sessions
                             for (let n = 1; n <= histogramOrPeak; n++) {
-                                const seed = (targetHour * 7 + n * 13) % 17;
+                                const seed = (h * 7 + n * 13) % 17;
                                 const intensity = 0.5 + (seed / 17) * 0.5;
                                 sessions.push({ index: n, intensity, minutes: 30 });
                             }
                         }
 
+                        const isCurrent = targetDateStr === todayStr && h === now.getUTCHours();
+                        const slotDate = new Date(targetDateStr + 'T' + String(h).padStart(2, '0') + ':00:00Z');
+
                         hourlyData.push({
-                            hour: targetHour,
+                            hour: h,
                             sessions,
-                            isCurrent: offsetHours === 0,
-                            date: slotDate // Store for tooltip
+                            isCurrent,
+                            date: slotDate
                         });
                     }
                     return hourlyData;
