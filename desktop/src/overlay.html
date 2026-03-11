@@ -37,23 +37,6 @@
   }
   .btn-icon:hover { background: rgba(255,255,255,0.08); color: #fff; }
 
-  /* Autostart toggle */
-  .autostart-toggle { display: flex; align-items: center; gap: 4px; }
-  .autostart-toggle .label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.3px; }
-  .switch { position: relative; width: 32px; height: 18px; }
-  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
-  .slider {
-    position: absolute; inset: 0; background: #333; border-radius: 9px;
-    cursor: pointer; transition: 0.2s;
-  }
-  .slider::before {
-    content: ''; position: absolute; width: 12px; height: 12px;
-    left: 3px; top: 3px; background: #fff; border-radius: 50%;
-    transition: 0.2s;
-  }
-  .switch input:checked + .slider { background: #6366f1; }
-  .switch input:checked + .slider::before { transform: translateX(14px); }
-
   .drag-region { cursor: grab; }
   .drag-region:active { cursor: grabbing; }
   .no-drag { -webkit-app-region: no-drag; app-region: no-drag; }
@@ -72,13 +55,6 @@
   <div class="header drag-region">
     <h1><img src="logo.png" alt="ClaudeRank logo" class="site-logo">ClaudeRank</h1>
     <div class="header-right no-drag">
-      <div class="autostart-toggle">
-        <span class="label">Auto-Update</span>
-        <label class="switch" title="Launch on startup">
-          <input type="checkbox" id="autostart">
-          <span class="slider"></span>
-        </label>
-      </div>
       <button class="btn-icon" id="btnHide" title="Hide (Alt+Space)">&#x2715;</button>
     </div>
   </div>
@@ -108,25 +84,6 @@ document.querySelector('.drag-region').addEventListener('mousedown', (e) => {
     console.error('Failed to load identity:', e);
   }
 })();
-
-// ── Autostart toggle ──
-(async () => {
-  try {
-    const enabled = await invoke('get_autostart_enabled');
-    document.getElementById('autostart').checked = enabled;
-  } catch (e) {
-    console.error('Failed to load autostart:', e);
-  }
-})();
-
-document.getElementById('autostart').addEventListener('change', async (e) => {
-  try {
-    await invoke('set_autostart_enabled', { enabled: e.target.checked });
-  } catch (err) {
-    console.error('Failed to toggle autostart:', err);
-    e.target.checked = !e.target.checked;
-  }
-});
 
 // ── Hide button ──
 document.getElementById('btnHide').addEventListener('click', () => invoke('hide_overlay'));
