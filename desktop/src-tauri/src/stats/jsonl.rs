@@ -274,7 +274,7 @@ impl JsonlTracker {
                     .duration_since(SystemTime::UNIX_EPOCH)
                     .map(|d| d.as_secs())
                     .unwrap_or(0);
-                if mtime_secs == old_mtime_secs && size == old_size {
+                if mtime_secs == old_mtime_secs && size == old_size && self.session_cache.contains_key(path) {
                     skipped += 1;
                     continue;
                 }

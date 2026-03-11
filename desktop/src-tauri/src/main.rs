@@ -543,13 +543,29 @@ fn copy_image_to_clipboard(image_base64: String) -> Result<(), String> {
 // ============ Env ============
 
 fn load_dotenv() {
-    // Look for .env in the project root (parent of src-tauri)
-    for candidate in [
-        std::env::current_dir().ok().map(|p| p.join(".env")),
-        std::env::current_exe().ok().and_then(|p| p.parent().map(|p| p.join(".env"))),
-    ] {
-        if let Some(path) = candidate {
+    // Walk up from cwd to find .env.local/.env (cwd is desktop/src-tauri/)
+    let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(mut dir) = std::env::current_dir() {
+        loop {
+            dirs.push(dir.clone());
+            match dir.parent() {
+                Some(p) => dir = p.to_path_buf(),
+                None => break,
+            }
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            dirs.push(parent.to_path_buf());
+        }
+    }
+    // Prefer .env.local over .env; first match wins
+    let filenames = [".env.local", ".env"];
+    for dir in &dirs {
+        for name in &filenames {
+            let path = dir.join(name);
             if path.exists() {
+                eprintln!("[load_dotenv] loading {}", path.display());
                 if let Ok(content) = std::fs::read_to_string(&path) {
                     for line in content.lines() {
                         let line = line.trim();
@@ -561,7 +577,7 @@ fn load_dotenv() {
                         }
                     }
                 }
-                break;
+                return;
             }
         }
     }

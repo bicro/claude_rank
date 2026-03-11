@@ -179,6 +179,33 @@
                         </div>
                     </div>
 
+                    <div class="burn-clock-container-full">
+                        <div class="burn-clock-header-full">
+                            <h3>Session Burn Clock</h3>
+                            <button class="copy-burn-btn" id="copyConcurrency">Copy</button>
+                        </div>
+                        <div class="burn-clock-wrapper">
+                            <div class="burn-clock-svg-container" id="burnClockContainer">
+                                <svg class="burn-clock-svg" id="burnClock" viewBox="0 0 320 320"></svg>
+                                <div class="burn-clock-center" id="burnClockCenter">
+                                    <div class="burn-clock-peak">0</div>
+                                    <div class="burn-clock-peak-label">Peak</div>
+                                </div>
+                            </div>
+                            <div class="burn-clock-day-nav" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:12px;">
+                                <button class="copy-burn-btn" id="dayPrev" style="font-size:16px;padding:4px 10px;" title="Previous day">&#9664;</button>
+                                <span id="dayLabel" style="font-size:13px;font-weight:600;min-width:90px;text-align:center;">Today</span>
+                                <button class="copy-burn-btn" id="dayNext" style="font-size:16px;padding:4px 10px;" title="Next day" disabled>&#9654;</button>
+                            </div>
+                            <div class="burn-clock-legend">
+                                <span class="legend-item"><div class="legend-dot" style="background:#CC581C"></div>Low</span>
+                                <span class="legend-item"><div class="legend-dot" style="background:#E89860"></div>Medium</span>
+                                <span class="legend-item"><div class="legend-dot" style="background:#FCF0E4"></div>High</span>
+                            </div>
+                            <div class="copy-feedback" id="concurrencyFeedback">Copied to clipboard!</div>
+                        </div>
+                    </div>
+
                     <div class="profile-gamification">
                         <div class="streak-display">
                             <div class="streak-icon">\u{1f525}</div>
@@ -244,33 +271,6 @@
                                     <div class="desc">${b.description}</div>
                                 </div>
                             `).join('')}
-                        </div>
-                    </div>
-
-                    <div class="burn-clock-container-full">
-                        <div class="burn-clock-header-full">
-                            <h3>Session Burn Clock</h3>
-                            <button class="copy-burn-btn" id="copyConcurrency">Copy</button>
-                        </div>
-                        <div class="burn-clock-wrapper">
-                            <div class="burn-clock-svg-container" id="burnClockContainer">
-                                <svg class="burn-clock-svg" id="burnClock" viewBox="0 0 320 320"></svg>
-                                <div class="burn-clock-center" id="burnClockCenter">
-                                    <div class="burn-clock-peak">0</div>
-                                    <div class="burn-clock-peak-label">Peak</div>
-                                </div>
-                            </div>
-                            <div class="burn-clock-day-nav" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:12px;">
-                                <button class="copy-burn-btn" id="dayPrev" style="font-size:16px;padding:4px 10px;" title="Previous day">&#9664;</button>
-                                <span id="dayLabel" style="font-size:13px;font-weight:600;min-width:90px;text-align:center;">Today</span>
-                                <button class="copy-burn-btn" id="dayNext" style="font-size:16px;padding:4px 10px;" title="Next day" disabled>&#9654;</button>
-                            </div>
-                            <div class="burn-clock-legend">
-                                <span class="legend-item"><div class="legend-dot" style="background:#CC581C"></div>Low</span>
-                                <span class="legend-item"><div class="legend-dot" style="background:#E89860"></div>Medium</span>
-                                <span class="legend-item"><div class="legend-dot" style="background:#FCF0E4"></div>High</span>
-                            </div>
-                            <div class="copy-feedback" id="concurrencyFeedback">Copied to clipboard!</div>
                         </div>
                     </div>
 
