@@ -334,8 +334,23 @@
                 let burnDayOffset = 0;
                 let currentBurnView = 'v1';
                 let lastConcurrencyData = null;
+                let lastLocalDateStr = null;
 
-                function formatDateISO(d) { return d.toISOString().split('T')[0]; }
+                function localDateISO(d) {
+                    return d.getFullYear() + '-' +
+                        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+                        String(d.getDate()).padStart(2, '0');
+                }
+                function utcDatesForLocalDay(localDateStr) {
+                    const localMidnight = new Date(localDateStr + 'T00:00:00');
+                    const dates = new Set();
+                    for (let h = 0; h < 24; h++) {
+                        const t = new Date(localMidnight.getTime() + h * 3600000);
+                        dates.add(t.toISOString().split('T')[0]);
+                    }
+                    return [...dates];
+                }
+                function formatDateISO(d) { return localDateISO(d); }
                 function dateForOffset(offset) {
                     const d = new Date();
                     d.setDate(d.getDate() + offset);
@@ -350,19 +365,22 @@
                 async function loadBurnClockDay(offset) {
                     burnDayOffset = offset;
                     const targetDate = dateForOffset(offset);
-                    const dateStr = formatDateISO(targetDate);
+                    const localDateStr = formatDateISO(targetDate);
 
                     document.getElementById('dayLabel').textContent = formatDayLabel(offset);
                     document.getElementById('dayNext').disabled = (offset >= 0);
                     document.getElementById('dayPrev').disabled = (offset <= -6);
 
                     try {
-                        const concurrencyData = await getUserConcurrencyByDate(hash, dateStr);
-                        lastConcurrencyData = concurrencyData;
+                        const utcDates = utcDatesForLocalDay(localDateStr);
+                        const results = await Promise.all(utcDates.map(d => getUserConcurrencyByDate(hash, d)));
+                        const allHistograms = Object.assign({}, ...results);
+                        lastConcurrencyData = allHistograms;
+                        lastLocalDateStr = localDateStr;
                         if (currentBurnView === 'v2') {
-                            renderBurnClockV2(concurrencyData, profile.username);
+                            renderBurnClockV2(allHistograms, localDateStr, profile.username);
                         } else {
-                            renderBurnClock(concurrencyData, profile.username);
+                            renderBurnClock(allHistograms, localDateStr, profile.username);
                         }
                     } catch (e) {
                         console.error('Failed to load concurrency data:', e);
@@ -379,24 +397,19 @@
                 loadBurnClockDay(0);
 
                 // Burn clock rendering functions
-                function processHourlyData(concurrencyHistogram) {
-                    // Date-based: iterate over UTC hours 0-23 for the target date
-                    // Determine the target date from the first key in the histogram
-                    const keys = Object.keys(concurrencyHistogram);
-                    let targetDateStr = null;
-                    if (keys.length > 0) {
-                        targetDateStr = keys[0].split(':')[0];
-                    } else {
-                        targetDateStr = new Date().toISOString().split('T')[0];
-                    }
-
+                function processHourlyData(allHistograms, localDateStr) {
                     const hourlyData = [];
+                    const localMidnight = new Date(localDateStr + 'T00:00:00');
                     const now = new Date();
-                    const todayStr = now.toISOString().split('T')[0];
+                    const isToday = localDateStr === localDateISO(now);
 
                     for (let h = 0; h < 24; h++) {
-                        const key = targetDateStr + ':' + h;
-                        const histogramOrPeak = concurrencyHistogram[key];
+                        const t = new Date(localMidnight.getTime() + h * 3600000);
+                        const utcDate = t.toISOString().split('T')[0];
+                        const utcHour = t.getUTCHours();
+                        const key = utcDate + ':' + utcHour;
+
+                        const histogramOrPeak = allHistograms[key];
                         const sessions = [];
 
                         if (typeof histogramOrPeak === 'object' && histogramOrPeak !== null) {
@@ -420,14 +433,12 @@
                             }
                         }
 
-                        const isCurrent = targetDateStr === todayStr && h === now.getUTCHours();
-                        const slotDate = new Date(targetDateStr + 'T' + String(h).padStart(2, '0') + ':00:00Z');
+                        const isCurrent = isToday && h === now.getHours();
 
                         hourlyData.push({
                             hour: h,
                             sessions,
-                            isCurrent,
-                            date: slotDate
+                            isCurrent
                         });
                     }
                     return hourlyData;
@@ -463,20 +474,12 @@
                     return displayH + ' ' + period;
                 }
 
-                function formatDateHour(date) {
-                    const h = date.getHours();
-                    const period = h < 12 ? 'AM' : 'PM';
-                    const displayH = h % 12 === 0 ? 12 : h % 12;
-                    const dateStr = date.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
-                    return dateStr + ', ' + displayH + ' ' + period;
-                }
-
-                function renderBurnClock(concurrencyHistogram, username) {
+                function renderBurnClock(concurrencyHistogram, localDateStr, username) {
                     const svg = document.getElementById('burnClock');
                     const centerEl = document.getElementById('burnClockCenter');
                     if (!svg) return;
 
-                    const hourlyData = processHourlyData(concurrencyHistogram);
+                    const hourlyData = processHourlyData(concurrencyHistogram, localDateStr);
                     burnClockData = hourlyData;
 
                     const cx = 160, cy = 160;
@@ -524,7 +527,7 @@
                             const color = getBurnColor(session.intensity);
 
                             const path = annularSector(cx, cy, r1, r2, startAngle, endAngle);
-                            const tooltipText = formatDateHour(data.date) + ': ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '');
+                            const tooltipText = formatHour(data.hour) + ': ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '');
                             svgContent += `<path class="burn-pill" d="${path}" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}">
                                 <title>${tooltipText}</title>
                             </path>`;
@@ -570,12 +573,12 @@
                     }
                 }
 
-                function renderBurnClockV2(concurrencyHistogram, username) {
+                function renderBurnClockV2(concurrencyHistogram, localDateStr, username) {
                     const svg = document.getElementById('burnClockV2');
                     const centerEl = document.getElementById('burnClockCenter');
                     if (!svg) return;
 
-                    const hourlyData = processHourlyData(concurrencyHistogram);
+                    const hourlyData = processHourlyData(concurrencyHistogram, localDateStr);
                     burnClockData = hourlyData;
 
                     const chartLeft = 30, chartRight = 830, chartTop = 10, chartBottom = 250;
@@ -669,11 +672,11 @@
                         btnV2.classList.remove('active');
                     }
 
-                    if (lastConcurrencyData) {
+                    if (lastConcurrencyData && lastLocalDateStr) {
                         if (view === 'v2') {
-                            renderBurnClockV2(lastConcurrencyData, profile.username);
+                            renderBurnClockV2(lastConcurrencyData, lastLocalDateStr, profile.username);
                         } else {
-                            renderBurnClock(lastConcurrencyData, profile.username);
+                            renderBurnClock(lastConcurrencyData, lastLocalDateStr, profile.username);
                         }
                     }
                 }
