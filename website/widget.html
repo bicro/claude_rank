@@ -347,7 +347,8 @@ function processHourlyData(allHistograms, localDateStr) {
     const utcHour = t.getUTCHours();
     const key = utcDate + ':' + utcHour;
 
-    const histogram = allHistograms[key] || {};
+    const raw = allHistograms[key] || {};
+    const histogram = (typeof raw === 'object' && raw !== null && raw.histogram) ? raw.histogram : raw;
     const sessions = [];
 
     for (let n = 1; n <= 5; n++) {
@@ -370,8 +371,8 @@ function processHourlyData(allHistograms, localDateStr) {
 }
 
 function getBurnColor(intensity) {
-  const r1 = 204, g1 = 88, b1 = 28;
-  const r2 = 252, g2 = 240, b2 = 228;
+  const r1 = 252, g1 = 240, b1 = 228;
+  const r2 = 204, g2 = 88, b2 = 28;
   return `rgb(${Math.round(r1 + (r2 - r1) * intensity)},${Math.round(g1 + (g2 - g1) * intensity)},${Math.round(b1 + (b2 - b1) * intensity)})`;
 }
 

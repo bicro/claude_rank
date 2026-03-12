@@ -26,7 +26,7 @@ impl FileWatcher {
                 // Show cost in tray title immediately from cache
                 let total = cost::total_cost(&m.data.stats);
                 let label = cost::format_cost(total);
-                Self::update_tray_title(&app, &label);
+                Self::update_tray_icon(&app, &label);
             }
         }
 
@@ -101,11 +101,16 @@ impl FileWatcher {
         }
     }
 
-    fn update_tray_title(app: &AppHandle, label: &str) {
+    fn update_tray_icon(app: &AppHandle, label: &str) {
         let state = app.state::<crate::AppState>();
-        let guard = state.tray_icon.lock().unwrap();
-        if let Some(tray) = guard.as_ref() {
-            let _ = tray.set_title(Some(label));
+        let base_icon = state.tray_icon_base.lock().unwrap();
+        // Only render if we have a valid base icon (not the 1x1 placeholder)
+        if base_icon.width() > 1 {
+            let rendered = crate::tray_render::render_tray_image(&base_icon, label);
+            let guard = state.tray_icon.lock().unwrap();
+            if let Some(tray) = guard.as_ref() {
+                let _ = tray.set_icon(Some(rendered));
+            }
         }
     }
 
@@ -123,7 +128,7 @@ impl FileWatcher {
             // Update tray icon title with total cost
             let total = cost::total_cost(&m.data.stats);
             let label = cost::format_cost(total);
-            Self::update_tray_title(app, &label);
+            Self::update_tray_icon(app, &label);
 
             Some(m.data.stats.clone())
         } else {

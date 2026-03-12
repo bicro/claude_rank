@@ -57,16 +57,15 @@ pub fn total_cost(stats: &StatsCache) -> f64 {
         .sum()
 }
 
-/// Format cost for display in the menu bar (e.g. " $4.20").
-/// Leading space adds padding between the tray icon and the text on macOS.
+/// Format cost for display in the menu bar (e.g. "$4.20").
 pub fn format_cost(cost: f64) -> String {
     if cost < 0.01 {
-        " $0.00".to_string()
+        "$0.00".to_string()
     } else if cost < 10.0 {
-        format!(" ${:.2}", cost)
+        format!("${:.2}", cost)
     } else if cost < 100.0 {
-        format!(" ${:.1}", cost)
+        format!("${:.1}", cost)
     } else {
-        format!(" ${:.0}", cost)
+        format!("${:.0}", cost)
     }
 }

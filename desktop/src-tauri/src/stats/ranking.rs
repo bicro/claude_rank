@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::Emitter;
 
-use super::parser::StatsCache;
+use super::parser::{DaySessionEntry, StatsCache};
 use super::points::PointsState;
 
 fn ranking_api_base() -> String {
@@ -90,7 +90,11 @@ pub(crate) struct SyncPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     hour_counts: Option<HashMap<String, u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    hour_tokens: Option<HashMap<String, u64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     concurrency_histogram: Option<HashMap<String, HashMap<u32, u32>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    day_sessions: Option<HashMap<String, Vec<DaySessionEntry>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     prompt_hashes: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -259,9 +263,23 @@ impl RankingEngine {
             None
         };
 
+        // Hourly token totals
+        let hour_tokens = if settings.hour_activity {
+            Some(stats.hour_tokens.clone())
+        } else {
+            None
+        };
+
         // Concurrency histogram
         let concurrency_histogram = if settings.concurrency_activity {
             Some(stats.concurrency_histogram.clone())
+        } else {
+            None
+        };
+
+        // Day sessions (session-based burn clock)
+        let day_sessions = if settings.concurrency_activity {
+            Some(stats.day_sessions.clone())
         } else {
             None
         };
@@ -273,7 +291,9 @@ impl RankingEngine {
             token_breakdown,
             daily_activity,
             hour_counts,
+            hour_tokens,
             concurrency_histogram,
+            day_sessions,
             prompt_hashes: None, // Populated from sessions if enabled
             prompts: None,       // Populated from sessions if enabled
             tool_names: None,    // Could be populated from stats

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from better_profanity import profanity
 
 from app.db import get_db
-from app.models import User, UserMetrics, UserBadge, Badge, MetricsHistory, MetricsHourly, ConcurrencyHistogram
+from app.models import User, UserMetrics, UserBadge, Badge, MetricsHistory, MetricsHourly, ConcurrencyHistogram, DailySessions
 from app.services.ranking import get_user_ranks_with_percentiles, compute_tier
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -395,6 +395,7 @@ async def get_user_concurrency(
         day_start = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0)
         day_end = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59)
 
+        # Fetch concurrency histograms
         stmt = (
             select(ConcurrencyHistogram)
             .where(
@@ -413,9 +414,45 @@ async def get_user_concurrency(
             try:
                 histogram = json.loads(row.histogram) if row.histogram else {}
                 hour_key = f"{row.snapshot_hour.strftime('%Y-%m-%d')}:{row.snapshot_hour.hour}"
-                per_hour[hour_key] = histogram
+                per_hour[hour_key] = {"histogram": histogram, "tokens": 0}
             except (json.JSONDecodeError, ValueError):
                 continue
+
+        # Fetch hourly token data
+        token_stmt = (
+            select(MetricsHourly)
+            .where(
+                and_(
+                    MetricsHourly.user_hash == user_hash,
+                    MetricsHourly.snapshot_hour >= day_start,
+                    MetricsHourly.snapshot_hour <= day_end,
+                )
+            )
+        )
+        token_result = await db.execute(token_stmt)
+        token_rows = token_result.scalars().all()
+
+        for row in token_rows:
+            hour_key = f"{row.snapshot_hour.strftime('%Y-%m-%d')}:{row.snapshot_hour.hour}"
+            if hour_key in per_hour:
+                per_hour[hour_key]["tokens"] = row.total_tokens or 0
+            elif row.total_tokens and row.total_tokens > 0:
+                per_hour[hour_key] = {"histogram": {}, "tokens": row.total_tokens}
+
+        # Fetch day sessions
+        ds_stmt = select(DailySessions).where(
+            and_(
+                DailySessions.user_hash == user_hash,
+                DailySessions.snapshot_date == target_date,
+            )
+        )
+        ds_result = await db.execute(ds_stmt)
+        ds_row = ds_result.scalar_one_or_none()
+        if ds_row and ds_row.sessions:
+            try:
+                per_hour["sessions"] = json.loads(ds_row.sessions)
+            except (json.JSONDecodeError, ValueError):
+                pass
 
         return per_hour
 

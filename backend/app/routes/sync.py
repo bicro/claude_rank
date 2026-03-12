@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db, DATABASE_URL
-from app.models import User, UserMetrics, MetricsHistory, MetricsHourly, ConcurrencyHistogram
+from app.models import User, UserMetrics, MetricsHistory, MetricsHourly, ConcurrencyHistogram, DailySessions
 from app.services.ranking import compute_weighted_score
 from app.services.badge_engine import (
     evaluate_milestone_badges,
@@ -69,7 +69,9 @@ class SyncRequest(BaseModel):
     token_breakdown: Optional[Dict] = None
     daily_activity: Optional[List] = None
     hour_counts: Optional[Dict] = None
+    hour_tokens: Optional[Dict[str, int]] = None
     concurrency_histogram: Optional[Dict[str, Dict[str, int]]] = None
+    day_sessions: Optional[Dict[str, List[Dict]]] = None
     prompt_hashes: Optional[List[str]] = None
     prompts: Optional[List[str]] = None
     tool_names: Optional[List[str]] = None
@@ -199,6 +201,36 @@ async def sync_metrics(req: SyncRequest, db: AsyncSession = Depends(get_db)):
                     total_messages=count,
                 ))
 
+    # Persist hour_tokens: actual per-hour token totals
+    if req.hour_tokens:
+        for hour_str, token_count in req.hour_tokens.items():
+            try:
+                if ':' in hour_str:
+                    parts = hour_str.rsplit(':', 1)
+                    d = date.fromisoformat(parts[0])
+                    h = int(parts[1])
+                    snapshot_hour = datetime(d.year, d.month, d.day, h, 0, 0)
+                else:
+                    continue
+            except (ValueError, TypeError):
+                continue
+            if not (0 <= h <= 23) or token_count <= 0:
+                continue
+            ht_stmt = select(MetricsHourly).where(
+                MetricsHourly.user_hash == req.user_hash,
+                MetricsHourly.snapshot_hour == snapshot_hour,
+            )
+            ht_result = await db.execute(ht_stmt)
+            existing_ht = ht_result.scalar_one_or_none()
+            if existing_ht:
+                existing_ht.total_tokens = token_count
+            else:
+                db.add(MetricsHourly(
+                    user_hash=req.user_hash,
+                    snapshot_hour=snapshot_hour,
+                    total_tokens=token_count,
+                ))
+
     # Persist daily_activity: actual per-day message/tool counts
     if req.daily_activity:
         for entry in req.daily_activity:
@@ -263,6 +295,32 @@ async def sync_metrics(req: SyncRequest, db: AsyncSession = Depends(get_db)):
                     user_hash=req.user_hash,
                     snapshot_hour=snapshot_hour,
                     histogram=histogram_json,
+                ))
+
+    # Persist day_sessions: per-day session entries for burn clock
+    if req.day_sessions:
+        import json
+        for date_str, sessions_list in req.day_sessions.items():
+            try:
+                entry_date = date.fromisoformat(date_str)
+            except (ValueError, TypeError):
+                continue
+            if not sessions_list:
+                continue
+            sessions_json = json.dumps(sessions_list)
+            ds_stmt = select(DailySessions).where(
+                DailySessions.user_hash == req.user_hash,
+                DailySessions.snapshot_date == entry_date,
+            )
+            ds_result = await db.execute(ds_stmt)
+            existing_ds = ds_result.scalar_one_or_none()
+            if existing_ds:
+                existing_ds.sessions = sessions_json
+            else:
+                db.add(DailySessions(
+                    user_hash=req.user_hash,
+                    snapshot_date=entry_date,
+                    sessions=sessions_json,
                 ))
 
     await db.flush()

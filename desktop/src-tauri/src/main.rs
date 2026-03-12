@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod stats;
+mod tray_render;
 
 use serde::Serialize;
 use serde_json::json;
@@ -206,11 +207,22 @@ async fn open_overlay_devtools(app: tauri::AppHandle) -> Result<(), String> {
 
 // ============ App State ============
 
-#[derive(Default)]
 pub struct AppState {
     pub overlay_visible: Mutex<bool>,
     pub toggle_menu_item: Mutex<Option<MenuItem<tauri::Wry>>>,
     pub tray_icon: Mutex<Option<TrayIcon<tauri::Wry>>>,
+    pub tray_icon_base: Mutex<image::RgbaImage>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            overlay_visible: Mutex::new(false),
+            toggle_menu_item: Mutex::new(None),
+            tray_icon: Mutex::new(None),
+            tray_icon_base: Mutex::new(image::RgbaImage::new(1, 1)),
+        }
+    }
 }
 
 // ============ Window Prefs Persistence ============
@@ -756,11 +768,15 @@ fn main() {
             let tray_png = image::load_from_memory(include_bytes!("../icons/tray-icon.png"))
                 .expect("failed to decode tray icon PNG");
             let tray_rgba = tray_png.to_rgba8();
-            let (tw, th) = (tray_rgba.width(), tray_rgba.height());
-            let tray_icon_img = tauri::image::Image::new_owned(tray_rgba.into_raw(), tw, th);
+
+            // Store base icon for later re-rendering with updated cost text
+            *state.tray_icon_base.lock().unwrap() = tray_rgba.clone();
+
+            // Render initial composite tray image (icon + "$0.00" on white background)
+            let initial_icon = tray_render::render_tray_image(&tray_rgba, "$0.00");
 
             let tray = TrayIconBuilder::new()
-                .icon(tray_icon_img)
+                .icon(initial_icon)
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(move |_app, event| {

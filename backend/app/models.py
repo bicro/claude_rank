@@ -133,3 +133,14 @@ class ConcurrencyHistogram(Base):
     histogram: Mapped[str] = mapped_column(Text)  # JSON: {"1": 20, "2": 30}
 
     __table_args__ = (UniqueConstraint("user_hash", "snapshot_hour"),)
+
+
+class DailySessions(Base):
+    __tablename__ = "daily_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_hash: Mapped[str] = mapped_column(String(36), ForeignKey("users.user_hash"))
+    snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
+    sessions: Mapped[str] = mapped_column(Text)  # JSON array of session entries
+
+    __table_args__ = (UniqueConstraint("user_hash", "snapshot_date"),)

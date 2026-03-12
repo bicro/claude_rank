@@ -9,7 +9,7 @@ use std::time::SystemTime;
 
 /// Idle threshold: gaps longer than 5 minutes between messages are considered idle time
 const IDLE_THRESHOLD_SECS: i64 = 300;
-const CACHE_VERSION: u32 = 2;
+const CACHE_VERSION: u32 = 5;
 
 // ── Cache persistence structs ──
 
@@ -530,22 +530,43 @@ fn parse_jsonl_file(path: &PathBuf, is_main: bool) -> SessionStats {
 
 // ── Concurrency Histogram ──
 
+/// Compute active segments from sorted timestamps, splitting at gaps > IDLE_THRESHOLD_SECS.
+fn compute_active_segments(timestamps: &[DateTime<Utc>]) -> Vec<(DateTime<Utc>, DateTime<Utc>)> {
+    if timestamps.is_empty() {
+        return vec![];
+    }
+    let mut sorted = timestamps.to_vec();
+    sorted.sort();
+
+    let mut segments = Vec::new();
+    let mut seg_start = sorted[0];
+    let mut seg_end = sorted[0];
+
+    for i in 1..sorted.len() {
+        let gap = (sorted[i] - seg_end).num_seconds();
+        if gap > IDLE_THRESHOLD_SECS {
+            segments.push((seg_start, seg_end));
+            seg_start = sorted[i];
+        }
+        seg_end = sorted[i];
+    }
+    segments.push((seg_start, seg_end));
+    segments
+}
+
 fn compute_concurrency_histogram(sessions: &[&SessionStats]) -> HashMap<String, HashMap<u32, u32>> {
     use chrono::{Duration, NaiveDateTime, TimeZone};
 
     let mut histogram: HashMap<String, HashMap<u32, u32>> = HashMap::new();
 
     // Only consider main sessions (exclude subagents)
-    let main_sessions: Vec<_> = sessions
+    // Each session is represented as a list of active segments
+    let main_sessions: Vec<Vec<(DateTime<Utc>, DateTime<Utc>)>> = sessions
         .iter()
         .filter(|s| s.is_main)
-        .filter_map(|s| {
-            let first = s.first_timestamp.as_ref()?;
-            let last = s.last_timestamp.as_ref()?;
-            let first_dt = first.parse::<DateTime<Utc>>().ok()?;
-            let last_dt = last.parse::<DateTime<Utc>>().ok()?;
-            Some((first_dt, last_dt))
-        })
+        .filter(|s| s.all_timestamps.len() >= 2)
+        .map(|s| compute_active_segments(&s.all_timestamps))
+        .filter(|segs| !segs.is_empty())
         .collect();
 
     if main_sessions.is_empty() {
@@ -554,16 +575,14 @@ fn compute_concurrency_histogram(sessions: &[&SessionStats]) -> HashMap<String, 
 
     // Collect all unique hours with activity
     let mut hours_with_activity: BTreeSet<String> = BTreeSet::new();
-    for (first_dt, last_dt) in &main_sessions {
-        let start = *first_dt;
-        let end = *last_dt;
-
-        // Iterate through each hour the session spans
-        let mut current = start.with_minute(0).unwrap().with_second(0).unwrap().with_nanosecond(0).unwrap();
-        while current <= end {
-            let hour_key = format!("{}:{}", current.format("%Y-%m-%d"), current.hour());
-            hours_with_activity.insert(hour_key);
-            current = current + Duration::hours(1);
+    for segments in &main_sessions {
+        for (seg_start, seg_end) in segments {
+            let mut current = seg_start.with_minute(0).unwrap().with_second(0).unwrap().with_nanosecond(0).unwrap();
+            while current <= *seg_end {
+                let hour_key = format!("{}:{}", current.format("%Y-%m-%d"), current.hour());
+                hours_with_activity.insert(hour_key);
+                current = current + Duration::hours(1);
+            }
         }
     }
 
@@ -595,12 +614,13 @@ fn compute_concurrency_histogram(sessions: &[&SessionStats]) -> HashMap<String, 
             let minute_start = hour_start + Duration::minutes(minute as i64);
             let minute_end = minute_start + Duration::minutes(1);
 
-            // Count sessions active during this minute
+            // Count sessions active during this minute (using active segments)
             let concurrent = main_sessions
                 .iter()
-                .filter(|(first_dt, last_dt)| {
-                    // Session is active if its range overlaps with [minute_start, minute_end)
-                    *first_dt < minute_end && *last_dt >= minute_start
+                .filter(|segments| {
+                    segments.iter().any(|(seg_start, seg_end)| {
+                        *seg_start < minute_end && *seg_end >= minute_start
+                    })
                 })
                 .count() as u32;
 
@@ -617,6 +637,158 @@ fn compute_concurrency_histogram(sessions: &[&SessionStats]) -> HashMap<String, 
     histogram
 }
 
+// ── Day Sessions (session-based burn clock) ──
+
+/// For each session, compute per-day entries with start/end as minutes since midnight UTC,
+/// tokens from deduplicated assistant entries, and greedy ring assignment.
+fn compute_day_sessions(sessions: &[&SessionStats]) -> HashMap<String, Vec<DaySessionEntry>> {
+    // Collect per-day raw session spans
+    struct RawSpan {
+        start_min: u32,
+        end_min: u32,
+        tokens: u64,
+        messages: u64,
+    }
+
+    let mut day_spans: HashMap<String, Vec<RawSpan>> = HashMap::new();
+
+    for session in sessions {
+        if !session.is_main || session.all_timestamps.len() < 2 || session.user_message_count == 0 {
+            continue;
+        }
+
+        let segments = compute_active_segments(&session.all_timestamps);
+        if segments.is_empty() {
+            continue;
+        }
+
+        // Deduplicate assistant entries by request_id for token counting
+        let mut request_last: HashMap<String, &AssistantEntry> = HashMap::new();
+        let mut no_rid_entries: Vec<&AssistantEntry> = Vec::new();
+        for entry in &session.assistant_entries {
+            if let Some(ref rid) = entry.request_id {
+                request_last.insert(rid.clone(), entry);
+            } else {
+                no_rid_entries.push(entry);
+            }
+        }
+
+        // Group segments by UTC date
+        let mut date_segments: HashMap<String, Vec<(u32, u32)>> = HashMap::new();
+
+        for (seg_start, seg_end) in &segments {
+            let start_date = seg_start.format("%Y-%m-%d").to_string();
+            let end_date = seg_end.format("%Y-%m-%d").to_string();
+
+            if start_date == end_date {
+                // Same day
+                let start_min = seg_start.hour() * 60 + seg_start.minute();
+                let end_min = seg_end.hour() * 60 + seg_end.minute();
+                date_segments.entry(start_date).or_default().push((start_min, end_min.max(start_min)));
+            } else {
+                // Spans midnight: split into two entries
+                let start_min = seg_start.hour() * 60 + seg_start.minute();
+                date_segments.entry(start_date).or_default().push((start_min, 1439));
+
+                let end_min = seg_end.hour() * 60 + seg_end.minute();
+                date_segments.entry(end_date).or_default().push((0, end_min));
+            }
+        }
+
+        // Compute tokens per date from deduplicated entries
+        let mut date_tokens: HashMap<String, u64> = HashMap::new();
+        for entry in request_last.values().chain(no_rid_entries.iter()) {
+            if let (Some(ts), Some(ref usage)) = (entry.timestamp, &entry.usage) {
+                let date = ts.format("%Y-%m-%d").to_string();
+                let total = usage.input_tokens + usage.output_tokens
+                    + usage.cache_read_input_tokens + usage.cache_creation_input_tokens;
+                *date_tokens.entry(date).or_default() += total;
+            }
+        }
+
+        // Compute messages per date: user messages + unique assistant request_ids
+        let mut date_messages: HashMap<String, u64> = HashMap::new();
+        for ts in &session.user_timestamps {
+            let date = ts.format("%Y-%m-%d").to_string();
+            *date_messages.entry(date).or_default() += 1;
+        }
+        // Count unique assistant request_ids per date
+        let mut date_request_ids: HashMap<String, HashSet<String>> = HashMap::new();
+        for entry in &session.assistant_entries {
+            if let (Some(ts), Some(ref rid)) = (entry.timestamp, &entry.request_id) {
+                let date = ts.format("%Y-%m-%d").to_string();
+                date_request_ids.entry(date).or_default().insert(rid.clone());
+            }
+        }
+        for (date, rids) in &date_request_ids {
+            *date_messages.entry(date.clone()).or_default() += rids.len() as u64;
+        }
+
+        // Build spans per date (one span per active segment, not merged)
+        for (date, segs) in &date_segments {
+            let tokens = date_tokens.get(date).copied().unwrap_or(0);
+            let messages = date_messages.get(date).copied().unwrap_or(0);
+            let seg_count = segs.len().max(1) as u64;
+
+            for &(seg_start, seg_end) in segs {
+                day_spans.entry(date.clone()).or_default().push(RawSpan {
+                    start_min: seg_start,
+                    end_min: seg_end.max(seg_start),
+                    tokens: tokens / seg_count,
+                    messages: messages / seg_count,
+                });
+            }
+        }
+    }
+
+    // Greedy ring assignment per date
+    let mut result: HashMap<String, Vec<DaySessionEntry>> = HashMap::new();
+
+    for (date, mut spans) in day_spans {
+        // Sort by start time
+        spans.sort_by_key(|s| s.start_min);
+
+        // ring_ends[i] = end minute of the last session assigned to ring i
+        let mut ring_ends: Vec<u32> = Vec::new();
+
+        let mut entries = Vec::new();
+        for span in &spans {
+            // Find lowest ring where this session doesn't overlap
+            let mut assigned_ring = None;
+            for (i, end) in ring_ends.iter().enumerate() {
+                if span.start_min > *end {
+                    assigned_ring = Some(i);
+                    break;
+                }
+            }
+            let ring = match assigned_ring {
+                Some(r) => {
+                    ring_ends[r] = span.end_min;
+                    r
+                }
+                None => {
+                    ring_ends.push(span.end_min);
+                    ring_ends.len() - 1
+                }
+            };
+
+            entries.push(DaySessionEntry {
+                ring: ring as u32,
+                start: span.start_min,
+                end: span.end_min,
+                tokens: span.tokens,
+                messages: span.messages,
+            });
+        }
+
+        if !entries.is_empty() {
+            result.insert(date, entries);
+        }
+    }
+
+    result
+}
+
 // ── Aggregation ──
 
 fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
@@ -626,6 +798,7 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
     let mut daily_tokens: HashMap<String, HashMap<String, u64>> = HashMap::new();
     let mut model_usage_map: HashMap<String, ModelUsage> = HashMap::new();
     let mut hour_counts: HashMap<String, u64> = HashMap::new();
+    let mut hour_tokens: HashMap<String, u64> = HashMap::new();
 
     let mut total_messages: u64 = 0;
     let mut total_sessions: u64 = 0;
@@ -735,16 +908,22 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
                                 .map(|ts| ts.format("%Y-%m-%d").to_string())
                         })
                         .unwrap_or_default();
+                    let total = usage.input_tokens
+                        + usage.output_tokens
+                        + usage.cache_read_input_tokens
+                        + usage.cache_creation_input_tokens;
                     if !date.is_empty() {
-                        let total = usage.input_tokens
-                            + usage.output_tokens
-                            + usage.cache_read_input_tokens
-                            + usage.cache_creation_input_tokens;
                         *daily_tokens
                             .entry(date)
                             .or_default()
                             .entry(entry.model.clone())
                             .or_default() += total;
+                    }
+
+                    // Accumulate hourly tokens
+                    if let Some(ts) = entry.timestamp {
+                        let hour_key = format!("{}:{}", ts.format("%Y-%m-%d"), ts.hour());
+                        *hour_tokens.entry(hour_key).or_default() += total;
                     }
                 }
             }
@@ -805,6 +984,9 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
     // Compute concurrency histogram
     let concurrency_histogram = compute_concurrency_histogram(sessions);
 
+    // Compute day sessions for session-based burn clock
+    let day_sessions = compute_day_sessions(sessions);
+
     StatsCache {
         version: 1,
         last_computed_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
@@ -821,5 +1003,7 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
         total_session_time_secs,
         total_active_time_secs,
         total_idle_time_secs,
+        hour_tokens,
+        day_sessions,
     }
 }

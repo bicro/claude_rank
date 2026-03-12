@@ -2,6 +2,19 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+// ── Day session entry (for burn clock) ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DaySessionEntry {
+    pub ring: u32,
+    pub start: u32,  // minutes since midnight UTC
+    pub end: u32,
+    pub tokens: u64,
+    #[serde(default)]
+    pub messages: u64,
+}
+
 // ── stats-cache.json ──
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -41,6 +54,12 @@ pub struct StatsCache {
     /// Total idle time across all sessions (seconds)
     #[serde(default)]
     pub total_idle_time_secs: u64,
+    /// Hourly token totals: key is "YYYY-MM-DD:H", value is total tokens for that hour
+    #[serde(default)]
+    pub hour_tokens: HashMap<String, u64>,
+    /// Day sessions: key is "YYYY-MM-DD", value is session entries for that day
+    #[serde(default)]
+    pub day_sessions: HashMap<String, Vec<DaySessionEntry>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
