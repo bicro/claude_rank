@@ -9,12 +9,12 @@
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background: transparent;
-    color: #e0e0e0;
+    color: #333;
     overflow-x: hidden;
     user-select: none;
   }
   .panel {
-    background: rgba(18, 18, 24, 0.95);
+    background: #fff;
     padding: 14px;
     display: flex;
     flex-direction: column;
@@ -26,21 +26,21 @@
   .user-bar {
     display: flex; align-items: center; gap: 10px;
     padding: 8px 12px;
-    background: rgba(255,255,255,0.04);
+    background: rgba(0,0,0,0.03);
     border-radius: 10px;
   }
   .user-bar .username {
-    font-weight: 600; font-size: 14px; color: #fff;
+    font-weight: 600; font-size: 14px; color: #333;
     cursor: pointer; border-bottom: 1px dashed transparent;
     padding: 1px 0;
   }
-  .user-bar .username:hover { border-bottom-color: rgba(255,255,255,0.3); }
-  .user-bar .username .pencil { font-size: 11px; color: #666; margin-left: 4px; opacity: 0; transition: opacity 0.15s; }
+  .user-bar .username:hover { border-bottom-color: rgba(0,0,0,0.2); }
+  .user-bar .username .pencil { font-size: 11px; color: #999; margin-left: 4px; opacity: 0; transition: opacity 0.15s; }
   .user-bar .username:hover .pencil { opacity: 1; }
   .username-edit-row { display: flex; align-items: center; gap: 4px; }
   .user-bar .username-input {
-    font-weight: 600; font-size: 14px; color: #fff;
-    background: rgba(255,255,255,0.08); border: 1px solid rgba(99,102,241,0.5);
+    font-weight: 600; font-size: 14px; color: #333;
+    background: rgba(0,0,0,0.04); border: 1px solid rgba(99,102,241,0.5);
     border-radius: 4px; padding: 1px 4px; outline: none;
     font-family: inherit; width: 120px;
   }
@@ -61,10 +61,10 @@
   }
   .username-prompt.show { display: block; }
   .user-bar .hash {
-    font-size: 11px; color: #666; font-family: monospace;
+    font-size: 11px; color: #999; font-family: monospace;
     cursor: pointer;
   }
-  .user-bar .hash:hover { color: #999; }
+  .user-bar .hash:hover { color: #666; }
   .hash-feedback {
     font-size: 10px; color: #4ade80; margin-left: 4px;
     opacity: 0; transition: opacity 0.2s;
@@ -90,14 +90,14 @@
   .burn-clock-section { margin-top: 4px; }
   .burn-clock-header {
     display: flex; align-items: center; gap: 6px;
-    font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+    font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
   }
   .copy-btn {
-    background: rgba(255,255,255,0.08); border: none; color: #888;
+    background: rgba(0,0,0,0.05); border: none; color: #888;
     font-size: 10px; padding: 2px 8px; border-radius: 4px; cursor: pointer;
     text-transform: none; letter-spacing: 0; margin-left: auto;
   }
-  .copy-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .copy-btn:hover { background: rgba(0,0,0,0.08); color: #333; }
   .copy-feedback {
     font-size: 10px; color: #4ade80; text-align: center; margin-top: 4px;
     opacity: 0; transition: opacity 0.2s;
@@ -111,7 +111,7 @@
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%); text-align: center; pointer-events: none;
   }
-  .burn-clock-center .center-tokens { font-size: 14px; font-weight: 700; color: #fff; line-height: 1.2; }
+  .burn-clock-center .center-tokens { font-size: 14px; font-weight: 700; color: #333; line-height: 1.2; }
   .burn-clock-center .center-cost { font-size: 10px; color: #a5b4fc; font-weight: 600; }
   .burn-pill { cursor: default; transition: opacity 0.15s; }
   .burn-pill:hover { opacity: 1 !important; }
@@ -124,18 +124,18 @@
   .burn-clock-tooltip.show { opacity: 1; }
   .view-toggle { display: flex; gap: 2px; margin-left: 8px; }
   .view-toggle-btn {
-    background: rgba(255,255,255,0.08); border: none; color: #888;
+    background: rgba(0,0,0,0.05); border: none; color: #888;
     font-size: 10px; padding: 2px 6px; border-radius: 3px; cursor: pointer;
     text-transform: none; letter-spacing: 0; font-weight: 600;
   }
-  .view-toggle-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .view-toggle-btn:hover { background: rgba(0,0,0,0.08); color: #333; }
   .view-toggle-btn.active { background: #6366f1; color: #fff; }
   .burn-clock-container.v2 { width: 320px; height: 140px; }
   .burn-clock-v2 { width: 100%; height: 100%; }
   .burn-clock-center-v2 {
     text-align: center; margin-bottom: 4px;
   }
-  .burn-clock-center-v2 .center-tokens { font-size: 14px; font-weight: 700; color: #fff; margin-right: 6px; }
+  .burn-clock-center-v2 .center-tokens { font-size: 14px; font-weight: 700; color: #333; margin-right: 6px; }
   .burn-clock-center-v2 .center-cost { font-size: 10px; color: #a5b4fc; font-weight: 600; }
   .burn-bar { cursor: default; transition: opacity 0.15s; }
   .burn-bar:hover { opacity: 1 !important; }
@@ -146,14 +146,14 @@
     gap: 8px; margin-top: 6px;
   }
   .day-nav-btn {
-    background: rgba(255,255,255,0.08); border: none; color: #888;
+    background: rgba(0,0,0,0.05); border: none; color: #888;
     font-size: 14px; width: 24px; height: 24px; border-radius: 6px;
     cursor: pointer; display: flex; align-items: center; justify-content: center;
   }
-  .day-nav-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .day-nav-btn:hover { background: rgba(0,0,0,0.08); color: #333; }
   .day-nav-btn:disabled { opacity: 0.3; cursor: default; }
   .day-nav-label {
-    font-size: 12px; color: #ccc; font-weight: 600; min-width: 80px; text-align: center;
+    font-size: 12px; color: #333; font-weight: 600; min-width: 80px; text-align: center;
   }
 
   /* Leaderboard */
@@ -161,26 +161,26 @@
     flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;
   }
   .leaderboard::-webkit-scrollbar { width: 4px; }
-  .leaderboard::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
-  .lb-header { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .leaderboard::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 2px; }
+  .lb-header { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
   .lb-row {
     display: flex; align-items: center; gap: 10px;
     padding: 6px 10px; border-radius: 8px; font-size: 13px;
   }
-  .lb-row:hover { background: rgba(255,255,255,0.04); }
-  .lb-row.me { background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); }
+  .lb-row:hover { background: rgba(0,0,0,0.03); }
+  .lb-row.me { background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); }
   .lb-rank { width: 24px; text-align: center; font-weight: 700; color: #888; }
   .lb-rank.gold { color: #fbbf24; }
   .lb-rank.silver { color: #94a3b8; }
   .lb-rank.bronze { color: #d97706; }
   .lb-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .lb-score { font-weight: 600; color: #a5b4fc; font-variant-numeric: tabular-nums; }
+  .lb-score { font-weight: 600; color: #6366f1; font-variant-numeric: tabular-nums; }
 
   /* Footer */
   .footer { text-align: center; padding-top: 4px; }
   .footer a { color: #6366f1; text-decoration: none; font-size: 12px; }
   .footer a:hover { text-decoration: underline; }
-  .loading { color: #555; font-size: 12px; text-align: center; padding: 20px 0; }
+  .loading { color: #999; font-size: 12px; text-align: center; padding: 20px 0; }
 </style>
 </head>
 <body>
