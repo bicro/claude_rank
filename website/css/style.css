@@ -909,28 +909,22 @@ a:hover { text-decoration: underline; }
     color: #FF9B5C;
 }
 
-/* Burn clock view toggle */
-.burn-clock-view-toggle {
-    display: flex; gap: 4px;
+/* Burn clock section labels */
+.burn-clock-section {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 20px;
 }
-.burn-clock-view-btn {
-    background: var(--bg-card);
-    border: 1px solid #d0d0d0;
+.burn-clock-section-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    text-align: center;
     color: var(--text-secondary);
-    font-size: 11px; padding: 3px 8px; border-radius: 4px;
-    cursor: pointer; font-weight: 600; font-family: inherit;
-}
-.burn-clock-view-btn:hover {
-    background: var(--bg-hover); color: var(--text-primary);
-}
-.burn-clock-view-btn.active {
-    background: #CC581C; color: #fff; border-color: #CC581C;
-}
-[data-theme="dark"] .burn-clock-view-btn {
-    border-color: #333;
-}
-[data-theme="dark"] .burn-clock-view-btn.active {
-    background: #FF9B5C; color: #000; border-color: #FF9B5C;
 }
 /* V2 bar chart */
 .burn-clock-svg-container.v2 {
