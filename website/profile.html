@@ -192,8 +192,12 @@
                                 <button class="copy-burn-btn" id="dayNext" style="font-size:16px;padding:4px 10px;" title="Next day" disabled>&#9654;</button>
                             </div>
                             <div class="burn-clock-section">
-                                <div class="burn-clock-svg-container v2">
-                                    <svg class="burn-clock-v2-svg" id="burnClockV2" viewBox="0 0 860 300"></svg>
+                                <div class="burn-clock-svg-container">
+                                    <svg class="burn-clock-svg" id="burnClockDaily" viewBox="0 0 320 320"></svg>
+                                    <div class="burn-clock-center" id="burnClockDailyCenter">
+                                        <div class="burn-clock-peak">0</div>
+                                        <div class="burn-clock-peak-label">Peak</div>
+                                    </div>
                                 </div>
                             </div>
                             <div class="burn-clock-section">
@@ -635,47 +639,88 @@
                 }
 
                 function renderBurnClockV2(concurrencyHistogram, username, localDateStr) {
-                    const svg = document.getElementById('burnClockV2');
+                    const svg = document.getElementById('burnClockDaily');
+                    const centerEl = document.getElementById('burnClockDailyCenter');
                     if (!svg) return;
 
                     const hourlyData = processHourlyData(concurrencyHistogram, localDateStr);
                     burnClockDayData = hourlyData;
 
-                    const chartLeft = 30, chartRight = 830, chartTop = 10, chartBottom = 250;
-                    const barWidth = 31, barGap = 3;
-                    const segHeight = 31, segGap = 3, maxSegs = 7;
-                    let svgContent = '';
+                    const cx = 160, cy = 160;
+                    const baseRadius = 50;
+                    const pillWidth = 10;
+                    const pillGap = 4;
+                    const maxRings = 7;
 
+                    let svgContent = '';
+                    let maxSessions = 0;
+
+                    // Draw center circle
+                    svgContent += `<circle cx="${cx}" cy="${cy}" r="${baseRadius - 6}" fill="rgba(204,88,28,0.08)" />`;
+
+                    // Cardinal labels
+                    const cardinals = [
+                        { angle: -90, label: '12am' },
+                        { angle: 0, label: '6am' },
+                        { angle: 90, label: '12pm' },
+                        { angle: 180, label: '6pm' }
+                    ];
+                    const labelRadius = cx - 10;
+                    cardinals.forEach(c => {
+                        const toRad = Math.PI / 180;
+                        const x = cx + labelRadius * Math.cos(c.angle * toRad);
+                        const y = cy + labelRadius * Math.sin(c.angle * toRad);
+                        svgContent += `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="10" font-family="inherit">${c.label}</text>`;
+                    });
+
+                    // Draw hour slices
                     for (let i = 0; i < 24; i++) {
                         const data = hourlyData[i];
-                        const x = chartLeft + i * (barWidth + barGap);
-                        const hour12 = i === 0 ? '12 AM' : i < 12 ? i + ' AM' : i === 12 ? '12 PM' : (i - 12) + ' PM';
-                        const tooltipText = hour12 + ': ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '');
+                        const startAngle = -90 + (i * 15);
+                        const endAngle = startAngle + 13;
 
-                        for (const session of data.sessions) {
-                            if (session.index > maxSegs) continue;
-                            const segY = chartBottom - session.index * (segHeight + segGap);
-                            const color = getBurnColor(session.intensity);
-                            svgContent += '<rect class="burn-bar" x="' + x + '" y="' + segY + '" width="' + barWidth + '" height="' + segHeight + '" rx="4" ry="4" fill="' + color + '"><title>' + tooltipText + '</title></rect>';
+                        if (data.sessions.length > maxSessions) {
+                            maxSessions = data.sessions.length;
                         }
 
-                        if (data.isCurrent) {
-                            svgContent += '<rect x="' + x + '" y="' + (chartBottom + 5) + '" width="' + barWidth + '" height="4" rx="2" fill="#CC581C" />';
+                        for (const session of data.sessions) {
+                            if (session.index > maxRings) continue;
+
+                            const r1 = baseRadius + (session.index - 1) * (pillWidth + pillGap);
+                            const r2 = r1 + pillWidth;
+                            const color = getBurnColor(session.intensity);
+
+                            const path = annularSector(cx, cy, r1, r2, startAngle, endAngle);
+                            const tooltipText = formatDateHour(data.date) + ': ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '');
+                            svgContent += `<path class="burn-pill" d="${path}" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}">
+                                <title>${tooltipText}</title>
+                            </path>`;
                         }
                     }
 
-                    const axisLabels = [
-                        { label: '12am', hour: 0 }, { label: '3am', hour: 3 },
-                        { label: '6am', hour: 6 },  { label: '9am', hour: 9 },
-                        { label: '12pm', hour: 12 }, { label: '3pm', hour: 15 },
-                        { label: '6pm', hour: 18 }, { label: '9pm', hour: 21 },
-                    ];
-                    for (const al of axisLabels) {
-                        const lx = chartLeft + al.hour * (barWidth + barGap) + barWidth / 2;
-                        svgContent += '<text x="' + lx + '" y="280" fill="currentColor" font-size="14" text-anchor="middle" dominant-baseline="central" font-weight="600" font-family="inherit">' + al.label + '</text>';
+                    // Draw current hour label
+                    const isToday = hourlyData.some(d => d.isCurrent);
+                    if (isToday) {
+                        const currentHour = new Date().getHours();
+                        const midAngle = -90 + (currentHour * 15) + 6.5;
+                        const toRad = Math.PI / 180;
+                        const currentSessions = hourlyData[currentHour].sessions.length;
+                        const rings = Math.max(currentSessions, 1);
+                        const labelDist = baseRadius + rings * (pillWidth + pillGap) + 10;
+                        const lx = cx + labelDist * Math.cos(midAngle * toRad);
+                        const ly = cy + labelDist * Math.sin(midAngle * toRad);
+                        const period = currentHour < 12 ? 'AM' : 'PM';
+                        const displayH = currentHour % 12 === 0 ? 12 : currentHour % 12;
+                        const timeStr = displayH + ' ' + period;
+                        svgContent += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" fill="#CC581C" font-size="8" font-weight="600" font-family="inherit">${timeStr}</text>`;
                     }
 
                     svg.innerHTML = svgContent;
+
+                    // Update center badge
+                    if (centerEl) {
+                        centerEl.querySelector('.burn-clock-peak').textContent = maxSessions;
+                    }
                 }
 
                 if (history.length > 0) {

@@ -840,7 +840,7 @@ a:hover { text-decoration: underline; }
     border-color: #333;
 }
 .burn-clock-wrapper {
-    background: var(--bg-secondary);
+    background: var(--bg-primary);
     border-radius: var(--radius);
     padding: 24px;
     display: flex;
