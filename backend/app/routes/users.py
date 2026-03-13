@@ -179,6 +179,7 @@ async def get_user_history(user_hash: str, days: int = 30, db: AsyncSession = De
         {
             "date": r.snapshot_date.isoformat(),
             "tokens": r.total_tokens,
+            "daily_tokens": r.daily_tokens or 0,
             "messages": r.total_messages,
             "sessions": r.total_sessions,
             "tool_calls": r.total_tool_calls,

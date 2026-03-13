@@ -96,8 +96,123 @@
                         </div>
                     </div>
 
-                    <div class="profile-content-layout">
-                    <div class="profile-stats">
+                    <div class="profile-section-constrained">
+                        <div class="stat-category">
+                            <div class="xp-display">
+                                <div class="level-badge">${currentLevel}</div>
+                                <div class="xp-info">
+                                    <div class="xp-label">Level ${currentLevel}</div>
+                                    <div class="xp-bar"><div class="xp-fill" style="width:${xpProgress.toFixed(1)}%"></div></div>
+                                    <div class="xp-text">${formatNumber(m.total_points)} / ${formatNumber(nextLevelPoints)} XP</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="profile-section-constrained">
+                    <div class="burn-clock-container-full">
+                        <div class="burn-clock-wrapper">
+                            <div class="burn-clock-top-bar" style="position:relative;display:flex;justify-content:center;align-items:center;width:100%;margin-bottom:12px;">
+                                <div class="burn-clock-view-toggle" style="display:flex;gap:0;">
+                                <button class="burn-clock-toggle-btn active" id="toggleDaily" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-radius:6px 0 0 6px;background:var(--accent,#c45a1c);color:#fff;cursor:pointer;">Daily</button>
+                                <button class="burn-clock-toggle-btn" id="toggleWeekly" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-left:none;border-radius:0 6px 6px 0;background:transparent;color:var(--text-secondary,#888);cursor:pointer;">Weekly Avg</button>
+                                </div>
+                                <button class="copy-burn-btn copy-icon-btn" id="copyConcurrency" title="Copy" style="position:absolute;right:0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                            </div>
+                            <div id="dailyView">
+                                <div class="burn-clock-nav-bar">
+                                    <button class="copy-burn-btn" id="dayPrev" style="font-size:16px;padding:4px 10px;" title="Previous day">&#9664;</button>
+                                    <span id="dayLabel" style="font-size:13px;font-weight:600;min-width:90px;text-align:center;">Today</span>
+                                    <button class="copy-burn-btn" id="dayNext" style="font-size:16px;padding:4px 10px;" title="Next day" disabled>&#9654;</button>
+                                </div>
+                                <div class="burn-clock-split">
+                                    <div class="burn-clock-daily-stats">
+                                        <div class="daily-stats-title">Daily ClaudeRank Stats</div>
+                                        <div class="daily-stats-group">
+                                            <div class="daily-stats-group-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Usage</div>
+                                            <div class="daily-stat">
+                                                <div class="daily-stat-label">Daily Spend</div>
+                                                <div class="daily-stat-value" id="dailyCostDisplay">$0</div>
+                                            </div>
+                                            <div class="daily-stat">
+                                                <div class="daily-stat-label">Daily Tokens</div>
+                                                <div class="daily-stat-value" id="dailyTokensDisplay">0</div>
+                                            </div>
+                                        </div>
+                                        <div class="daily-stats-group">
+                                            <div class="daily-stats-group-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><rect x="2" y="3" width="20" height="18" rx="2"/><polyline points="7 9 10 12 7 15"/><line x1="13" y1="15" x2="17" y2="15"/></svg>Sessions</div>
+                                            <div class="daily-stat">
+                                                <div class="daily-stat-label">Peak Concurrency</div>
+                                                <div class="daily-stat-value" id="dailyPeakDisplay">&mdash;</div>
+                                            </div>
+                                            <div class="daily-stat">
+                                                <div class="daily-stat-label">Active Time</div>
+                                                <div class="daily-stat-value" id="dailyActiveHoursDisplay">&mdash;</div>
+                                            </div>
+                                            <div class="daily-stat">
+                                                <div class="daily-stat-label">Concurrent Mins</div>
+                                                <div class="daily-stat-value" id="dailyConcurrentMinsDisplay">&mdash;</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="burn-clock-right">
+                                        <div class="burn-clock-section">
+                                            <div class="burn-clock-svg-container">
+                                                <svg class="burn-clock-svg" id="burnClockDaily" viewBox="0 0 320 320"></svg>
+                                            </div>
+                                        </div>
+                                        <div class="burn-clock-legend">
+                                            <span class="legend-label">~10 min</span>
+                                            <div class="legend-gradient"></div>
+                                            <span class="legend-label">~60 min</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="weeklyView" style="display:none;">
+                                <div class="burn-clock-nav-bar">
+                                    <button class="copy-burn-btn" id="weekPrev" style="font-size:16px;padding:4px 10px;" title="Previous week">&#9664;</button>
+                                    <span id="weekLabel" style="font-size:13px;font-weight:600;min-width:130px;text-align:center;">This Week</span>
+                                    <button class="copy-burn-btn" id="weekNext" style="font-size:16px;padding:4px 10px;" title="Next week" disabled>&#9654;</button>
+                                </div>
+                                <div class="burn-clock-split">
+                                    <div class="burn-clock-daily-stats">
+                                        <div class="daily-stats-title">Weekly ClaudeRank Stats</div>
+                                        <div class="daily-stats-group">
+                                            <div class="daily-stats-group-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Usage</div>
+                                            <div class="daily-stat">
+                                                <div class="daily-stat-label">Avg Spend</div>
+                                                <div class="daily-stat-value" id="weeklyCostDisplay">&mdash;</div>
+                                            </div>
+                                        </div>
+                                        <div class="daily-stats-group">
+                                            <div class="daily-stats-group-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><rect x="2" y="3" width="20" height="18" rx="2"/><polyline points="7 9 10 12 7 15"/><line x1="13" y1="15" x2="17" y2="15"/></svg>Sessions</div>
+                                            <div class="daily-stat">
+                                                <div class="daily-stat-label">Peak Avg</div>
+                                                <div class="daily-stat-value" id="weeklyPeakDisplay">0</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="burn-clock-right">
+                                        <div class="burn-clock-section">
+                                            <div class="burn-clock-svg-container">
+                                                <svg class="burn-clock-svg" id="burnClock" viewBox="0 0 320 320"></svg>
+                                            </div>
+                                        </div>
+                                        <div class="burn-clock-legend">
+                                            <span class="legend-label">~10 min</span>
+                                            <div class="legend-gradient"></div>
+                                            <span class="legend-label">~60 min</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="copy-feedback" id="concurrencyFeedback">Copied to clipboard!</div>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="profile-stats-below">
                         <div class="stat-category">
                             <div class="stat-category-header">
                                 <div class="stat-category-value">${formatCost(m.estimated_spend || 0)}</div>
@@ -137,72 +252,6 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="stat-category">
-                            <div class="xp-display">
-                                <div class="level-badge">${currentLevel}</div>
-                                <div class="xp-info">
-                                    <div class="xp-label">Level ${currentLevel}</div>
-                                    <div class="xp-bar"><div class="xp-fill" style="width:${xpProgress.toFixed(1)}%"></div></div>
-                                    <div class="xp-text">${formatNumber(m.total_points)} / ${formatNumber(nextLevelPoints)} XP</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="burn-clock-container-full">
-                        <div class="burn-clock-wrapper">
-                            <div class="burn-clock-top-bar" style="position:relative;display:flex;justify-content:center;align-items:center;width:100%;margin-bottom:12px;">
-                                <div class="burn-clock-view-toggle" style="display:flex;gap:0;">
-                                <button class="burn-clock-toggle-btn active" id="toggleDaily" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-radius:6px 0 0 6px;background:var(--accent,#c45a1c);color:#fff;cursor:pointer;">Daily</button>
-                                <button class="burn-clock-toggle-btn" id="toggleWeekly" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-left:none;border-radius:0 6px 6px 0;background:transparent;color:var(--text-secondary,#888);cursor:pointer;">Weekly Avg</button>
-                                </div>
-                                <button class="copy-burn-btn copy-icon-btn" id="copyConcurrency" title="Copy" style="position:absolute;right:0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-                            </div>
-                            <div id="dailyView">
-                                <div class="burn-clock-day-nav" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:12px;">
-                                    <button class="copy-burn-btn" id="dayPrev" style="font-size:16px;padding:4px 10px;" title="Previous day">&#9664;</button>
-                                    <span id="dayLabel" style="font-size:13px;font-weight:600;min-width:90px;text-align:center;">Today</span>
-                                    <button class="copy-burn-btn" id="dayNext" style="font-size:16px;padding:4px 10px;" title="Next day" disabled>&#9654;</button>
-                                </div>
-                                <div class="burn-clock-section">
-                                    <div class="burn-clock-svg-container">
-                                        <svg class="burn-clock-svg" id="burnClockDaily" viewBox="0 0 320 320"></svg>
-                                        <div class="burn-clock-center" id="burnClockDailyCenter">
-                                            <div class="burn-clock-peak" id="dailyCostDisplay">$0</div>
-                                            <div class="burn-clock-peak-label" id="dailyTokensDisplay">0 tokens</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="burn-clock-legend">
-                                    <span class="legend-label">~10 min</span>
-                                    <div class="legend-gradient"></div>
-                                    <span class="legend-label">~60 min</span>
-                                </div>
-                            </div>
-                            <div id="weeklyView" style="display:none;">
-                                <div class="burn-clock-day-nav" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:12px;">
-                                    <button class="copy-burn-btn" id="weekPrev" style="font-size:16px;padding:4px 10px;" title="Previous week">&#9664;</button>
-                                    <span id="weekLabel" style="font-size:13px;font-weight:600;min-width:130px;text-align:center;">This Week</span>
-                                    <button class="copy-burn-btn" id="weekNext" style="font-size:16px;padding:4px 10px;" title="Next week" disabled>&#9654;</button>
-                                </div>
-                                <div class="burn-clock-section">
-                                    <div class="burn-clock-svg-container">
-                                        <svg class="burn-clock-svg" id="burnClock" viewBox="0 0 320 320"></svg>
-                                        <div class="burn-clock-center" id="burnClockCenter">
-                                            <div class="burn-clock-peak">0</div>
-                                            <div class="burn-clock-peak-label">Peak Avg</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="burn-clock-legend">
-                                    <span class="legend-label">~10 min</span>
-                                    <div class="legend-gradient"></div>
-                                    <span class="legend-label">~60 min</span>
-                                </div>
-                            </div>
-                            <div class="copy-feedback" id="concurrencyFeedback">Copied to clipboard!</div>
-                        </div>
-                    </div>
                     </div>
 
                     <div class="profile-badges">
@@ -393,6 +442,23 @@
                         const weekAvg = computeWeeklyAverage(weekConcurrencyCache, weekDates);
                         const refDateStr = weekDates[weekDates.length - 1];
                         renderBurnClock(weekAvg, profile.username, refDateStr);
+
+                        // Update weekly cost display
+                        const totalTokens = m.total_tokens || 0;
+                        const totalCost = m.estimated_spend || 0;
+                        let weekTokenSum = 0;
+                        for (const ds of weekDates) {
+                            const dayEntry = history.find(h => h.date === ds);
+                            if (dayEntry) weekTokenSum += dayEntry.daily_tokens || 0;
+                        }
+                        const wcEl = document.getElementById('weeklyCostDisplay');
+                        if (wcEl) {
+                            if (totalTokens > 0 && weekTokenSum > 0 && totalCost > 0) {
+                                wcEl.textContent = formatCost((totalCost * (weekTokenSum / totalTokens)) / 7) + '/day';
+                            } else {
+                                wcEl.textContent = '\u2014';
+                            }
+                        }
                     } catch (e) {
                         console.error('Failed to load weekly concurrency data:', e);
                     }
@@ -519,7 +585,6 @@
 
                 function renderBurnClock(concurrencyHistogram, username, localDateStr) {
                     const svg = document.getElementById('burnClock');
-                    const centerEl = document.getElementById('burnClockCenter');
                     if (!svg) return;
 
                     const hourlyData = processHourlyData(concurrencyHistogram, localDateStr);
@@ -567,10 +632,10 @@
                     const peakRings = Math.max(maxSessions, 1);
                     const labelRadius = baseRadius + peakRings * (pillWidth + pillGap) + 18;
                     const hourLabels = [
-                        { hour: 0, label: 'midnight' }, { hour: 3, label: '3a' },
-                        { hour: 6, label: '6a' },  { hour: 9, label: '9a' },
-                        { hour: 12, label: 'noon' }, { hour: 15, label: '3p' },
-                        { hour: 18, label: '6p' }, { hour: 21, label: '9p' }
+                        { hour: 0, label: 'midnight' }, { hour: 3, label: '3am' },
+                        { hour: 6, label: '6am' },  { hour: 9, label: '9am' },
+                        { hour: 12, label: 'noon' }, { hour: 15, label: '3pm' },
+                        { hour: 18, label: '6pm' }, { hour: 21, label: '9pm' }
                     ];
 
                     // Guide lines from center circle edge to just before labels
@@ -597,15 +662,13 @@
                     // Prepend guide lines so they render behind cells and labels
                     svg.innerHTML = guideLines + svgContent;
 
-                    // Update center badge
-                    if (centerEl) {
-                        centerEl.querySelector('.burn-clock-peak').textContent = maxSessions;
-                    }
+                    // Update weekly stats panel
+                    const peakEl = document.getElementById('weeklyPeakDisplay');
+                    if (peakEl) peakEl.textContent = maxSessions > 0 ? maxSessions : '\u2014';
                 }
 
                 function renderBurnClockV2(concurrencyHistogram, username, localDateStr) {
                     const svg = document.getElementById('burnClockDaily');
-                    const centerEl = document.getElementById('burnClockDailyCenter');
                     if (!svg) return;
 
                     const hourlyData = processHourlyData(concurrencyHistogram, localDateStr);
@@ -655,10 +718,10 @@
                     const peakRings = Math.max(maxSessions, 1);
                     const labelRadius = baseRadius + peakRings * (pillWidth + pillGap) + 18;
                     const hourLabels = [
-                        { hour: 0, label: 'midnight' }, { hour: 3, label: '3a' },
-                        { hour: 6, label: '6a' },  { hour: 9, label: '9a' },
-                        { hour: 12, label: 'noon' }, { hour: 15, label: '3p' },
-                        { hour: 18, label: '6p' }, { hour: 21, label: '9p' }
+                        { hour: 0, label: 'midnight' }, { hour: 3, label: '3am' },
+                        { hour: 6, label: '6am' },  { hour: 9, label: '9am' },
+                        { hour: 12, label: 'noon' }, { hour: 15, label: '3pm' },
+                        { hour: 18, label: '6pm' }, { hour: 21, label: '9pm' }
                     ];
 
                     // Guide lines from center circle edge to just before labels (inserted behind everything)
@@ -685,20 +748,44 @@
                     // Prepend guide lines so they render behind cells and labels
                     svg.innerHTML = guideLines + svgContent;
 
-                    // Update center with cost and tokens for the day
-                    if (centerEl) {
-                        const dayEntry = history.find(h => h.date === localDateStr);
-                        const dayTokens = dayEntry ? dayEntry.tokens : 0;
-                        const totalTokens = m.total_tokens || 0;
-                        const totalCost = m.estimated_spend || 0;
-                        let costText = '$0';
-                        if (totalTokens > 0 && dayTokens > 0 && totalCost > 0) {
-                            const dayCost = totalCost * (dayTokens / totalTokens);
-                            costText = formatCost(dayCost);
-                        }
-                        document.getElementById('dailyCostDisplay').textContent = costText;
-                        document.getElementById('dailyTokensDisplay').textContent = formatNumber(dayTokens) + ' tokens';
+                    // Update daily stats panel
+                    // Match local date to overlapping UTC dates in history
+                    const utcDatesForDay = utcDatesForLocalDay(localDateStr);
+                    let dayTokens = 0;
+                    for (const ud of utcDatesForDay) {
+                        const entry = history.find(h => h.date === ud);
+                        if (entry) dayTokens += entry.daily_tokens || 0;
                     }
+                    // Avoid double-counting: if local day spans 2 UTC dates,
+                    // scale by fraction of overlap (approximate: split evenly)
+                    if (utcDatesForDay.length > 1 && dayTokens > 0) {
+                        dayTokens = Math.round(dayTokens / utcDatesForDay.length);
+                    }
+                    const totalTokens = m.total_tokens || 0;
+                    const totalCost = m.estimated_spend || 0;
+                    let costText = '$0';
+                    if (totalTokens > 0 && dayTokens > 0 && totalCost > 0) {
+                        costText = formatCost(totalCost * (dayTokens / totalTokens));
+                    }
+                    document.getElementById('dailyCostDisplay').textContent = costText;
+                    document.getElementById('dailyTokensDisplay').textContent = formatNumber(dayTokens);
+                    const peak = Math.max(0, ...hourlyData.map(d => d.sessions.length));
+                    document.getElementById('dailyPeakDisplay').textContent = peak > 0 ? peak : '\u2014';
+                    let activeMins = 0;
+                    for (const d of hourlyData) {
+                        const s1 = d.sessions.find(s => s.index === 1);
+                        if (s1) activeMins += s1.minutes;
+                    }
+                    const ah = Math.floor(activeMins / 60);
+                    const am = Math.round(activeMins % 60);
+                    const activeText = activeMins > 0 ? (ah > 0 ? ah + 'h ' + am + 'm' : am + 'm') : '\u2014';
+                    document.getElementById('dailyActiveHoursDisplay').textContent = activeText;
+                    let concurrentMins = 0;
+                    for (const d of hourlyData) {
+                        const s2 = d.sessions.find(s => s.index === 2);
+                        if (s2) concurrentMins += s2.minutes;
+                    }
+                    document.getElementById('dailyConcurrentMinsDisplay').textContent = concurrentMins > 0 ? Math.round(concurrentMins) + 'm' : '\u2014';
                 }
 
                 if (history.length > 0) {
