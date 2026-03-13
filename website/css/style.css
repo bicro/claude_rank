@@ -883,6 +883,12 @@ a:hover { text-decoration: underline; }
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
+#dailyCostDisplay {
+    font-size: 16px;
+}
+#dailyTokensDisplay {
+    font-size: 9px;
+}
 .burn-clock-legend {
     display: flex;
     gap: 8px;

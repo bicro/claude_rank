@@ -33,7 +33,7 @@
     <div id="profileContent"><div class="loading">Loading profile</div></div>
 
     <script type="module">
-        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserHeatmap, getUserHourlyHeatmap, getUserConcurrency, getUserConcurrencyByDate, formatNumber, getCategoryLabel, getTier } from './js/api.js';
+        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserHeatmap, getUserHourlyHeatmap, getUserConcurrency, getUserConcurrencyByDate, formatNumber, formatCost, getCategoryLabel, getTier } from './js/api.js';
 
         const params = new URLSearchParams(window.location.search);
         const userHash = params.get('hash');
@@ -195,8 +195,8 @@
                                 <div class="burn-clock-svg-container">
                                     <svg class="burn-clock-svg" id="burnClockDaily" viewBox="0 0 320 320"></svg>
                                     <div class="burn-clock-center" id="burnClockDailyCenter">
-                                        <div class="burn-clock-peak">0</div>
-                                        <div class="burn-clock-peak-label">Peak</div>
+                                        <div class="burn-clock-peak" id="dailyCostDisplay">$0</div>
+                                        <div class="burn-clock-peak-label" id="dailyTokensDisplay">0 tokens</div>
                                     </div>
                                 </div>
                             </div>
@@ -648,8 +648,8 @@
 
                     const cx = 160, cy = 160;
                     const baseRadius = 50;
-                    const pillWidth = 10;
-                    const pillGap = 4;
+                    const pillWidth = 13;
+                    const pillGap = 2;
                     const maxRings = 7;
 
                     let svgContent = '';
@@ -658,68 +658,81 @@
                     // Draw center circle
                     svgContent += `<circle cx="${cx}" cy="${cy}" r="${baseRadius - 6}" fill="rgba(204,88,28,0.08)" />`;
 
-                    // Cardinal labels
-                    const cardinals = [
-                        { angle: -90, label: '12am' },
-                        { angle: 0, label: '6am' },
-                        { angle: 90, label: '12pm' },
-                        { angle: 180, label: '6pm' }
-                    ];
-                    const labelRadius = cx - 10;
-                    cardinals.forEach(c => {
-                        const toRad = Math.PI / 180;
-                        const x = cx + labelRadius * Math.cos(c.angle * toRad);
-                        const y = cy + labelRadius * Math.sin(c.angle * toRad);
-                        svgContent += `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="10" font-family="inherit">${c.label}</text>`;
-                    });
-
                     // Draw hour slices
                     for (let i = 0; i < 24; i++) {
                         const data = hourlyData[i];
-                        const startAngle = -90 + (i * 15);
-                        const endAngle = startAngle + 13;
+                        const midAngleDeg = -90 + (i * 15);
+                        const startAngle = midAngleDeg - 6.5;
+                        const endAngle = midAngleDeg + 6.5;
 
                         if (data.sessions.length > maxSessions) {
                             maxSessions = data.sessions.length;
                         }
+                        const midAngleRad = midAngleDeg * Math.PI / 180;
+                        const tooltipText = formatDateHour(data.date) + ': ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '');
 
                         for (const session of data.sessions) {
                             if (session.index > maxRings) continue;
 
                             const r1 = baseRadius + (session.index - 1) * (pillWidth + pillGap);
-                            const r2 = r1 + pillWidth;
+                            const rMid = r1 + pillWidth / 2;
+                            const cellCx = cx + rMid * Math.cos(midAngleRad);
+                            const cellCy = cy + rMid * Math.sin(midAngleRad);
                             const color = getBurnColor(session.intensity);
 
-                            const path = annularSector(cx, cy, r1, r2, startAngle, endAngle);
-                            const tooltipText = formatDateHour(data.date) + ': ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '');
-                            svgContent += `<path class="burn-pill" d="${path}" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}">
+                            svgContent += `<rect class="burn-pill" x="${cellCx - pillWidth / 2}" y="${cellCy - pillWidth / 2}" width="${pillWidth}" height="${pillWidth}" rx="3" ry="3" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}" transform="rotate(${midAngleDeg + 90}, ${cellCx}, ${cellCy})">
                                 <title>${tooltipText}</title>
-                            </path>`;
+                            </rect>`;
                         }
                     }
 
-                    // Draw current hour label
-                    const isToday = hourlyData.some(d => d.isCurrent);
-                    if (isToday) {
-                        const currentHour = new Date().getHours();
-                        const midAngle = -90 + (currentHour * 15) + 6.5;
+                    // Hour labels every 3 hours, just outside the highest ring
+                    const peakRings = Math.max(maxSessions, 1);
+                    const labelRadius = baseRadius + peakRings * (pillWidth + pillGap) + 18;
+                    const hourLabels = [
+                        { hour: 0, label: 'midnight' }, { hour: 3, label: '3a' },
+                        { hour: 6, label: '6a' },  { hour: 9, label: '9a' },
+                        { hour: 12, label: 'noon' }, { hour: 15, label: '3p' },
+                        { hour: 18, label: '6p' }, { hour: 21, label: '9p' }
+                    ];
+
+                    // Guide lines from center circle edge to just before labels (inserted behind everything)
+                    let guideLines = '';
+                    const guideStart = baseRadius - 6;
+                    const guideEnd = labelRadius - 8;
+                    hourLabels.forEach(c => {
+                        const angle = (-90 + c.hour * 15) * Math.PI / 180;
+                        const x1 = cx + guideStart * Math.cos(angle);
+                        const y1 = cy + guideStart * Math.sin(angle);
+                        const x2 = cx + guideEnd * Math.cos(angle);
+                        const y2 = cy + guideEnd * Math.sin(angle);
+                        guideLines += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="currentColor" stroke-width="0.5" opacity="0.1" />`;
+                    });
+
+                    hourLabels.forEach(c => {
+                        const angle = -90 + (c.hour * 15);
                         const toRad = Math.PI / 180;
-                        const currentSessions = hourlyData[currentHour].sessions.length;
-                        const rings = Math.max(currentSessions, 1);
-                        const labelDist = baseRadius + rings * (pillWidth + pillGap) + 10;
-                        const lx = cx + labelDist * Math.cos(midAngle * toRad);
-                        const ly = cy + labelDist * Math.sin(midAngle * toRad);
-                        const period = currentHour < 12 ? 'AM' : 'PM';
-                        const displayH = currentHour % 12 === 0 ? 12 : currentHour % 12;
-                        const timeStr = displayH + ' ' + period;
-                        svgContent += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" fill="#CC581C" font-size="8" font-weight="600" font-family="inherit">${timeStr}</text>`;
-                    }
+                        const x = cx + labelRadius * Math.cos(angle * toRad);
+                        const y = cy + labelRadius * Math.sin(angle * toRad);
+                        svgContent += `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="8" font-family="inherit">${c.label}</text>`;
+                    });
 
-                    svg.innerHTML = svgContent;
+                    // Prepend guide lines so they render behind cells and labels
+                    svg.innerHTML = guideLines + svgContent;
 
-                    // Update center badge
+                    // Update center with cost and tokens for the day
                     if (centerEl) {
-                        centerEl.querySelector('.burn-clock-peak').textContent = maxSessions;
+                        const dayEntry = history.find(h => h.date === localDateStr);
+                        const dayTokens = dayEntry ? dayEntry.tokens : 0;
+                        const totalTokens = m.total_tokens || 0;
+                        const totalCost = m.estimated_spend || 0;
+                        let costText = '$0';
+                        if (totalTokens > 0 && dayTokens > 0 && totalCost > 0) {
+                            const dayCost = totalCost * (dayTokens / totalTokens);
+                            costText = formatCost(dayCost);
+                        }
+                        document.getElementById('dailyCostDisplay').textContent = costText;
+                        document.getElementById('dailyTokensDisplay').textContent = formatNumber(dayTokens) + ' tokens';
                     }
                 }
 
