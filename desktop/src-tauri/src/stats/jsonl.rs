@@ -9,7 +9,7 @@ use std::time::SystemTime;
 
 /// Idle threshold: gaps longer than 5 minutes between messages are considered idle time
 const IDLE_THRESHOLD_SECS: i64 = 300;
-const CACHE_VERSION: u32 = 2;
+const CACHE_VERSION: u32 = 3;
 
 // ── Cache persistence structs ──
 
@@ -626,6 +626,10 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
     let mut daily_tokens: HashMap<String, HashMap<String, u64>> = HashMap::new();
     let mut model_usage_map: HashMap<String, ModelUsage> = HashMap::new();
     let mut hour_counts: HashMap<String, u64> = HashMap::new();
+    let mut hour_tokens: HashMap<String, u64> = HashMap::new();
+
+    // Per-session per-hour buckets: (session_idx, hour_key) → (messages, tokens)
+    let mut session_hour_buckets: HashMap<(usize, String), (u64, u64)> = HashMap::new();
 
     let mut total_messages: u64 = 0;
     let mut total_sessions: u64 = 0;
@@ -656,6 +660,12 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
             }
 
             *hour_counts.entry(format!("{}:{}", ts.format("%Y-%m-%d"), ts.hour())).or_default() += 1;
+
+            if session.is_main {
+                session_hour_buckets
+                    .entry((idx, format!("{}:{}", ts.format("%Y-%m-%d"), ts.hour())))
+                    .or_default().0 += 1;
+            }
 
             match &first_date {
                 None => first_date = Some(date),
@@ -745,6 +755,18 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
                             .or_default()
                             .entry(entry.model.clone())
                             .or_default() += total;
+
+                        // Hourly tokens
+                        if let Some(ts) = entry.timestamp {
+                            let hour_key = format!("{}:{}", ts.format("%Y-%m-%d"), ts.hour());
+                            *hour_tokens.entry(hour_key.clone()).or_default() += total;
+
+                            if session.is_main {
+                                session_hour_buckets
+                                    .entry((idx, hour_key))
+                                    .or_default().1 += total;
+                            }
+                        }
                     }
                 }
             }
@@ -805,6 +827,98 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
     // Compute concurrency histogram
     let concurrency_histogram = compute_concurrency_histogram(sessions);
 
+    // Build per-session per-hour metrics
+    let session_hour_metrics = {
+        use chrono::{Duration, NaiveDateTime, TimeZone};
+
+        // Collect buckets into hour_key → Vec<(idx, msgs, toks)>
+        let mut hour_sessions: HashMap<String, Vec<(usize, u64, u64)>> = HashMap::new();
+        for ((idx, hour_key), (msgs, toks)) in &session_hour_buckets {
+            hour_sessions.entry(hour_key.clone()).or_default().push((*idx, *msgs, *toks));
+        }
+
+        // Also add entries for main sessions that span an hour but have 0 messages/tokens
+        // (so blocks match the concurrency histogram)
+        let main_sessions_parsed: Vec<(usize, DateTime<Utc>, DateTime<Utc>)> = sessions
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.is_main)
+            .filter_map(|(idx, s)| {
+                let first = s.first_timestamp.as_ref()?.parse::<DateTime<Utc>>().ok()?;
+                let last = s.last_timestamp.as_ref()?.parse::<DateTime<Utc>>().ok()?;
+                Some((idx, first, last))
+            })
+            .collect();
+
+        for (idx, first_dt, last_dt) in &main_sessions_parsed {
+            let mut current = first_dt
+                .with_minute(0).unwrap()
+                .with_second(0).unwrap()
+                .with_nanosecond(0).unwrap();
+            while current <= *last_dt {
+                let hour_key = format!("{}:{}", current.format("%Y-%m-%d"), current.hour());
+                let entry = hour_sessions.entry(hour_key).or_default();
+                if !entry.iter().any(|(i, _, _)| *i == *idx) {
+                    entry.push((*idx, 0, 0));
+                }
+                current = current + Duration::hours(1);
+            }
+        }
+
+        // Build final HashMap<String, Vec<SessionHourMetric>>
+        let mut result: HashMap<String, Vec<SessionHourMetric>> = HashMap::new();
+        for (hour_key, mut session_list) in hour_sessions {
+            // Sort by session's first_timestamp
+            session_list.sort_by(|a, b| {
+                let ts_a = sessions[a.0].first_timestamp.as_deref().unwrap_or("");
+                let ts_b = sessions[b.0].first_timestamp.as_deref().unwrap_or("");
+                ts_a.cmp(ts_b)
+            });
+
+            // Parse hour start for minute overlap calculation
+            let parts: Vec<&str> = hour_key.rsplitn(2, ':').collect();
+            let hour_start_opt = if parts.len() == 2 {
+                let hour: u32 = parts[0].parse().unwrap_or(0);
+                NaiveDateTime::parse_from_str(
+                    &format!("{} {:02}:00:00", parts[1], hour),
+                    "%Y-%m-%d %H:%M:%S",
+                )
+                .ok()
+                .map(|dt| Utc.from_utc_datetime(&dt))
+            } else {
+                None
+            };
+
+            let metrics: Vec<SessionHourMetric> = session_list
+                .iter()
+                .map(|(idx, msgs, toks)| {
+                    let minutes = if let Some(hour_start) = hour_start_opt {
+                        let hour_end = hour_start + Duration::hours(1);
+                        // Find this session's time range
+                        if let Some((_, first_dt, last_dt)) = main_sessions_parsed.iter().find(|(i, _, _)| *i == *idx) {
+                            let overlap_start = if *first_dt > hour_start { *first_dt } else { hour_start };
+                            let overlap_end = if *last_dt < hour_end { *last_dt } else { hour_end };
+                            let overlap = (overlap_end - overlap_start).num_minutes().max(0) as u32;
+                            overlap.min(60)
+                        } else {
+                            0
+                        }
+                    } else {
+                        0
+                    };
+                    SessionHourMetric {
+                        messages: *msgs,
+                        tokens: *toks,
+                        minutes,
+                    }
+                })
+                .collect();
+
+            result.insert(hour_key, metrics);
+        }
+        result
+    };
+
     StatsCache {
         version: 1,
         last_computed_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
@@ -816,10 +930,12 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
         longest_session: longest_opt,
         first_session_date: first_date,
         hour_counts,
+        hour_tokens,
         total_speculation_time_saved_ms: 0,
         concurrency_histogram,
         total_session_time_secs,
         total_active_time_secs,
         total_idle_time_secs,
+        session_hour_metrics,
     }
 }

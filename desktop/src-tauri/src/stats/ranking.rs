@@ -90,7 +90,11 @@ pub(crate) struct SyncPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     hour_counts: Option<HashMap<String, u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    hour_tokens: Option<HashMap<String, u64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     concurrency_histogram: Option<HashMap<String, HashMap<u32, u32>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    session_hour_metrics: Option<HashMap<String, Vec<super::parser::SessionHourMetric>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     prompt_hashes: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -259,9 +263,23 @@ impl RankingEngine {
             None
         };
 
+        // Hour tokens
+        let hour_tokens = if settings.hour_activity {
+            Some(stats.hour_tokens.clone())
+        } else {
+            None
+        };
+
         // Concurrency histogram
         let concurrency_histogram = if settings.concurrency_activity {
             Some(stats.concurrency_histogram.clone())
+        } else {
+            None
+        };
+
+        // Per-session per-hour metrics
+        let session_hour_metrics = if settings.concurrency_activity {
+            Some(stats.session_hour_metrics.clone())
         } else {
             None
         };
@@ -273,7 +291,9 @@ impl RankingEngine {
             token_breakdown,
             daily_activity,
             hour_counts,
+            hour_tokens,
             concurrency_histogram,
+            session_hour_metrics,
             prompt_hashes: None, // Populated from sessions if enabled
             prompts: None,       // Populated from sessions if enabled
             tool_names: None,    // Could be populated from stats

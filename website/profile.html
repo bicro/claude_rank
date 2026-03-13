@@ -410,7 +410,16 @@
                         const key = utcDate + ':' + utcHour;
 
                         const histogramOrPeak = allHistograms[key];
+                        const messagesKey = utcDate + ':' + utcHour + ':messages';
+                        const tokensKey = utcDate + ':' + utcHour + ':tokens';
+                        const costKey = utcDate + ':' + utcHour + ':cost';
+                        const messages = allHistograms[messagesKey] || 0;
+                        const tokens = allHistograms[tokensKey] || 0;
+                        const cost = allHistograms[costKey] || 0;
                         const sessions = [];
+
+                        const sessionMetricsKey = utcDate + ':' + utcHour + ':session_metrics';
+                        const sessionMetrics = allHistograms[sessionMetricsKey] || null;
 
                         if (typeof histogramOrPeak === 'object' && histogramOrPeak !== null) {
                             for (let n = 1; n <= 7; n++) {
@@ -433,20 +442,32 @@
                             }
                         }
 
+                        // Enrich sessions with per-session metrics
+                        if (sessionMetrics && Array.isArray(sessionMetrics)) {
+                            for (let i = 0; i < sessions.length && i < sessionMetrics.length; i++) {
+                                sessions[i].messages = sessionMetrics[i].messages || 0;
+                                sessions[i].tokens = sessionMetrics[i].tokens || 0;
+                                sessions[i].cost = sessionMetrics[i].cost || 0;
+                            }
+                        }
+
                         const isCurrent = isToday && h === now.getHours();
 
                         hourlyData.push({
                             hour: h,
                             sessions,
-                            isCurrent
+                            isCurrent,
+                            messages,
+                            tokens,
+                            cost
                         });
                     }
                     return hourlyData;
                 }
 
                 function getBurnColor(intensity) {
-                    const r1 = 204, g1 = 88, b1 = 28;
-                    const r2 = 252, g2 = 240, b2 = 228;
+                    const r1 = 252, g1 = 240, b1 = 228;
+                    const r2 = 204, g2 = 88, b2 = 28;
                     const r = Math.round(r1 + (r2 - r1) * intensity);
                     const g = Math.round(g1 + (g2 - g1) * intensity);
                     const b = Math.round(b1 + (b2 - b1) * intensity);
@@ -466,6 +487,12 @@
                     const largeArc = (a1 - a0) > 180 ? 1 : 0;
 
                     return `M ${x1} ${y1} L ${x2} ${y2} A ${r2} ${r2} 0 ${largeArc} 1 ${x3} ${y3} L ${x4} ${y4} A ${r1} ${r1} 0 ${largeArc} 0 ${x1} ${y1} Z`;
+                }
+
+                function formatTokens(n) {
+                    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+                    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+                    return n.toString();
                 }
 
                 function formatHour(h) {
@@ -519,6 +546,7 @@
                             maxSessions = data.sessions.length;
                         }
 
+                        const hour12 = formatHour(data.hour);
                         for (const session of data.sessions) {
                             if (session.index > maxRings) continue;
 
@@ -527,7 +555,12 @@
                             const color = getBurnColor(session.intensity);
 
                             const path = annularSector(cx, cy, r1, r2, startAngle, endAngle);
-                            const tooltipText = formatHour(data.hour) + ': ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '');
+                            let tooltipText;
+                            if (session.messages !== undefined) {
+                                tooltipText = hour12 + ' \u2014 Session ' + session.index + '/' + data.sessions.length + '\n' + session.messages + ' prompt' + (session.messages !== 1 ? 's' : '') + '\n' + formatTokens(session.tokens) + ' tokens' + (session.cost > 0 ? ' (~$' + session.cost.toFixed(2) + ')' : '');
+                            } else {
+                                tooltipText = hour12 + ' \u2014 ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '') + '\n' + data.messages + ' prompt' + (data.messages !== 1 ? 's' : '') + '\n' + formatTokens(data.tokens) + ' tokens' + (data.cost > 0 ? ' (~$' + data.cost.toFixed(2) + ')' : '');
+                            }
                             svgContent += `<path class="burn-pill" d="${path}" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}">
                                 <title>${tooltipText}</title>
                             </path>`;
@@ -591,7 +624,6 @@
                         const data = hourlyData[i];
                         const x = chartLeft + i * (barWidth + barGap);
                         const hour12 = i === 0 ? '12 AM' : i < 12 ? i + ' AM' : i === 12 ? '12 PM' : (i - 12) + ' PM';
-                        const tooltipText = hour12 + ': ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '');
 
                         if (data.sessions.length > maxSessions) {
                             maxSessions = data.sessions.length;
@@ -601,6 +633,12 @@
                             if (session.index > maxSegs) continue;
                             const segY = chartBottom - session.index * (segHeight + segGap);
                             const color = getBurnColor(session.intensity);
+                            let tooltipText;
+                            if (session.messages !== undefined) {
+                                tooltipText = hour12 + ' \u2014 Session ' + session.index + '/' + data.sessions.length + '\n' + session.messages + ' prompt' + (session.messages !== 1 ? 's' : '') + '\n' + formatTokens(session.tokens) + ' tokens' + (session.cost > 0 ? ' (~$' + session.cost.toFixed(2) + ')' : '');
+                            } else {
+                                tooltipText = hour12 + ' \u2014 ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '') + '\n' + data.messages + ' prompt' + (data.messages !== 1 ? 's' : '') + '\n' + formatTokens(data.tokens) + ' tokens' + (data.cost > 0 ? ' (~$' + data.cost.toFixed(2) + ')' : '');
+                            }
                             svgContent += '<rect class="burn-bar" x="' + x + '" y="' + segY + '" width="' + barWidth + '" height="' + segHeight + '" rx="4" ry="4" fill="' + color + '"><title>' + tooltipText + '</title></rect>';
                         }
 

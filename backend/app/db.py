@@ -55,6 +55,7 @@ async def init_db():
         ("metrics_history", "daily_tool_calls", "BIGINT DEFAULT 0"),
         ("user_metrics", "estimated_spend", "DOUBLE PRECISION DEFAULT 0"),
         ("metrics_history", "daily_tokens", "BIGINT DEFAULT 0"),
+        ("concurrency_histogram", "session_metrics", "TEXT"),
     ]
     try:
         async with engine.begin() as conn:

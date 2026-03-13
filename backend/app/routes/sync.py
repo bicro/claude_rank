@@ -69,7 +69,9 @@ class SyncRequest(BaseModel):
     token_breakdown: Optional[Dict] = None
     daily_activity: Optional[List] = None
     hour_counts: Optional[Dict] = None
+    hour_tokens: Optional[Dict] = None
     concurrency_histogram: Optional[Dict[str, Dict[str, int]]] = None
+    session_hour_metrics: Optional[Dict[str, list]] = None
     prompt_hashes: Optional[List[str]] = None
     prompts: Optional[List[str]] = None
     tool_names: Optional[List[str]] = None
@@ -199,6 +201,37 @@ async def sync_metrics(req: SyncRequest, db: AsyncSession = Depends(get_db)):
                     total_messages=count,
                 ))
 
+    # Persist hour_tokens: actual per-hour token counts
+    if req.hour_tokens:
+        for hour_str, token_count in req.hour_tokens.items():
+            try:
+                if ':' in hour_str:
+                    parts = hour_str.rsplit(':', 1)
+                    d = date.fromisoformat(parts[0])
+                    h = int(parts[1])
+                    snapshot_hour = datetime(d.year, d.month, d.day, h, 0, 0)
+                else:
+                    h = int(hour_str)
+                    snapshot_hour = now.replace(hour=h, minute=0, second=0, microsecond=0)
+            except (ValueError, TypeError):
+                continue
+            if not (0 <= h <= 23) or token_count <= 0:
+                continue
+            hourly_tok_stmt = select(MetricsHourly).where(
+                MetricsHourly.user_hash == req.user_hash,
+                MetricsHourly.snapshot_hour == snapshot_hour,
+            )
+            result_hourly_tok = await db.execute(hourly_tok_stmt)
+            existing_hourly_tok = result_hourly_tok.scalar_one_or_none()
+            if existing_hourly_tok:
+                existing_hourly_tok.total_tokens = token_count
+            else:
+                db.add(MetricsHourly(
+                    user_hash=req.user_hash,
+                    snapshot_hour=snapshot_hour,
+                    total_tokens=token_count,
+                ))
+
     # Persist daily_activity: actual per-day message/tool counts
     if req.daily_activity:
         for entry in req.daily_activity:
@@ -263,6 +296,39 @@ async def sync_metrics(req: SyncRequest, db: AsyncSession = Depends(get_db)):
                     user_hash=req.user_hash,
                     snapshot_hour=snapshot_hour,
                     histogram=histogram_json,
+                ))
+
+    # Persist session_hour_metrics: per-session per-hour data
+    if req.session_hour_metrics:
+        import json as json_mod
+        for hour_key, metrics_list in req.session_hour_metrics.items():
+            try:
+                if ':' in hour_key:
+                    parts = hour_key.rsplit(':', 1)
+                    d = date.fromisoformat(parts[0])
+                    h = int(parts[1])
+                    snapshot_hour = datetime(d.year, d.month, d.day, h, 0, 0)
+                else:
+                    continue
+            except (ValueError, TypeError):
+                continue
+            if not (0 <= h <= 23) or not metrics_list:
+                continue
+            metrics_json = json_mod.dumps(metrics_list)
+            sm_stmt = select(ConcurrencyHistogram).where(
+                ConcurrencyHistogram.user_hash == req.user_hash,
+                ConcurrencyHistogram.snapshot_hour == snapshot_hour,
+            )
+            sm_result = await db.execute(sm_stmt)
+            existing_sm = sm_result.scalar_one_or_none()
+            if existing_sm:
+                existing_sm.session_metrics = metrics_json
+            else:
+                db.add(ConcurrencyHistogram(
+                    user_hash=req.user_hash,
+                    snapshot_hour=snapshot_hour,
+                    histogram='{}',
+                    session_metrics=metrics_json,
                 ))
 
     await db.flush()

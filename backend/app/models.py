@@ -131,5 +131,6 @@ class ConcurrencyHistogram(Base):
     user_hash: Mapped[str] = mapped_column(String(36), ForeignKey("users.user_hash"))
     snapshot_hour: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     histogram: Mapped[str] = mapped_column(Text)  # JSON: {"1": 20, "2": 30}
+    session_metrics: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     __table_args__ = (UniqueConstraint("user_hash", "snapshot_hour"),)

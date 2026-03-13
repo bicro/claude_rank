@@ -28,6 +28,8 @@ pub struct StatsCache {
     #[serde(default)]
     pub hour_counts: HashMap<String, u64>,
     #[serde(default)]
+    pub hour_tokens: HashMap<String, u64>,
+    #[serde(default)]
     pub total_speculation_time_saved_ms: u64,
     /// Concurrency histogram: Key is "YYYY-MM-DD:HH", Value is {session_count: minutes_with_that_count}
     #[serde(default)]
@@ -41,6 +43,17 @@ pub struct StatsCache {
     /// Total idle time across all sessions (seconds)
     #[serde(default)]
     pub total_idle_time_secs: u64,
+    /// Per-session per-hour metrics: Key is "YYYY-MM-DD:HH", Value is vec of per-session metrics
+    #[serde(default)]
+    pub session_hour_metrics: HashMap<String, Vec<SessionHourMetric>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionHourMetric {
+    pub messages: u64,
+    pub tokens: u64,
+    pub minutes: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

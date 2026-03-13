@@ -304,7 +304,7 @@ async def get_user_heatmap(
     current = start_date
     while current <= end_date:
         snap = snap_map.get(current)
-        if snap and getattr(snap, "daily_messages", 0) > 0:
+        if snap and (getattr(snap, "daily_messages", 0) > 0 or getattr(snap, "daily_tokens", 0) > 0):
             # Direct per-day counts from daily_activity sync
             messages = snap.daily_messages
             tool_calls = getattr(snap, "daily_tool_calls", 0) or 0
@@ -414,8 +414,45 @@ async def get_user_concurrency(
                 histogram = json.loads(row.histogram) if row.histogram else {}
                 hour_key = f"{row.snapshot_hour.strftime('%Y-%m-%d')}:{row.snapshot_hour.hour}"
                 per_hour[hour_key] = histogram
+                if row.session_metrics:
+                    session_data = json.loads(row.session_metrics)
+                    per_hour[hour_key + ":session_metrics"] = session_data
             except (json.JSONDecodeError, ValueError):
                 continue
+
+        # Enrich with per-hour human prompt counts, tokens, and cost from MetricsHourly
+        msg_stmt = (
+            select(MetricsHourly)
+            .where(
+                and_(
+                    MetricsHourly.user_hash == user_hash,
+                    MetricsHourly.snapshot_hour >= day_start,
+                    MetricsHourly.snapshot_hour <= day_end,
+                )
+            )
+        )
+        msg_result = await db.execute(msg_stmt)
+        msg_rows = msg_result.scalars().all()
+
+        # Compute average cost per token from UserMetrics
+        metrics_result = await db.execute(select(UserMetrics).where(UserMetrics.user_hash == user_hash))
+        um = metrics_result.scalar_one_or_none()
+        avg_cost = (um.estimated_spend / um.total_tokens) if um and um.total_tokens and um.total_tokens > 0 else 0
+
+        for mrow in msg_rows:
+            hour_base = f"{mrow.snapshot_hour.strftime('%Y-%m-%d')}:{mrow.snapshot_hour.hour}"
+            per_hour[hour_base + ":messages"] = mrow.total_messages or 0
+            tokens = mrow.total_tokens or 0
+            per_hour[hour_base + ":tokens"] = tokens
+            per_hour[hour_base + ":cost"] = round(tokens * avg_cost, 2)
+
+        # Enrich session_metrics with per-session cost
+        for key in list(per_hour.keys()):
+            if key.endswith(":session_metrics"):
+                session_data = per_hour[key]
+                if isinstance(session_data, list):
+                    for sm in session_data:
+                        sm["cost"] = round((sm.get("tokens", 0)) * avg_cost, 2)
 
         return per_hour
 

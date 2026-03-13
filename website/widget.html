@@ -117,8 +117,8 @@
   .burn-pill:hover { opacity: 1 !important; }
   .burn-clock-tooltip {
     position: absolute; background: rgba(0,0,0,0.9); color: #fff;
-    padding: 4px 8px; border-radius: 4px; font-size: 10px;
-    opacity: 0; pointer-events: none; z-index: 10; white-space: nowrap;
+    padding: 6px 10px; border-radius: 4px; font-size: 10px;
+    opacity: 0; pointer-events: none; z-index: 10; white-space: pre-line; max-width: 220px;
     transition: opacity 0.15s;
   }
   .burn-clock-tooltip.show { opacity: 1; }
@@ -348,7 +348,16 @@ function processHourlyData(allHistograms, localDateStr) {
     const key = utcDate + ':' + utcHour;
 
     const histogram = allHistograms[key] || {};
+    const messagesKey = utcDate + ':' + utcHour + ':messages';
+    const tokensKey = utcDate + ':' + utcHour + ':tokens';
+    const costKey = utcDate + ':' + utcHour + ':cost';
+    const messages = allHistograms[messagesKey] || 0;
+    const tokens = allHistograms[tokensKey] || 0;
+    const cost = allHistograms[costKey] || 0;
     const sessions = [];
+
+    const sessionMetricsKey = utcDate + ':' + utcHour + ':session_metrics';
+    const sessionMetrics = allHistograms[sessionMetricsKey] || null;
 
     for (let n = 1; n <= 5; n++) {
       let totalMins = 0;
@@ -363,15 +372,30 @@ function processHourlyData(allHistograms, localDateStr) {
       }
     }
 
+    // Enrich sessions with per-session metrics
+    if (sessionMetrics && Array.isArray(sessionMetrics)) {
+      for (let i = 0; i < sessions.length && i < sessionMetrics.length; i++) {
+        sessions[i].messages = sessionMetrics[i].messages || 0;
+        sessions[i].tokens = sessionMetrics[i].tokens || 0;
+        sessions[i].cost = sessionMetrics[i].cost || 0;
+      }
+    }
+
     const isCurrent = isToday && h === now.getHours();
-    hourlyData.push({ hour: h, sessions, isCurrent, histogram });
+    hourlyData.push({ hour: h, sessions, isCurrent, histogram, messages, tokens, cost });
   }
   return hourlyData;
 }
 
+function formatTokens(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return n.toString();
+}
+
 function getBurnColor(intensity) {
-  const r1 = 204, g1 = 88, b1 = 28;
-  const r2 = 252, g2 = 240, b2 = 228;
+  const r1 = 252, g1 = 240, b1 = 228;
+  const r2 = 204, g2 = 88, b2 = 28;
   return `rgb(${Math.round(r1 + (r2 - r1) * intensity)},${Math.round(g1 + (g2 - g1) * intensity)},${Math.round(b1 + (b2 - b1) * intensity)})`;
 }
 
@@ -404,13 +428,18 @@ function renderBurnClock(allHistograms, localDateStr) {
     const startAngle = -90 + (i * 15);
     const endAngle = startAngle + 14;
 
+    const hour12 = i === 0 ? '12 AM' : i < 12 ? i + ' AM' : i === 12 ? '12 PM' : (i - 12) + ' PM';
     for (const session of data.sessions) {
       if (session.index > maxRings) continue;
       const r1 = baseRadius + (session.index - 1) * (pillWidth + pillGap);
       const r2 = r1 + pillWidth;
       const color = getBurnColor(session.intensity);
-      const hour12 = i === 0 ? '12 AM' : i < 12 ? i + ' AM' : i === 12 ? '12 PM' : (i - 12) + ' PM';
-      const tooltipText = `${hour12}: ${data.sessions.length} session${data.sessions.length !== 1 ? 's' : ''}`;
+      let tooltipText;
+      if (session.messages !== undefined) {
+        tooltipText = `${hour12} — Session ${session.index}/${data.sessions.length}||${session.messages} prompt${session.messages !== 1 ? 's' : ''}||${formatTokens(session.tokens)} tokens${session.cost > 0 ? ' (~$' + session.cost.toFixed(2) + ')' : ''}`;
+      } else {
+        tooltipText = `${hour12} — ${data.sessions.length} session${data.sessions.length !== 1 ? 's' : ''}||${data.messages} prompt${data.messages !== 1 ? 's' : ''}||${formatTokens(data.tokens)} tokens${data.cost > 0 ? ' (~$' + data.cost.toFixed(2) + ')' : ''}`;
+      }
       svgContent += `<path class="burn-pill" d="${annularSector(cx, cy, r1, r2, startAngle, endAngle)}" fill="${color}" data-tooltip="${tooltipText}" />`;
     }
 
@@ -438,7 +467,7 @@ function renderBurnClock(allHistograms, localDateStr) {
 
   svg.querySelectorAll('.burn-pill').forEach(pill => {
     pill.addEventListener('mouseenter', (e) => {
-      tooltip.textContent = e.target.getAttribute('data-tooltip');
+      tooltip.innerHTML = e.target.getAttribute('data-tooltip').replace(/\|\|/g, '<br>');
       tooltip.classList.add('show');
     });
     pill.addEventListener('mousemove', (e) => {
@@ -470,12 +499,17 @@ function renderBurnClockV2(allHistograms, localDateStr) {
     const data = hourlyData[i];
     const x = chartLeft + i * (barWidth + barGap);
     const hour12 = i === 0 ? '12 AM' : i < 12 ? i + ' AM' : i === 12 ? '12 PM' : (i - 12) + ' PM';
-    const tooltipText = `${hour12}: ${data.sessions.length} session${data.sessions.length !== 1 ? 's' : ''}`;
 
     for (const session of data.sessions) {
       if (session.index > maxSegs) continue;
       const segY = chartBottom - session.index * (segHeight + segGap);
       const color = getBurnColor(session.intensity);
+      let tooltipText;
+      if (session.messages !== undefined) {
+        tooltipText = `${hour12} — Session ${session.index}/${data.sessions.length}||${session.messages} prompt${session.messages !== 1 ? 's' : ''}||${formatTokens(session.tokens)} tokens${session.cost > 0 ? ' (~$' + session.cost.toFixed(2) + ')' : ''}`;
+      } else {
+        tooltipText = `${hour12} — ${data.sessions.length} session${data.sessions.length !== 1 ? 's' : ''}||${data.messages} prompt${data.messages !== 1 ? 's' : ''}||${formatTokens(data.tokens)} tokens${data.cost > 0 ? ' (~$' + data.cost.toFixed(2) + ')' : ''}`;
+      }
       svgContent += `<rect class="burn-bar" x="${x}" y="${segY}" width="${barWidth}" height="${segHeight}" rx="2" ry="2" fill="${color}" data-tooltip="${tooltipText}" />`;
     }
 
@@ -500,7 +534,7 @@ function renderBurnClockV2(allHistograms, localDateStr) {
 
   svg.querySelectorAll('.burn-bar').forEach(bar => {
     bar.addEventListener('mouseenter', (e) => {
-      tooltip.textContent = e.target.getAttribute('data-tooltip');
+      tooltip.innerHTML = e.target.getAttribute('data-tooltip').replace(/\|\|/g, '<br>');
       tooltip.classList.add('show');
     });
     bar.addEventListener('mousemove', (e) => {
