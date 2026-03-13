@@ -96,17 +96,7 @@
                         </div>
                     </div>
 
-                    <div class="profile-gamification">
-                        <div class="xp-display">
-                            <div class="level-badge">${currentLevel}</div>
-                            <div class="xp-info">
-                                <div class="xp-label">Level ${currentLevel}</div>
-                                <div class="xp-bar"><div class="xp-fill" style="width:${xpProgress.toFixed(1)}%"></div></div>
-                                <div class="xp-text">${formatNumber(m.total_points)} / ${formatNumber(nextLevelPoints)} XP</div>
-                            </div>
-                        </div>
-                    </div>
-
+                    <div class="profile-content-layout">
                     <div class="profile-stats">
                         <div class="stat-category">
                             <div class="stat-category-header">
@@ -147,17 +137,26 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="stat-category">
+                            <div class="xp-display">
+                                <div class="level-badge">${currentLevel}</div>
+                                <div class="xp-info">
+                                    <div class="xp-label">Level ${currentLevel}</div>
+                                    <div class="xp-bar"><div class="xp-fill" style="width:${xpProgress.toFixed(1)}%"></div></div>
+                                    <div class="xp-text">${formatNumber(m.total_points)} / ${formatNumber(nextLevelPoints)} XP</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="burn-clock-container-full">
-                        <div class="burn-clock-header-full">
-                            <h3>Session Burn Clock</h3>
-                            <button class="copy-burn-btn" id="copyConcurrency">Copy</button>
-                        </div>
                         <div class="burn-clock-wrapper">
-                            <div class="burn-clock-view-toggle" style="display:flex;justify-content:center;gap:0;margin-bottom:12px;">
+                            <div class="burn-clock-top-bar" style="position:relative;display:flex;justify-content:center;align-items:center;width:100%;margin-bottom:12px;">
+                                <div class="burn-clock-view-toggle" style="display:flex;gap:0;">
                                 <button class="burn-clock-toggle-btn active" id="toggleDaily" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-radius:6px 0 0 6px;background:var(--accent,#c45a1c);color:#fff;cursor:pointer;">Daily</button>
                                 <button class="burn-clock-toggle-btn" id="toggleWeekly" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-left:none;border-radius:0 6px 6px 0;background:transparent;color:var(--text-secondary,#888);cursor:pointer;">Weekly Avg</button>
+                                </div>
+                                <button class="copy-burn-btn copy-icon-btn" id="copyConcurrency" title="Copy" style="position:absolute;right:0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                             </div>
                             <div id="dailyView">
                                 <div class="burn-clock-day-nav" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:12px;">
@@ -203,6 +202,7 @@
                             </div>
                             <div class="copy-feedback" id="concurrencyFeedback">Copied to clipboard!</div>
                         </div>
+                    </div>
                     </div>
 
                     <div class="profile-badges">
