@@ -805,8 +805,7 @@ a:hover { text-decoration: underline; }
     display: flex;
     justify-content: space-between;
     align-items: center;
-    width: 100%;
-    margin-bottom: 4px;
+    margin-bottom: 12px;
 }
 .burn-clock-header-full h3 {
     font-size: 16px;
@@ -841,37 +840,29 @@ a:hover { text-decoration: underline; }
     border-color: #333;
 }
 .burn-clock-wrapper {
-    background: #fff;
+    background: var(--bg-secondary);
     border-radius: var(--radius);
-    padding: 16px;
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 32px;
-    align-items: flex-start;
-    justify-content: center;
-}
-.burn-clock-panel {
+    padding: 24px;
     display: flex;
     flex-direction: column;
     align-items: center;
 }
-.burn-clock-panel-daily {
-    flex: 1 1 0;
-    min-width: 0;
-}
-.burn-clock-panel-weekly {
-    flex: 0 0 auto;
-    width: 260px;
-}
 .burn-clock-svg-container {
     position: relative;
-    width: 260px;
-    height: 260px;
+    width: 320px;
+    height: 320px;
 }
 .burn-clock-svg {
     width: 100%;
     height: 100%;
+}
+.burn-pill {
+    cursor: default;
+    transition: opacity 0.15s;
+    filter: drop-shadow(0 0 2px rgba(204,88,28,0.3));
+}
+.burn-pill:hover {
+    opacity: 0.8;
 }
 .burn-clock-center {
     position: absolute;
@@ -882,7 +873,7 @@ a:hover { text-decoration: underline; }
     pointer-events: none;
 }
 .burn-clock-peak {
-    font-size: 24px;
+    font-size: 28px;
     font-weight: 700;
     color: #CC581C;
 }
@@ -897,8 +888,7 @@ a:hover { text-decoration: underline; }
     gap: 8px;
     justify-content: center;
     align-items: center;
-    margin-bottom: 8px;
-    width: 100%;
+    margin-top: 16px;
 }
 .legend-gradient {
     width: 80px;
@@ -912,10 +902,21 @@ a:hover { text-decoration: underline; }
 }
 
 /* Dark mode burn clock */
+[data-theme="dark"] .burn-pill {
+    filter: drop-shadow(0 0 4px rgba(255,180,100,0.5));
+}
 [data-theme="dark"] .burn-clock-peak {
     color: #FF9B5C;
 }
 
+/* Burn clock section labels */
+.burn-clock-section {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 20px;
+}
 .burn-clock-section-label {
     font-size: 12px;
     font-weight: 600;
@@ -927,7 +928,7 @@ a:hover { text-decoration: underline; }
 }
 /* V2 bar chart */
 .burn-clock-svg-container.v2 {
-    width: 100%; max-width: 100%; height: 220px;
+    width: 100%; max-width: 860px; height: 320px;
 }
 .burn-clock-v2-svg { width: 100%; height: 100%; }
 .burn-bar {
@@ -941,26 +942,17 @@ a:hover { text-decoration: underline; }
 
 /* Responsive burn clock */
 @media (max-width: 640px) {
-    .burn-clock-wrapper {
-        flex-direction: column;
-        align-items: center;
-        padding: 12px;
-    }
-    .burn-clock-panel-daily {
-        flex: 1 1 auto;
-        width: 100%;
-    }
-    .burn-clock-panel-weekly {
-        width: auto;
-    }
     .burn-clock-svg-container {
-        width: 180px;
-        height: 180px;
+        width: 240px;
+        height: 240px;
     }
     .burn-clock-svg-container.v2 {
-        width: 100%; height: 140px;
+        width: 100%; height: 240px;
     }
     .burn-clock-peak {
-        font-size: 18px;
+        font-size: 22px;
+    }
+    .burn-clock-wrapper {
+        padding: 16px;
     }
 }

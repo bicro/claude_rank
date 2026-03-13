@@ -563,8 +563,8 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
         return Ok(window);
     }
 
-    let width = 420.0;
-    let height = 720.0;
+    let width = 380.0;
+    let height = 620.0;
 
     let window = tauri::WebviewWindowBuilder::new(
         app,
@@ -605,8 +605,8 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
                         if let Some(mon) = find_monitor_at(&monitors, pos.x as f64, pos.y as f64) {
                             let key = monitor_key(mon);
                             let mut prefs = load_window_prefs().unwrap_or(WindowPrefs {
-                                width: 420,
-                                height: 720,
+                                width: 380,
+                                height: 620,
                                 positions: HashMap::new(),
                             });
                             prefs.positions.insert(key, MonitorPosition {
