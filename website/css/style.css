@@ -885,21 +885,20 @@ a:hover { text-decoration: underline; }
 }
 .burn-clock-legend {
     display: flex;
-    gap: 16px;
+    gap: 8px;
     justify-content: center;
-    margin-top: 16px;
-    font-size: 12px;
-    color: var(--text-secondary);
-}
-.legend-item {
-    display: flex;
     align-items: center;
-    gap: 6px;
+    margin-top: 16px;
 }
-.legend-dot {
-    width: 12px;
+.legend-gradient {
+    width: 80px;
     height: 12px;
+    background: linear-gradient(to right, #FCF0E4, #CC581C);
     border-radius: 3px;
+}
+.legend-label {
+    font-size: 11px;
+    color: var(--text-secondary);
 }
 
 /* Dark mode burn clock */
