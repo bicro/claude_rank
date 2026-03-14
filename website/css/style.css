@@ -341,6 +341,7 @@ a:hover { text-decoration: underline; }
     padding: 32px 24px;
     display: flex;
     gap: 24px;
+
     align-items: flex-start;
     max-width: 900px;
     margin: 0 auto;
@@ -365,6 +366,7 @@ a:hover { text-decoration: underline; }
     gap: 16px;
     padding: 0 24px 24px;
     max-width: 900px;
+
     margin: 0 auto;
     align-items: stretch;
 }
@@ -377,6 +379,7 @@ a:hover { text-decoration: underline; }
     max-width: 900px;
     margin: 0 auto;
     padding: 0 24px;
+
 }
 .profile-stats-below {
     display: grid;
@@ -385,6 +388,7 @@ a:hover { text-decoration: underline; }
     max-width: 900px;
     margin: 0 auto;
     padding: 0 24px;
+
 }
 .profile-stats .stat-category:last-child {
     flex: 1;
@@ -521,8 +525,9 @@ a:hover { text-decoration: underline; }
     .profile-stats { grid-template-columns: 1fr; }
     .profile-section-constrained { padding-left: 16px; padding-right: 16px; }
     .burn-clock-split { flex-direction: column-reverse; }
-    .burn-clock-daily-stats { width: 100%; }
-    .burn-clock-right .burn-clock-svg-container { max-width: 240px; }
+    .daily-stats-row { flex-wrap: wrap; }
+    .daily-stat-card { min-width: 120px; }
+    .burn-clock-right .burn-clock-svg-container { min-width: 0; max-width: 100%; }
     .profile-stats-below { grid-template-columns: 1fr; padding-left: 16px; padding-right: 16px; }
     .landing-hero { padding: 48px 16px 20px; }
     .landing-hero h2.hero-typed { font-size: 24px; white-space: normal; overflow: visible; min-height: 70px; }
@@ -857,6 +862,10 @@ a:hover { text-decoration: underline; }
 
 /* ── Burn Clock Visualization ── */
 .burn-clock-container-full {
+    width: 100%;
+}
+.burn-clock-section-wide {
+    max-width: none;
 }
 .copy-burn-btn {
     background: var(--bg-card);
@@ -896,10 +905,12 @@ a:hover { text-decoration: underline; }
 .burn-clock-wrapper {
     background: var(--bg-primary);
     border-radius: var(--radius);
-    padding: 16px;
+    padding: 24px;
     display: flex;
     flex-direction: column;
     align-items: center;
+    width: 100%;
+    box-sizing: border-box;
 }
 .burn-clock-nav-bar {
     display: flex;
@@ -911,28 +922,32 @@ a:hover { text-decoration: underline; }
     border: 1px solid var(--border, #e5e5e5);
     border-radius: var(--radius, 12px);
     margin-bottom: 12px;
+    width: 100%;
+    box-sizing: border-box;
 }
 .burn-clock-split {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
     gap: 16px;
     width: 100%;
 }
-.burn-clock-daily-stats {
-    width: 160px;
-    flex-shrink: 0;
+.daily-stats-row {
     display: flex;
-    flex-direction: column;
     gap: 12px;
+    width: 100%;
+    margin-bottom: 16px;
+}
+.daily-stat-card {
+    flex: 1;
     padding: 16px;
     background: var(--bg-card, #f9f9f9);
     border-radius: var(--radius, 12px);
     border: 1px solid var(--border, #e5e5e5);
-    align-self: stretch;
-    justify-content: center;
+    text-align: center;
 }
 .daily-stats-title {
-    font-size: 12px;
+    font-size: 18px;
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 4px;
@@ -945,49 +960,57 @@ a:hover { text-decoration: underline; }
     gap: 8px;
 }
 .daily-stats-group-label {
-    font-size: 9px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 .daily-stat-label {
-    font-size: 10px;
+    font-size: 14px;
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.3px;
     margin-bottom: 1px;
 }
 .daily-stat-value {
-    font-size: 16px;
+    font-size: 28px;
     font-weight: 700;
     color: var(--text-primary);
     white-space: nowrap;
 }
+.daily-stat-sub {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+.daily-stat-rank {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-top: 1px;
+    white-space: nowrap;
+}
 .burn-clock-svg-container {
     position: relative;
-    width: 400px;
-    height: 400px;
+    width: 100%;
 }
 .burn-clock-right {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
 }
 .burn-clock-right .burn-clock-section {
     margin-bottom: 0;
 }
 .burn-clock-right .burn-clock-svg-container {
     width: 100%;
-    height: auto;
-    aspect-ratio: 1;
-    margin: 0 auto;
 }
 .burn-clock-svg {
     width: 100%;
-    height: 100%;
+    height: auto;
+    min-height: 296px;
 }
 .burn-pill {
     cursor: default;
@@ -996,19 +1019,6 @@ a:hover { text-decoration: underline; }
 }
 .burn-pill:hover {
     opacity: 0.8;
-}
-.burn-clock-center {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    text-align: center;
-    pointer-events: none;
-}
-.burn-clock-peak {
-    font-size: 28px;
-    font-weight: 700;
-    color: #CC581C;
 }
 .burn-clock-peak-label {
     font-size: 11px;
@@ -1044,16 +1054,12 @@ a:hover { text-decoration: underline; }
 [data-theme="dark"] .burn-pill {
     filter: drop-shadow(0 0 4px rgba(255,180,100,0.5));
 }
-[data-theme="dark"] .burn-clock-peak {
-    color: #FF9B5C;
-}
-
 /* Burn clock section labels */
 .burn-clock-section {
     width: 100%;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     margin-bottom: 20px;
 }
 .burn-clock-section-label {
@@ -1082,14 +1088,13 @@ a:hover { text-decoration: underline; }
 /* Responsive burn clock */
 @media (max-width: 640px) {
     .burn-clock-svg-container {
-        width: 240px;
-        height: 240px;
+        max-width: 100%;
+    }
+    .burn-clock-svg {
+        min-height: 240px;
     }
     .burn-clock-svg-container.v2 {
         width: 100%; height: 240px;
-    }
-    .burn-clock-peak {
-        font-size: 22px;
     }
     .burn-clock-wrapper {
         padding: 16px;

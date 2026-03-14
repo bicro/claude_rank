@@ -33,7 +33,7 @@
     <div id="profileContent"><div class="loading">Loading profile</div></div>
 
     <script type="module">
-        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserConcurrency, getUserConcurrencyByDate, formatNumber, formatCost, getCategoryLabel, getTier } from './js/api.js';
+        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserConcurrency, getUserConcurrencyByDate, getUserDailyRanks, formatNumber, formatCost, getCategoryLabel, getTier } from './js/api.js';
 
         const params = new URLSearchParams(window.location.search);
         const userHash = params.get('hash');
@@ -56,6 +56,11 @@
         function rankDisplay(rankObj) {
             if (!rankObj) return '';
             return `<div class="rank">#${rankObj.rank} &middot; Top ${rankObj.percentile}%</div>`;
+        }
+
+        function dailyRankDisplay(rankObj) {
+            if (!rankObj) return '';
+            return `<div class="daily-stat-rank">#${rankObj.rank} &middot; Top ${rankObj.percentile}%</div>`;
         }
 
         async function loadProfile(hash) {
@@ -109,7 +114,7 @@
                         </div>
                     </div>
 
-                    <div class="profile-section-constrained">
+                    <div class="profile-section-constrained burn-clock-section-wide">
                     <div class="burn-clock-container-full">
                         <div class="burn-clock-wrapper">
                             <div class="burn-clock-top-bar" style="position:relative;display:flex;justify-content:center;align-items:center;width:100%;margin-bottom:12px;">
@@ -125,40 +130,32 @@
                                     <span id="dayLabel" style="font-size:13px;font-weight:600;min-width:90px;text-align:center;">Today</span>
                                     <button class="copy-burn-btn" id="dayNext" style="font-size:16px;padding:4px 10px;" title="Next day" disabled>&#9654;</button>
                                 </div>
-                                <div class="burn-clock-split">
-                                    <div class="burn-clock-daily-stats">
-                                        <div class="daily-stats-title">Daily ClaudeRank Stats</div>
-                                        <div class="daily-stats-group">
-                                            <div class="daily-stats-group-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Usage</div>
-                                            <div class="daily-stat">
-                                                <div class="daily-stat-label">Daily Spend</div>
-                                                <div class="daily-stat-value" id="dailyCostDisplay">$0</div>
-                                            </div>
-                                            <div class="daily-stat">
-                                                <div class="daily-stat-label">Daily Tokens</div>
-                                                <div class="daily-stat-value" id="dailyTokensDisplay">0</div>
-                                            </div>
-                                        </div>
-                                        <div class="daily-stats-group">
-                                            <div class="daily-stats-group-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><rect x="2" y="3" width="20" height="18" rx="2"/><polyline points="7 9 10 12 7 15"/><line x1="13" y1="15" x2="17" y2="15"/></svg>Sessions</div>
-                                            <div class="daily-stat">
-                                                <div class="daily-stat-label">Peak Concurrency</div>
-                                                <div class="daily-stat-value" id="dailyPeakDisplay">&mdash;</div>
-                                            </div>
-                                            <div class="daily-stat">
-                                                <div class="daily-stat-label">Active Time</div>
-                                                <div class="daily-stat-value" id="dailyActiveHoursDisplay">&mdash;</div>
-                                            </div>
-                                            <div class="daily-stat">
-                                                <div class="daily-stat-label">Concurrent Mins</div>
-                                                <div class="daily-stat-value" id="dailyConcurrentMinsDisplay">&mdash;</div>
-                                            </div>
-                                        </div>
+                                <div class="daily-stats-row">
+                                    <div class="daily-stat-card">
+                                        <div class="daily-stat-label">Daily Spend</div>
+                                        <div class="daily-stat-value" id="dailyCostDisplay">$0</div>
+                                        <div class="daily-stat-rank" id="dailyCostRank"></div>
+                                        <div class="daily-stat-sub" id="dailyTokensDisplay">0</div>
+                                        <div class="daily-stat-rank" id="dailyTokensRank"></div>
                                     </div>
+                                    <div class="daily-stat-card">
+                                        <div class="daily-stat-label">Peak Concurrency</div>
+                                        <div class="daily-stat-value" id="dailyPeakDisplay">&mdash;</div>
+                                        <div class="daily-stat-rank" id="dailyPeakRank"></div>
+                                        <div class="daily-stat-sub" id="dailyConcurrentMinsDisplay">&mdash;</div>
+                                        <div class="daily-stat-rank" id="dailyConcurrentMinsRank"></div>
+                                    </div>
+                                    <div class="daily-stat-card">
+                                        <div class="daily-stat-label">Active Time</div>
+                                        <div class="daily-stat-value" id="dailyActiveHoursDisplay">&mdash;</div>
+                                        <div class="daily-stat-rank" id="dailyActiveHoursRank"></div>
+                                    </div>
+                                </div>
+                                <div class="burn-clock-split">
                                     <div class="burn-clock-right">
                                         <div class="burn-clock-section">
                                             <div class="burn-clock-svg-container">
-                                                <svg class="burn-clock-svg" id="burnClockDaily" viewBox="0 0 320 320"></svg>
+                                                <svg class="burn-clock-svg" id="burnClockDaily" viewBox="0 0 860 296"></svg>
                                             </div>
                                         </div>
                                         <div class="burn-clock-legend">
@@ -175,28 +172,23 @@
                                     <span id="weekLabel" style="font-size:13px;font-weight:600;min-width:130px;text-align:center;">This Week</span>
                                     <button class="copy-burn-btn" id="weekNext" style="font-size:16px;padding:4px 10px;" title="Next week" disabled>&#9654;</button>
                                 </div>
-                                <div class="burn-clock-split">
-                                    <div class="burn-clock-daily-stats">
-                                        <div class="daily-stats-title">Weekly ClaudeRank Stats</div>
-                                        <div class="daily-stats-group">
-                                            <div class="daily-stats-group-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Usage</div>
-                                            <div class="daily-stat">
-                                                <div class="daily-stat-label">Avg Spend</div>
-                                                <div class="daily-stat-value" id="weeklyCostDisplay">&mdash;</div>
-                                            </div>
-                                        </div>
-                                        <div class="daily-stats-group">
-                                            <div class="daily-stats-group-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><rect x="2" y="3" width="20" height="18" rx="2"/><polyline points="7 9 10 12 7 15"/><line x1="13" y1="15" x2="17" y2="15"/></svg>Sessions</div>
-                                            <div class="daily-stat">
-                                                <div class="daily-stat-label">Peak Avg</div>
-                                                <div class="daily-stat-value" id="weeklyPeakDisplay">0</div>
-                                            </div>
-                                        </div>
+                                <div class="daily-stats-row">
+                                    <div class="daily-stat-card">
+                                        <div class="daily-stat-label">Avg Spend</div>
+                                        <div class="daily-stat-value" id="weeklyCostDisplay">&mdash;</div>
+                                        <div class="daily-stat-rank" id="weeklyCostRank"></div>
                                     </div>
+                                    <div class="daily-stat-card">
+                                        <div class="daily-stat-label">Peak Avg</div>
+                                        <div class="daily-stat-value" id="weeklyPeakDisplay">0</div>
+                                        <div class="daily-stat-rank" id="weeklyPeakRank"></div>
+                                    </div>
+                                </div>
+                                <div class="burn-clock-split">
                                     <div class="burn-clock-right">
                                         <div class="burn-clock-section">
                                             <div class="burn-clock-svg-container">
-                                                <svg class="burn-clock-svg" id="burnClock" viewBox="0 0 320 320"></svg>
+                                                <svg class="burn-clock-svg" id="burnClock" viewBox="0 0 860 296"></svg>
                                             </div>
                                         </div>
                                         <div class="burn-clock-legend">
@@ -377,6 +369,16 @@
                         const dayConcurrency = await fetchDayConcurrency(localDateStr);
                         renderBurnClockV2(dayConcurrency, profile.username, localDateStr);
 
+                        // Fetch and display daily ranks
+                        getUserDailyRanks(hash, localDateStr, 'day').then(resp => {
+                            const dr = resp.ranks || {};
+                            document.getElementById('dailyCostRank').innerHTML = dailyRankDisplay(dr.daily_spend);
+                            document.getElementById('dailyTokensRank').innerHTML = dailyRankDisplay(dr.daily_tokens);
+                            document.getElementById('dailyPeakRank').innerHTML = dailyRankDisplay(dr.peak_concurrency);
+                            document.getElementById('dailyActiveHoursRank').innerHTML = dailyRankDisplay(dr.active_mins);
+                            document.getElementById('dailyConcurrentMinsRank').innerHTML = dailyRankDisplay(dr.concurrent_mins);
+                        }).catch(() => {});
+
                         // Setup copy button using day data
                         const copyBtn = document.getElementById('copyConcurrency');
                         if (copyBtn) {
@@ -459,6 +461,14 @@
                                 wcEl.textContent = '\u2014';
                             }
                         }
+
+                        // Fetch and display weekly ranks
+                        const lastDateStr = weekDates[weekDates.length - 1];
+                        getUserDailyRanks(hash, lastDateStr, 'week').then(resp => {
+                            const wr = resp.ranks || {};
+                            document.getElementById('weeklyCostRank').innerHTML = dailyRankDisplay(wr.avg_spend);
+                            document.getElementById('weeklyPeakRank').innerHTML = dailyRankDisplay(wr.peak_avg);
+                        }).catch(() => {});
                     } catch (e) {
                         console.error('Failed to load weekly concurrency data:', e);
                     }
@@ -554,21 +564,6 @@
                     return `rgb(${r},${g},${b})`;
                 }
 
-                function annularSector(cx, cy, r1, r2, a0, a1) {
-                    const toRad = Math.PI / 180;
-                    const cos0 = Math.cos(a0 * toRad), sin0 = Math.sin(a0 * toRad);
-                    const cos1 = Math.cos(a1 * toRad), sin1 = Math.sin(a1 * toRad);
-
-                    const x1 = cx + r1 * cos0, y1 = cy + r1 * sin0;
-                    const x2 = cx + r2 * cos0, y2 = cy + r2 * sin0;
-                    const x3 = cx + r2 * cos1, y3 = cy + r2 * sin1;
-                    const x4 = cx + r1 * cos1, y4 = cy + r1 * sin1;
-
-                    const largeArc = (a1 - a0) > 180 ? 1 : 0;
-
-                    return `M ${x1} ${y1} L ${x2} ${y2} A ${r2} ${r2} 0 ${largeArc} 1 ${x3} ${y3} L ${x4} ${y4} A ${r1} ${r1} 0 ${largeArc} 0 ${x1} ${y1} Z`;
-                }
-
                 function formatHour(h) {
                     const period = h < 12 ? 'AM' : 'PM';
                     const displayH = h % 12 === 0 ? 12 : h % 12;
@@ -583,6 +578,109 @@
                     return dateStr + ', ' + displayH + ' ' + period;
                 }
 
+                function renderHeatmapGrid(svg, hourlyData, isWeekly) {
+                    const cellW = 30, cellH = 30, gap = 4;
+                    const marginLeft = 44, marginTop = 156;
+                    const minRows = 5;
+
+                    let svgContent = '';
+                    let maxSessions = 0;
+
+                    // First pass: find peak concurrency
+                    for (const data of hourlyData) {
+                        if (data.sessions.length > maxSessions) maxSessions = data.sessions.length;
+                    }
+                    const maxRows = Math.max(minRows, maxSessions);
+
+                    // Update viewBox dynamically
+                    const gridHeight = maxRows * (cellH + gap) - gap;
+                    const totalHeight = marginTop + gridHeight + 28;
+                    const totalWidth = marginLeft + 24 * (cellW + gap) - gap;
+                    svg.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
+
+                    // Draw grid cells
+                    for (let col = 0; col < 24; col++) {
+                        const data = hourlyData[col];
+
+                        const tooltipText = isWeekly
+                            ? formatDateHour(data.date) + ': ' + data.sessions.length + ' avg session' + (data.sessions.length !== 1 ? 's' : '')
+                            : formatDateHour(data.date) + ': ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '');
+
+                        // Draw empty background cells
+                        for (let row = 0; row < maxRows; row++) {
+                            const x = marginLeft + col * (cellW + gap);
+                            const y = marginTop + (maxRows - 1 - row) * (cellH + gap);
+                            svgContent += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="currentColor" opacity="0.04" />`;
+                        }
+
+                        // Draw filled cells
+                        for (const session of data.sessions) {
+                            if (session.index > maxRows) continue;
+                            const row = session.index - 1;
+                            const x = marginLeft + col * (cellW + gap);
+                            const y = marginTop + (maxRows - 1 - row) * (cellH + gap);
+                            const color = getBurnColor(session.intensity);
+
+                            svgContent += `<rect class="burn-pill" x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}">
+                                <title>${tooltipText}</title>
+                            </rect>`;
+                        }
+                    }
+
+                    // X-axis labels every 3 hours
+                    const xLabels = [
+                        { hour: 0, label: '12am' }, { hour: 3, label: '3am' },
+                        { hour: 6, label: '6am' }, { hour: 9, label: '9am' },
+                        { hour: 12, label: '12pm' }, { hour: 15, label: '3pm' },
+                        { hour: 18, label: '6pm' }, { hour: 21, label: '9pm' }
+                    ];
+                    const xAxisY = marginTop + maxRows * (cellH + gap) + 12;
+                    xLabels.forEach(l => {
+                        const x = marginLeft + l.hour * (cellW + gap) + cellW / 2;
+                        svgContent += `<text x="${x}" y="${xAxisY}" text-anchor="middle" fill="currentColor" font-size="11" font-family="inherit" opacity="0.6">${l.label}</text>`;
+                    });
+
+                    // Y-axis: label the highest active concurrency row
+                    if (maxSessions > 0) {
+                        const peakRow = maxSessions - 1;
+                        const peakY = marginTop + (maxRows - 1 - peakRow) * (cellH + gap) + cellH / 2;
+                        svgContent += `<text x="${marginLeft - 8}" y="${peakY}" text-anchor="end" dominant-baseline="middle" fill="currentColor" font-size="11" font-family="inherit" opacity="0.6">${maxSessions}x</text>`;
+                    }
+
+                    // Mini terminal UIs - one per concurrent session
+                    const termW = 180, termH = 110;
+                    const termGap = 12;
+                    const termY = 28;
+                    const displayCount = maxSessions || 0;
+                    const termStartX = marginLeft;
+                    for (let i = 0; i < displayCount; i++) {
+                        const tx = termStartX + i * (termW + termGap);
+                        const titleBarH = 22;
+                        // Window frame
+                        svgContent += `<rect x="${tx}" y="${termY}" width="${termW}" height="${termH}" rx="6" ry="6" fill="#1a1a1a" stroke="#333" stroke-width="0.5" />`;
+                        // Title bar
+                        svgContent += `<rect x="${tx}" y="${termY}" width="${termW}" height="${titleBarH}" rx="6" ry="6" fill="#2a2a2a" />`;
+                        svgContent += `<rect x="${tx}" y="${termY + 16}" width="${termW}" height="6" fill="#2a2a2a" />`;
+                        // Traffic light dots
+                        svgContent += `<circle cx="${tx + 12}" cy="${termY + 11}" r="3.5" fill="#FF5F57" />`;
+                        svgContent += `<circle cx="${tx + 24}" cy="${termY + 11}" r="3.5" fill="#FFBD2E" />`;
+                        svgContent += `<circle cx="${tx + 36}" cy="${termY + 11}" r="3.5" fill="#28CA41" />`;
+                        // Prompt lines
+                        svgContent += `<text x="${tx + 12}" y="${termY + 40}" font-size="12" font-family="monospace" fill="#aaa">$ claude</text>`;
+                        svgContent += `<rect x="${tx + 12}" y="${termY + 52}" width="${termW * 0.65}" height="4" rx="2" fill="#444" />`;
+                        svgContent += `<rect x="${tx + 12}" y="${termY + 62}" width="${termW * 0.4}" height="4" rx="2" fill="#3a3a3a" />`;
+                        svgContent += `<rect x="${tx + 12}" y="${termY + 72}" width="${termW * 0.55}" height="4" rx="2" fill="#333" />`;
+                        svgContent += `<rect x="${tx + 12}" y="${termY + 82}" width="${termW * 0.35}" height="4" rx="2" fill="#2e2e2e" />`;
+                        svgContent += `<rect x="${tx + 12}" y="${termY + 92}" width="${termW * 0.5}" height="4" rx="2" fill="#2a2a2a" />`;
+                    }
+
+                    // Title just above grid, beneath terminals
+                    svgContent += `<text x="${marginLeft}" y="${marginTop - 8}" text-anchor="start" dominant-baseline="auto" fill="currentColor" font-size="18" font-weight="700" font-family="inherit" opacity="0.7">Concurrent Activity</text>`;
+
+                    svg.innerHTML = svgContent;
+                    return maxSessions;
+                }
+
                 function renderBurnClock(concurrencyHistogram, username, localDateStr) {
                     const svg = document.getElementById('burnClock');
                     if (!svg) return;
@@ -590,77 +688,7 @@
                     const hourlyData = processHourlyData(concurrencyHistogram, localDateStr);
                     burnClockWeekData = hourlyData;
 
-                    const cx = 160, cy = 160;
-                    const baseRadius = 50;
-                    const pillWidth = 13;
-                    const pillGap = 2;
-                    const maxRings = 7;
-
-                    let svgContent = '';
-                    let maxSessions = 0;
-
-                    // Draw center circle
-                    svgContent += `<circle cx="${cx}" cy="${cy}" r="${baseRadius - 6}" fill="rgba(204,88,28,0.08)" />`;
-
-                    // Draw hour slices as rotated squares
-                    for (let i = 0; i < 24; i++) {
-                        const data = hourlyData[i];
-                        const midAngleDeg = -90 + (i * 15);
-
-                        if (data.sessions.length > maxSessions) {
-                            maxSessions = data.sessions.length;
-                        }
-                        const midAngleRad = midAngleDeg * Math.PI / 180;
-                        const tooltipText = formatDateHour(data.date) + ': ' + data.sessions.length + ' avg session' + (data.sessions.length !== 1 ? 's' : '');
-
-                        for (const session of data.sessions) {
-                            if (session.index > maxRings) continue;
-
-                            const r1 = baseRadius + (session.index - 1) * (pillWidth + pillGap);
-                            const rMid = r1 + pillWidth / 2;
-                            const cellCx = cx + rMid * Math.cos(midAngleRad);
-                            const cellCy = cy + rMid * Math.sin(midAngleRad);
-                            const color = getBurnColor(session.intensity);
-
-                            svgContent += `<rect class="burn-pill" x="${cellCx - pillWidth / 2}" y="${cellCy - pillWidth / 2}" width="${pillWidth}" height="${pillWidth}" rx="3" ry="3" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}" transform="rotate(${midAngleDeg + 90}, ${cellCx}, ${cellCy})">
-                                <title>${tooltipText}</title>
-                            </rect>`;
-                        }
-                    }
-
-                    // Hour labels every 3 hours, just outside the highest ring
-                    const peakRings = Math.max(maxSessions, 1);
-                    const labelRadius = baseRadius + peakRings * (pillWidth + pillGap) + 18;
-                    const hourLabels = [
-                        { hour: 0, label: 'midnight' }, { hour: 3, label: '3am' },
-                        { hour: 6, label: '6am' },  { hour: 9, label: '9am' },
-                        { hour: 12, label: 'noon' }, { hour: 15, label: '3pm' },
-                        { hour: 18, label: '6pm' }, { hour: 21, label: '9pm' }
-                    ];
-
-                    // Guide lines from center circle edge to just before labels
-                    let guideLines = '';
-                    const guideStart = baseRadius - 6;
-                    const guideEnd = labelRadius - 8;
-                    hourLabels.forEach(c => {
-                        const angle = (-90 + c.hour * 15) * Math.PI / 180;
-                        const x1 = cx + guideStart * Math.cos(angle);
-                        const y1 = cy + guideStart * Math.sin(angle);
-                        const x2 = cx + guideEnd * Math.cos(angle);
-                        const y2 = cy + guideEnd * Math.sin(angle);
-                        guideLines += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="currentColor" stroke-width="0.5" opacity="0.1" />`;
-                    });
-
-                    hourLabels.forEach(c => {
-                        const angle = -90 + (c.hour * 15);
-                        const toRad = Math.PI / 180;
-                        const x = cx + labelRadius * Math.cos(angle * toRad);
-                        const y = cy + labelRadius * Math.sin(angle * toRad);
-                        svgContent += `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="8" font-family="inherit">${c.label}</text>`;
-                    });
-
-                    // Prepend guide lines so they render behind cells and labels
-                    svg.innerHTML = guideLines + svgContent;
+                    const maxSessions = renderHeatmapGrid(svg, hourlyData, true);
 
                     // Update weekly stats panel
                     const peakEl = document.getElementById('weeklyPeakDisplay');
@@ -674,79 +702,7 @@
                     const hourlyData = processHourlyData(concurrencyHistogram, localDateStr);
                     burnClockDayData = hourlyData;
 
-                    const cx = 160, cy = 160;
-                    const baseRadius = 50;
-                    const pillWidth = 13;
-                    const pillGap = 2;
-                    const maxRings = 7;
-
-                    let svgContent = '';
-                    let maxSessions = 0;
-
-                    // Draw center circle
-                    svgContent += `<circle cx="${cx}" cy="${cy}" r="${baseRadius - 6}" fill="rgba(204,88,28,0.08)" />`;
-
-                    // Draw hour slices
-                    for (let i = 0; i < 24; i++) {
-                        const data = hourlyData[i];
-                        const midAngleDeg = -90 + (i * 15);
-                        const startAngle = midAngleDeg - 6.5;
-                        const endAngle = midAngleDeg + 6.5;
-
-                        if (data.sessions.length > maxSessions) {
-                            maxSessions = data.sessions.length;
-                        }
-                        const midAngleRad = midAngleDeg * Math.PI / 180;
-                        const tooltipText = formatDateHour(data.date) + ': ' + data.sessions.length + ' session' + (data.sessions.length !== 1 ? 's' : '');
-
-                        for (const session of data.sessions) {
-                            if (session.index > maxRings) continue;
-
-                            const r1 = baseRadius + (session.index - 1) * (pillWidth + pillGap);
-                            const rMid = r1 + pillWidth / 2;
-                            const cellCx = cx + rMid * Math.cos(midAngleRad);
-                            const cellCy = cy + rMid * Math.sin(midAngleRad);
-                            const color = getBurnColor(session.intensity);
-
-                            svgContent += `<rect class="burn-pill" x="${cellCx - pillWidth / 2}" y="${cellCy - pillWidth / 2}" width="${pillWidth}" height="${pillWidth}" rx="3" ry="3" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}" transform="rotate(${midAngleDeg + 90}, ${cellCx}, ${cellCy})">
-                                <title>${tooltipText}</title>
-                            </rect>`;
-                        }
-                    }
-
-                    // Hour labels every 3 hours, just outside the highest ring
-                    const peakRings = Math.max(maxSessions, 1);
-                    const labelRadius = baseRadius + peakRings * (pillWidth + pillGap) + 18;
-                    const hourLabels = [
-                        { hour: 0, label: 'midnight' }, { hour: 3, label: '3am' },
-                        { hour: 6, label: '6am' },  { hour: 9, label: '9am' },
-                        { hour: 12, label: 'noon' }, { hour: 15, label: '3pm' },
-                        { hour: 18, label: '6pm' }, { hour: 21, label: '9pm' }
-                    ];
-
-                    // Guide lines from center circle edge to just before labels (inserted behind everything)
-                    let guideLines = '';
-                    const guideStart = baseRadius - 6;
-                    const guideEnd = labelRadius - 8;
-                    hourLabels.forEach(c => {
-                        const angle = (-90 + c.hour * 15) * Math.PI / 180;
-                        const x1 = cx + guideStart * Math.cos(angle);
-                        const y1 = cy + guideStart * Math.sin(angle);
-                        const x2 = cx + guideEnd * Math.cos(angle);
-                        const y2 = cy + guideEnd * Math.sin(angle);
-                        guideLines += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="currentColor" stroke-width="0.5" opacity="0.1" />`;
-                    });
-
-                    hourLabels.forEach(c => {
-                        const angle = -90 + (c.hour * 15);
-                        const toRad = Math.PI / 180;
-                        const x = cx + labelRadius * Math.cos(angle * toRad);
-                        const y = cy + labelRadius * Math.sin(angle * toRad);
-                        svgContent += `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="8" font-family="inherit">${c.label}</text>`;
-                    });
-
-                    // Prepend guide lines so they render behind cells and labels
-                    svg.innerHTML = guideLines + svgContent;
+                    renderHeatmapGrid(svg, hourlyData, false);
 
                     // Update daily stats panel
                     // Match local date to overlapping UTC dates in history
@@ -768,7 +724,7 @@
                         costText = formatCost(totalCost * (dayTokens / totalTokens));
                     }
                     document.getElementById('dailyCostDisplay').textContent = costText;
-                    document.getElementById('dailyTokensDisplay').textContent = formatNumber(dayTokens);
+                    document.getElementById('dailyTokensDisplay').textContent = formatNumber(dayTokens) + ' tokens';
                     const peak = Math.max(0, ...hourlyData.map(d => d.sessions.length));
                     document.getElementById('dailyPeakDisplay').textContent = peak > 0 ? peak : '\u2014';
                     let activeMins = 0;
@@ -785,7 +741,7 @@
                         const s2 = d.sessions.find(s => s.index === 2);
                         if (s2) concurrentMins += s2.minutes;
                     }
-                    document.getElementById('dailyConcurrentMinsDisplay').textContent = concurrentMins > 0 ? Math.round(concurrentMins) + 'm' : '\u2014';
+                    document.getElementById('dailyConcurrentMinsDisplay').textContent = concurrentMins > 0 ? Math.round(concurrentMins) + 'm concurrent' : '\u2014';
                 }
 
                 if (history.length > 0) {

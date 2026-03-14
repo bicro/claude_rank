@@ -8,7 +8,7 @@ from better_profanity import profanity
 
 from app.db import get_db
 from app.models import User, UserMetrics, UserBadge, Badge, MetricsHistory, MetricsHourly, ConcurrencyHistogram, DailySessions
-from app.services.ranking import get_user_ranks_with_percentiles, compute_tier
+from app.services.ranking import get_user_ranks_with_percentiles, compute_tier, get_daily_ranks_for_user, get_weekly_ranks_for_user
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -361,6 +361,29 @@ async def get_user_heatmap(
             d["intensity"] = 0
 
     return heatmap
+
+
+@router.get("/{user_hash}/daily-ranks")
+async def get_user_daily_ranks(
+    user_hash: str,
+    query_date: str = Query(None, alias="date"),
+    period: str = Query("day"),
+    db: AsyncSession = Depends(get_db),
+):
+    if query_date:
+        try:
+            target = date.fromisoformat(query_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+    else:
+        target = date.today()
+
+    if period == "week":
+        ranks = await get_weekly_ranks_for_user(db, user_hash, target)
+    else:
+        ranks = await get_daily_ranks_for_user(db, user_hash, target)
+
+    return {"date": target.isoformat(), "period": period, "ranks": ranks}
 
 
 @router.get("/{user_hash}/concurrency")
