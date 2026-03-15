@@ -63,6 +63,28 @@
             return `<div class="daily-stat-rank">#${rankObj.rank} &middot; Top ${rankObj.percentile}%</div>`;
         }
 
+        function renderDailySummary() {
+            const s = window._dailySummary;
+            if (!s) return;
+            let text = '';
+            if (!s.activeText && s.dayTokens === 0) {
+                text = 'No activity recorded for this day.';
+            } else {
+                if (s.activeText) {
+                    text += `You were active for a combined total of ${s.activeText}`;
+                    if (s.activePercentile) text += `, putting you in the top ${s.activePercentile}%`;
+                    text += '. ';
+                }
+                if (s.dayTokens > 0) {
+                    text += `You burned ${formatNumber(s.dayTokens)} tokens, amounting to an estimated ${s.costText}.`;
+                }
+            }
+            for (const id of ['dailySummary1', 'dailySummary2', 'dailySummary3']) {
+                const el = document.getElementById(id);
+                if (el) el.textContent = text;
+            }
+        }
+
         async function loadProfile(hash) {
             const container = document.getElementById('profileContent');
             try {
@@ -114,6 +136,15 @@
                         </div>
                     </div>
 
+                    <div class="shareable-version-toggle" style="display:flex;justify-content:center;gap:0;margin-bottom:10px;">
+                        <button class="burn-clock-toggle-btn active" data-version="1" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-radius:6px 0 0 6px;background:var(--accent,#c45a1c);color:#fff;cursor:pointer;">Version 1</button>
+                        <button class="burn-clock-toggle-btn" data-version="2" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-left:none;border-radius:0;background:transparent;color:var(--text-secondary,#888);cursor:pointer;">Version 2</button>
+                        <button class="burn-clock-toggle-btn" data-version="3" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-left:none;border-radius:0;background:transparent;color:var(--text-secondary,#888);cursor:pointer;">Version 3</button>
+                        <button class="burn-clock-toggle-btn" data-version="4" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-left:none;border-radius:0;background:transparent;color:var(--text-secondary,#888);cursor:pointer;">Version 4</button>
+                        <button class="burn-clock-toggle-btn" data-version="5" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-left:none;border-radius:0;background:transparent;color:var(--text-secondary,#888);cursor:pointer;">Version 5</button>
+                        <button class="burn-clock-toggle-btn" data-version="6" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-left:none;border-radius:0 6px 6px 0;background:transparent;color:var(--text-secondary,#888);cursor:pointer;">Version 6</button>
+                    </div>
+
                     <div class="profile-section-constrained burn-clock-section-wide">
                     <div class="burn-clock-container-full">
                         <div class="burn-clock-wrapper">
@@ -130,39 +161,52 @@
                                     <span id="dayLabel" style="font-size:13px;font-weight:600;min-width:90px;text-align:center;">Today</span>
                                     <button class="copy-burn-btn" id="dayNext" style="font-size:16px;padding:4px 10px;" title="Next day" disabled>&#9654;</button>
                                 </div>
-                                <div class="daily-stats-row">
-                                    <div class="daily-stat-card">
-                                        <div class="daily-stat-label">Daily Spend</div>
-                                        <div class="daily-stat-value" id="dailyCostDisplay">$0</div>
-                                        <div class="daily-stat-rank" id="dailyCostRank"></div>
-                                        <div class="daily-stat-sub" id="dailyTokensDisplay">0</div>
-                                        <div class="daily-stat-rank" id="dailyTokensRank"></div>
-                                    </div>
-                                    <div class="daily-stat-card">
-                                        <div class="daily-stat-label">Peak Concurrency</div>
-                                        <div class="daily-stat-value" id="dailyPeakDisplay">&mdash;</div>
-                                        <div class="daily-stat-rank" id="dailyPeakRank"></div>
-                                        <div class="daily-stat-sub" id="dailyConcurrentMinsDisplay">&mdash;</div>
-                                        <div class="daily-stat-rank" id="dailyConcurrentMinsRank"></div>
-                                    </div>
-                                    <div class="daily-stat-card">
-                                        <div class="daily-stat-label">Active Time</div>
-                                        <div class="daily-stat-value" id="dailyActiveHoursDisplay">&mdash;</div>
-                                        <div class="daily-stat-rank" id="dailyActiveHoursRank"></div>
-                                    </div>
-                                </div>
-                                <div class="burn-clock-split">
-                                    <div class="burn-clock-right">
-                                        <div class="burn-clock-section">
-                                            <div class="burn-clock-svg-container">
-                                                <svg class="burn-clock-svg" id="burnClockDaily" viewBox="0 0 860 296"></svg>
+                                <div id="dailyVersion1">
+                                    <div class="daily-summary" id="dailySummary1" style="padding:12px 16px;font-size:15px;line-height:1.6;color:var(--text-secondary);text-align:center;"></div>
+                                    <div class="burn-clock-split">
+                                        <div class="burn-clock-right">
+                                            <div class="burn-clock-section">
+                                                <div class="burn-clock-svg-container">
+                                                    <svg class="burn-clock-svg" id="burnClockDaily1" viewBox="0 0 860 296"></svg>
+                                                </div>
                                             </div>
                                         </div>
-                                        <div class="burn-clock-legend">
-                                            <span class="legend-label">~10 min</span>
-                                            <div class="legend-gradient"></div>
-                                            <span class="legend-label">~60 min</span>
+                                    </div>
+                                </div>
+                                <div id="dailyVersion2" style="display:none;">
+                                    <div class="daily-summary" id="dailySummary2" style="padding:12px 16px;font-size:15px;line-height:1.6;color:var(--text-secondary);text-align:center;"></div>
+                                    <div class="burn-clock-split">
+                                        <div class="burn-clock-right">
+                                            <div class="burn-clock-section">
+                                                <div class="burn-clock-svg-container">
+                                                    <svg class="burn-clock-svg" id="burnClockDaily2" viewBox="0 0 860 296"></svg>
+                                                </div>
+                                            </div>
                                         </div>
+                                    </div>
+                                </div>
+                                <div id="dailyVersion3" style="display:none;">
+                                    <div class="daily-summary" id="dailySummary3" style="display:none;"></div>
+                                    <div style="width:100%;margin:0 auto;overflow-x:auto;background:#e0e0e0;border-radius:16px;padding:16px;">
+                                        <svg id="burnClockDaily3" style="min-width:580px;width:100%;height:auto;display:block;" viewBox="0 0 657 500"></svg>
+                                    </div>
+                                </div>
+                                <div id="dailyVersion4" style="display:none;">
+                                    <div class="daily-summary" id="dailySummary4" style="display:none;"></div>
+                                    <div style="width:100%;margin:0 auto;overflow-x:auto;background:#e0e0e0;border-radius:16px;padding:16px;">
+                                        <svg id="burnClockDaily4" style="min-width:580px;width:100%;height:auto;display:block;" viewBox="0 0 657 500"></svg>
+                                    </div>
+                                </div>
+                                <div id="dailyVersion5" style="display:none;">
+                                    <div class="daily-summary" id="dailySummary5" style="display:none;"></div>
+                                    <div style="width:100%;margin:0 auto;overflow-x:auto;background:#e0e0e0;border-radius:16px;padding:16px;">
+                                        <svg id="burnClockDaily5" style="min-width:580px;width:100%;height:auto;display:block;" viewBox="0 0 657 500"></svg>
+                                    </div>
+                                </div>
+                                <div id="dailyVersion6" style="display:none;">
+                                    <div class="daily-summary" id="dailySummary6" style="display:none;"></div>
+                                    <div style="width:100%;margin:0 auto;overflow-x:auto;background:#e0e0e0;border-radius:16px;padding:16px;">
+                                        <svg id="burnClockDaily6" style="min-width:580px;width:100%;height:auto;display:block;" viewBox="0 0 657 500"></svg>
                                     </div>
                                 </div>
                             </div>
@@ -350,7 +394,15 @@
                     if (weekConcurrencyCache[localDateStr]) return weekConcurrencyCache[localDateStr];
                     const utcDates = utcDatesForLocalDay(localDateStr);
                     const results = await Promise.all(utcDates.map(d => getUserConcurrencyByDate(hash, d)));
+                    // Collect sessions from all UTC dates before merging
+                    let allSessions = [];
+                    for (const r of results) {
+                        if (r.sessions && Array.isArray(r.sessions)) {
+                            allSessions = allSessions.concat(r.sessions);
+                        }
+                    }
                     const data = Object.assign({}, ...results);
+                    data.sessions = allSessions;
                     weekConcurrencyCache[localDateStr] = data;
                     return data;
                 }
@@ -367,16 +419,35 @@
                     try {
                         // Fetch and render daily view immediately
                         const dayConcurrency = await fetchDayConcurrency(localDateStr);
-                        renderBurnClockV2(dayConcurrency, profile.username, localDateStr);
+                        // For V3 last-24-hours view, also fetch yesterday's data
+                        const yesterdayDate = new Date(targetDate);
+                        yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+                        const yesterdayStr = localDateISO(yesterdayDate);
+                        const yesterdayConcurrency = await fetchDayConcurrency(yesterdayStr);
+                        renderBurnClockV2(dayConcurrency, profile.username, localDateStr, yesterdayConcurrency, yesterdayStr);
 
-                        // Fetch and display daily ranks
+                        // Fetch daily ranks and update summary with percentile
                         getUserDailyRanks(hash, localDateStr, 'day').then(resp => {
                             const dr = resp.ranks || {};
-                            document.getElementById('dailyCostRank').innerHTML = dailyRankDisplay(dr.daily_spend);
-                            document.getElementById('dailyTokensRank').innerHTML = dailyRankDisplay(dr.daily_tokens);
-                            document.getElementById('dailyPeakRank').innerHTML = dailyRankDisplay(dr.peak_concurrency);
-                            document.getElementById('dailyActiveHoursRank').innerHTML = dailyRankDisplay(dr.active_mins);
-                            document.getElementById('dailyConcurrentMinsRank').innerHTML = dailyRankDisplay(dr.concurrent_mins);
+                            document.querySelectorAll('#concurrencyPercentile').forEach(pctEl => {
+                                if (pctEl && dr.peak_concurrency) {
+                                    pctEl.textContent = `Putting you in the top ${dr.peak_concurrency.percentile}% of users for today`;
+                                    pctEl.setAttribute('opacity', '0.5');
+                                }
+                            });
+                            // Update v3/v4/v5 rank badges
+                            for (const vn of ['v3', 'v4', 'v5', 'v6']) {
+                                const badge = document.getElementById(vn + 'RankBadge');
+                                if (badge && dr.peak_concurrency) {
+                                    const txt = document.getElementById(vn + 'RankText');
+                                    if (txt) txt.textContent = `#${dr.peak_concurrency.rank} GLOBALLY · TOP ${dr.peak_concurrency.percentile}%`;
+                                    badge.setAttribute('opacity', '1');
+                                }
+                            }
+                            if (window._dailySummary) {
+                                window._dailySummary.activePercentile = dr.active_mins ? dr.active_mins.percentile : null;
+                                renderDailySummary();
+                            }
                         }).catch(() => {});
 
                         // Setup copy button using day data
@@ -505,6 +576,24 @@
                     document.getElementById('toggleDaily').style.color = 'var(--text-secondary,#888)';
                 });
 
+                // Version toggle within daily view
+                document.querySelectorAll('.shareable-version-toggle .burn-clock-toggle-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const version = btn.dataset.version;
+                        document.querySelectorAll('.shareable-version-toggle .burn-clock-toggle-btn').forEach(b => {
+                            b.classList.remove('active');
+                            b.style.background = 'transparent';
+                            b.style.color = 'var(--text-secondary,#888)';
+                        });
+                        btn.classList.add('active');
+                        btn.style.background = 'var(--accent,#c45a1c)';
+                        btn.style.color = '#fff';
+                        for (let i = 1; i <= 6; i++) {
+                            document.getElementById('dailyVersion' + i).style.display = (String(i) === version) ? '' : 'none';
+                        }
+                    });
+                });
+
                 // Burn clock rendering functions
                 function processHourlyData(allHistograms, localDateStr) {
                     const hourlyData = [];
@@ -578,9 +667,11 @@
                     return dateStr + ', ' + displayH + ' ' + period;
                 }
 
-                function renderHeatmapGrid(svg, hourlyData, isWeekly) {
+                function renderHeatmapGrid(svg, hourlyData, isWeekly, sessions, options) {
+                    sessions = sessions || [];
+                    options = options || {};
                     const cellW = 30, cellH = 30, gap = 4;
-                    const marginLeft = 44, marginTop = 156;
+                    const marginLeft = 44, marginTop = 196;
                     const minRows = 5;
 
                     let svgContent = '';
@@ -619,7 +710,7 @@
                             const row = session.index - 1;
                             const x = marginLeft + col * (cellW + gap);
                             const y = marginTop + (maxRows - 1 - row) * (cellH + gap);
-                            const color = getBurnColor(session.intensity);
+                            const color = options.solidColor || getBurnColor(session.intensity);
 
                             svgContent += `<rect class="burn-pill" x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}">
                                 <title>${tooltipText}</title>
@@ -650,7 +741,7 @@
                     // Mini terminal UIs - one per concurrent session
                     const termW = 180, termH = 110;
                     const termGap = 12;
-                    const termY = 28;
+                    const termY = 48;
                     const displayCount = maxSessions || 0;
                     const termStartX = marginLeft;
                     for (let i = 0; i < displayCount; i++) {
@@ -665,20 +756,708 @@
                         svgContent += `<circle cx="${tx + 12}" cy="${termY + 11}" r="3.5" fill="#FF5F57" />`;
                         svgContent += `<circle cx="${tx + 24}" cy="${termY + 11}" r="3.5" fill="#FFBD2E" />`;
                         svgContent += `<circle cx="${tx + 36}" cy="${termY + 11}" r="3.5" fill="#28CA41" />`;
-                        // Prompt lines
+                        // Terminal content: show per-session stats or placeholder
+                        const ringSessions = sessions.filter(s => s.ring === i);
                         svgContent += `<text x="${tx + 12}" y="${termY + 40}" font-size="12" font-family="monospace" fill="#aaa">$ claude</text>`;
-                        svgContent += `<rect x="${tx + 12}" y="${termY + 52}" width="${termW * 0.65}" height="4" rx="2" fill="#444" />`;
-                        svgContent += `<rect x="${tx + 12}" y="${termY + 62}" width="${termW * 0.4}" height="4" rx="2" fill="#3a3a3a" />`;
-                        svgContent += `<rect x="${tx + 12}" y="${termY + 72}" width="${termW * 0.55}" height="4" rx="2" fill="#333" />`;
-                        svgContent += `<rect x="${tx + 12}" y="${termY + 82}" width="${termW * 0.35}" height="4" rx="2" fill="#2e2e2e" />`;
-                        svgContent += `<rect x="${tx + 12}" y="${termY + 92}" width="${termW * 0.5}" height="4" rx="2" fill="#2a2a2a" />`;
+                        if (ringSessions.length > 0) {
+                            const totalTokens = ringSessions.reduce((sum, s) => sum + (s.tokens || 0), 0);
+                            const totalMsgs = ringSessions.reduce((sum, s) => sum + (s.messages || 0), 0);
+                            let totalMins = 0;
+                            for (const s of ringSessions) totalMins += (s.end || 0) - (s.start || 0);
+                            const dH = Math.floor(totalMins / 60);
+                            const dM = Math.round(totalMins % 60);
+                            const durText = dH > 0 ? `${dH}h ${dM}m active` : `${dM}m active`;
+                            svgContent += `<text x="${tx + 16}" y="${termY + 56}" font-size="11" font-family="monospace" fill="#7a7a7a">${formatNumber(totalTokens)} tokens</text>`;
+                            svgContent += `<text x="${tx + 16}" y="${termY + 70}" font-size="11" font-family="monospace" fill="#7a7a7a">${totalMsgs} messages</text>`;
+                            svgContent += `<text x="${tx + 16}" y="${termY + 84}" font-size="11" font-family="monospace" fill="#7a7a7a">${durText}</text>`;
+                        } else {
+                            svgContent += `<rect x="${tx + 12}" y="${termY + 52}" width="${termW * 0.65}" height="4" rx="2" fill="#444" />`;
+                            svgContent += `<rect x="${tx + 12}" y="${termY + 62}" width="${termW * 0.4}" height="4" rx="2" fill="#3a3a3a" />`;
+                            svgContent += `<rect x="${tx + 12}" y="${termY + 72}" width="${termW * 0.55}" height="4" rx="2" fill="#333" />`;
+                            svgContent += `<rect x="${tx + 12}" y="${termY + 82}" width="${termW * 0.35}" height="4" rx="2" fill="#2e2e2e" />`;
+                            svgContent += `<rect x="${tx + 12}" y="${termY + 92}" width="${termW * 0.5}" height="4" rx="2" fill="#2a2a2a" />`;
+                        }
                     }
 
-                    // Title just above grid, beneath terminals
-                    svgContent += `<text x="${marginLeft}" y="${marginTop - 8}" text-anchor="start" dominant-baseline="auto" fill="currentColor" font-size="18" font-weight="700" font-family="inherit" opacity="0.7">Concurrent Activity</text>`;
+                    // Header text above terminals
+                    if (maxSessions > 0) {
+                        svgContent += `<text x="${marginLeft}" y="16" fill="currentColor" font-size="16" font-weight="700" font-family="inherit" opacity="0.8">You ran ${maxSessions} concurrent terminal${maxSessions !== 1 ? 's' : ''}</text>`;
+                        svgContent += `<text id="concurrencyPercentile" x="${marginLeft}" y="32" fill="currentColor" font-size="12" font-family="inherit" opacity="0"></text>`;
+                    }
+
+                    // Title just above grid, beneath terminals, with inline legend
+                    svgContent += `<text x="${marginLeft}" y="${marginTop - 8}" text-anchor="start" dominant-baseline="auto" fill="currentColor" font-size="18" font-weight="700" font-family="inherit" opacity="0.7">Activity Heatmap</text>`;
+                    if (!options.solidColor) {
+                        const legendX = marginLeft + 180;
+                        const legendY = marginTop - 20;
+                        svgContent += `<defs><linearGradient id="heatLegendGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#FCF0E4"/><stop offset="100%" stop-color="#CC581C"/></linearGradient></defs>`;
+                        svgContent += `<text x="${legendX}" y="${legendY + 11}" fill="currentColor" font-size="11" font-family="inherit" opacity="0.6">~10 min</text>`;
+                        svgContent += `<rect x="${legendX + 50}" y="${legendY}" width="80" height="12" rx="2" fill="url(#heatLegendGrad)"/>`;
+                        svgContent += `<text x="${legendX + 136}" y="${legendY + 11}" fill="currentColor" font-size="11" font-family="inherit" opacity="0.6">~60 min</text>`;
+                    }
 
                     svg.innerHTML = svgContent;
                     return maxSessions;
+                }
+
+                function renderShareableCardV3(svg, hourlyData, sessions, cardData) {
+                    sessions = sessions || [];
+                    const cellW = 22, cellH = 22, gap = 3;
+                    const gridMarginLeft = 60;
+                    const gridMarginRight = 30;
+                    const cardW = gridMarginLeft + 24 * (cellW + gap) - gap + gridMarginRight;
+
+                    // Find peak concurrency
+                    let maxSessions = 0;
+                    for (const data of hourlyData) {
+                        if (data.sessions.length > maxSessions) maxSessions = data.sessions.length;
+                    }
+                    const maxRows = Math.max(5, maxSessions);
+                    const gridHeight = maxRows * (cellH + gap) - gap;
+
+                    // Compute stats
+                    let totalDevMins = 0;
+                    for (const d of hourlyData) {
+                        for (const sess of d.sessions) {
+                            totalDevMins += sess.minutes;
+                        }
+                    }
+                    const devHours = (totalDevMins / 60).toFixed(1);
+                    const activeMins = cardData.activeMins || 0;
+                    const activeH = Math.floor(activeMins / 60);
+                    const activeM = Math.round(activeMins % 60);
+                    const activeDisplay = activeMins > 0 ? (activeH > 0 ? activeH + 'h ' + activeM + 'm' : activeM + 'm') : '0m';
+
+                    // Format date
+                    const dateObj = cardData.localDateStr ? new Date(cardData.localDateStr + 'T12:00:00') : new Date();
+                    const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+                    const dateDisplay = `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
+
+                    // Layout Y positions
+                    const topY = 30;
+                    const usernameY = 48;
+                    const dateY = 100;
+                    const heroY = 200;
+                    const heroLabelY = 235;
+                    const pillY = 260;
+                    const divider1Y = 310;
+                    const gridLabelY = 330;
+                    const gridTopY = 350;
+                    const gridBottomY = gridTopY + gridHeight + 24;
+                    const divider2Y = gridBottomY + 10;
+                    const statsY = divider2Y + 20;
+                    const statsHeight = 70;
+                    const divider3Y = statsY + statsHeight + 10;
+                    const footerY = divider3Y + 25;
+                    const cardH = footerY + 20;
+
+                    svg.setAttribute('viewBox', `0 0 ${cardW} ${cardH}`);
+
+                    let s = '';
+
+                    // 1. Card background — light cream
+                    s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
+
+                    // 2. Header — CLAUDERANK label + @username (left) + rank pill (right)
+                    s += `<text x="30" y="${topY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
+                    s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="20" font-family="inherit" font-weight="700">@${cardData.username || 'anonymous'}</text>`;
+
+                    // Rank badge (hidden until rank data arrives) — upper right
+                    const rankPillH = 28;
+                    const rankPillW = 230;
+                    const rankPillX = cardW - 30 - rankPillW;
+                    const rankPillY = usernameY - 20;
+                    s += `<g id="v3RankBadge" opacity="0">`;
+                    s += `<rect x="${rankPillX}" y="${rankPillY}" width="${rankPillW}" height="${rankPillH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
+                    s += `<text id="v3RankText" x="${rankPillX + rankPillW / 2}" y="${rankPillY + rankPillH / 2 + 4}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.5"></text>`;
+                    s += `</g>`;
+
+                    // 3. Date — centered
+                    s += `<text x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">${dateDisplay}</text>`;
+
+                    // 4. Hero — token count (centered, dark text)
+                    const heroTokens = formatNumber(cardData.dayTokens || 0);
+                    s += `<text x="${cardW / 2}" y="${heroY}" fill="#1a1a1a" font-size="96" font-family="inherit" font-weight="800" text-anchor="middle">${heroTokens}</text>`;
+                    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
+
+                    // 5. Stats pill — estimated token value
+                    const heroCost = cardData.costText || '$0';
+                    const statsPillW = 240;
+                    const statsPillH = 30;
+                    const statsPillX = (cardW - statsPillW) / 2;
+                    s += `<rect x="${statsPillX}" y="${pillY}" width="${statsPillW}" height="${statsPillH}" rx="15" ry="15" fill="#f5f0eb" stroke="#e0d8d0" stroke-width="1"/>`;
+                    s += `<text x="${cardW / 2}" y="${pillY + statsPillH / 2 + 5}" fill="#8a8480" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
+                    s += `<tspan fill="#E8692D">${heroCost}</tspan> EST. TOKEN VALUE`;
+                    s += `</text>`;
+
+                    // 6. Divider 1
+                    s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+
+                    // 7. Grid labels — AGENT TIMELINE · DATE (left) / PEAK N (right)
+                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="11" font-family="inherit" font-weight="700" letter-spacing="1.5">AGENT TIMELINE · ${dateDisplay}</text>`;
+                    s += `<text x="${cardW - 30}" y="${gridLabelY}" fill="#8a8480" font-size="11" font-family="inherit" font-weight="700" letter-spacing="1.5" text-anchor="end">PEAK ${maxSessions}</text>`;
+
+                    // Grid row labels (A1, A2, ...) on the left
+                    for (let row = 0; row < maxRows; row++) {
+                        const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 4;
+                        s += `<text x="30" y="${y}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600">A${row + 1}</text>`;
+                    }
+
+                    // Grid cells
+                    const nowHour = new Date().getHours();
+                    for (let col = 0; col < 24; col++) {
+                        const data = hourlyData[col];
+                        // Empty background cells
+                        for (let row = 0; row < maxRows; row++) {
+                            const x = gridMarginLeft + col * (cellW + gap);
+                            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#d8d2ca" opacity="0.8"/>`;
+                        }
+                        // Filled cells
+                        for (const session of data.sessions) {
+                            if (session.index > maxRows) continue;
+                            const row = session.index - 1;
+                            const x = gridMarginLeft + col * (cellW + gap);
+                            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#E8692D"/>`;
+                        }
+                    }
+
+                    // X-axis labels
+                    const xAxisY = gridTopY + gridHeight + 18;
+                    const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
+                    const startHour = (nowHour + 1) % 24;
+                    const midHour = (nowHour + 13) % 24;
+                    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit">${fmtHr(startHour)}</text>`;
+                    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit">${fmtHr(midHour)}</text>`;
+                    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit" text-anchor="end">${fmtHr(nowHour)}</text>`;
+
+                    // 8. Divider 2
+                    s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+
+                    // 9. Stats row (3 columns): AGENT HOURS | CONCURRENT AGENTS | TOTAL CONCURRENCY
+                    let concurrentMins = 0;
+                    for (const d of hourlyData) {
+                        const s2 = d.sessions.find(s => s.index === 2);
+                        if (s2) concurrentMins += s2.minutes;
+                    }
+                    const concDisplay = concurrentMins >= 60
+                        ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
+                        : Math.round(concurrentMins) + 'm';
+                    const colW = (cardW - 60) / 3;
+                    const statsLabels = ['TOTAL AGENT HOURS', 'CONCURRENT AGENTS', 'CONCURRENCY TIME'];
+                    const statsValues = [devHours + 'h', maxSessions + '×', concDisplay];
+                    const statsColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
+
+                    for (let i = 0; i < 3; i++) {
+                        const cx = 30 + colW * i + colW / 2;
+                        s += `<text x="${cx}" y="${statsY + 18}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="1" text-anchor="middle">${statsLabels[i]}</text>`;
+                        s += `<text x="${cx}" y="${statsY + 50}" fill="${statsColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
+                        if (i < 2) {
+                            const divX = 30 + colW * (i + 1);
+                            s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#c8c0b8" stroke-width="1"/>`;
+                        }
+                    }
+
+                    // 10. Divider 3
+                    s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+
+                    // 11. Footer
+                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
+
+                    svg.innerHTML = s;
+                }
+
+                function renderShareableCardV4(svg, hourlyData, sessions, cardData) {
+                    sessions = sessions || [];
+                    const cellW = 22, cellH = 22, gap = 3;
+                    const gridMarginLeft = 60;
+                    const gridMarginRight = 30;
+                    const cardW = gridMarginLeft + 24 * (cellW + gap) - gap + gridMarginRight;
+
+                    // Find peak concurrency — V4 uses exact peak for row count (no minimum)
+                    let maxSessions = 0;
+                    for (const data of hourlyData) {
+                        if (data.sessions.length > maxSessions) maxSessions = data.sessions.length;
+                    }
+                    const maxRows = Math.max(1, maxSessions);
+                    const gridHeight = maxRows * (cellH + gap) - gap;
+
+                    // Compute stats
+                    let totalDevMins = 0;
+                    for (const d of hourlyData) {
+                        for (const sess of d.sessions) {
+                            totalDevMins += sess.minutes;
+                        }
+                    }
+                    const devHours = (totalDevMins / 60).toFixed(1);
+                    const activeMins = cardData.activeMins || 0;
+                    const activeH = Math.floor(activeMins / 60);
+                    const activeM = Math.round(activeMins % 60);
+                    const activeDisplay = activeMins > 0 ? (activeH > 0 ? activeH + 'h ' + activeM + 'm' : activeM + 'm') : '0m';
+
+                    // Format date
+                    const dateObj = cardData.localDateStr ? new Date(cardData.localDateStr + 'T12:00:00') : new Date();
+                    const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+                    const dateDisplay = `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
+
+                    // Layout Y positions
+                    const topY = 30;
+                    const usernameY = 48;
+                    const dateY = 100;
+                    const heroY = 200;
+                    const heroLabelY = 235;
+                    const pillY = 260;
+                    const divider1Y = 310;
+                    const gridLabelY = 340;
+                    const gridTopY = 360;
+                    const gridBottomY = gridTopY + gridHeight + 24;
+                    const divider2Y = gridBottomY + 10;
+                    const statsY = divider2Y + 20;
+                    const statsHeight = 70;
+                    const divider3Y = statsY + statsHeight + 10;
+                    const footerY = divider3Y + 25;
+                    const cardH = footerY + 20;
+
+                    svg.setAttribute('viewBox', `0 0 ${cardW} ${cardH}`);
+
+                    let s = '';
+
+                    s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
+
+                    s += `<text x="30" y="${topY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
+                    s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="20" font-family="inherit" font-weight="700">@${cardData.username || 'anonymous'}</text>`;
+
+                    const rankPillH = 28;
+                    const rankPillW = 230;
+                    const rankPillX = cardW - 30 - rankPillW;
+                    const rankPillY = usernameY - 20;
+                    s += `<g id="v4RankBadge" opacity="0">`;
+                    s += `<rect x="${rankPillX}" y="${rankPillY}" width="${rankPillW}" height="${rankPillH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
+                    s += `<text id="v4RankText" x="${rankPillX + rankPillW / 2}" y="${rankPillY + rankPillH / 2 + 4}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.5"></text>`;
+                    s += `</g>`;
+
+                    s += `<text x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">${dateDisplay}</text>`;
+
+                    const heroTokens = formatNumber(cardData.dayTokens || 0);
+                    s += `<text x="${cardW / 2}" y="${heroY}" fill="#1a1a1a" font-size="96" font-family="inherit" font-weight="800" text-anchor="middle">${heroTokens}</text>`;
+                    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
+
+                    const heroCost = cardData.costText || '$0';
+                    const statsPillW = 240;
+                    const statsPillH = 30;
+                    const statsPillX = (cardW - statsPillW) / 2;
+                    s += `<rect x="${statsPillX}" y="${pillY}" width="${statsPillW}" height="${statsPillH}" rx="15" ry="15" fill="#f5f0eb" stroke="none"/>`;
+                    s += `<text x="${cardW / 2}" y="${pillY + statsPillH / 2 + 5}" fill="#8a8480" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
+                    s += `<tspan fill="#E8692D">${heroCost}</tspan> EST. TOKEN VALUE`;
+                    s += `</text>`;
+
+                    s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+
+                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="11" font-family="inherit" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
+
+                    for (let row = 0; row < maxRows; row++) {
+                        const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 4;
+                        s += `<text x="30" y="${y}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600">A${row + 1}</text>`;
+                    }
+
+                    const nowHour = new Date().getHours();
+                    for (let col = 0; col < 24; col++) {
+                        const data = hourlyData[col];
+                        for (let row = 0; row < maxRows; row++) {
+                            const x = gridMarginLeft + col * (cellW + gap);
+                            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#d8d2ca" opacity="0.8"/>`;
+                        }
+                        for (const session of data.sessions) {
+                            if (session.index > maxRows) continue;
+                            const row = session.index - 1;
+                            const x = gridMarginLeft + col * (cellW + gap);
+                            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#E8692D"/>`;
+                        }
+                    }
+
+                    const xAxisY = gridTopY + gridHeight + 18;
+                    const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
+                    const startHour = (nowHour + 1) % 24;
+                    const midHour = (nowHour + 13) % 24;
+                    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit">${fmtHr(startHour)}</text>`;
+                    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit">${fmtHr(midHour)}</text>`;
+                    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit" text-anchor="end">${fmtHr(nowHour)}</text>`;
+
+                    s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+
+                    let concurrentMins = 0;
+                    for (const d of hourlyData) {
+                        const s2 = d.sessions.find(s => s.index === 2);
+                        if (s2) concurrentMins += s2.minutes;
+                    }
+                    const concDisplay = concurrentMins >= 60
+                        ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
+                        : Math.round(concurrentMins) + 'm';
+                    const colW = (cardW - 60) / 3;
+                    const statsLabels = ['TOTAL AGENT HOURS', 'CONCURRENT AGENTS', 'CONCURRENCY TIME'];
+                    const statsValues = [devHours + 'h', maxSessions + '×', concDisplay];
+                    const statsColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
+
+                    for (let i = 0; i < 3; i++) {
+                        const cx = 30 + colW * i + colW / 2;
+                        s += `<text x="${cx}" y="${statsY + 18}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="1" text-anchor="middle">${statsLabels[i]}</text>`;
+                        s += `<text x="${cx}" y="${statsY + 50}" fill="${statsColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
+                        if (i < 2) {
+                            const divX = 30 + colW * (i + 1);
+                            s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#c8c0b8" stroke-width="1"/>`;
+                        }
+                    }
+
+                    s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
+
+                    svg.innerHTML = s;
+                }
+
+                function renderShareableCardV5(svg, hourlyData, sessions, cardData) {
+                    sessions = sessions || [];
+                    const cellW = 22, cellH = 22, gap = 3;
+                    const gridMarginLeft = 60;
+                    const gridMarginRight = 30;
+                    const cardW = gridMarginLeft + 24 * (cellW + gap) - gap + gridMarginRight;
+
+                    // Find peak concurrency — V5 uses exact peak (no minimum)
+                    let maxSessions = 0;
+                    for (const data of hourlyData) {
+                        if (data.sessions.length > maxSessions) maxSessions = data.sessions.length;
+                    }
+                    const maxRows = Math.max(1, maxSessions);
+                    const gridHeight = maxRows * (cellH + gap) - gap;
+
+                    // Compute stats
+                    let totalDevMins = 0;
+                    for (const d of hourlyData) {
+                        for (const sess of d.sessions) {
+                            totalDevMins += sess.minutes;
+                        }
+                    }
+                    const devHours = (totalDevMins / 60).toFixed(1);
+                    const activeMins = cardData.activeMins || 0;
+                    const activeH = Math.floor(activeMins / 60);
+                    const activeM = Math.round(activeMins % 60);
+                    const activeDisplay = activeMins > 0 ? (activeH > 0 ? activeH + 'h ' + activeM + 'm' : activeM + 'm') : '0m';
+
+                    // V5 gradient: light tan to deep burnt orange (readable on white)
+                    function getV5Color(intensity) {
+                        const r1 = 245, g1 = 170, b1 = 100;
+                        const r2 = 210, g2 = 70, b2 = 15;
+                        const r = Math.round(r1 + (r2 - r1) * intensity);
+                        const g = Math.round(g1 + (g2 - g1) * intensity);
+                        const b = Math.round(b1 + (b2 - b1) * intensity);
+                        return `rgb(${r},${g},${b})`;
+                    }
+
+                    // Format date
+                    const dateObj = cardData.localDateStr ? new Date(cardData.localDateStr + 'T12:00:00') : new Date();
+                    const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+                    const dateDisplay = `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
+
+                    // Layout Y positions
+                    const topY = 30;
+                    const usernameY = 48;
+                    const dateY = 100;
+                    const heroY = 200;
+                    const heroLabelY = 235;
+                    const pillY = 260;
+                    const divider1Y = 310;
+                    const gridLabelY = 340;
+                    const gridTopY = 360;
+                    const gridBottomY = gridTopY + gridHeight + 24;
+                    const divider2Y = gridBottomY + 10;
+                    const statsY = divider2Y + 20;
+                    const statsHeight = 70;
+                    const divider3Y = statsY + statsHeight + 10;
+                    const footerY = divider3Y + 25;
+                    const cardH = footerY + 20;
+
+                    svg.setAttribute('viewBox', `0 0 ${cardW} ${cardH}`);
+
+                    let s = '';
+
+                    s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
+
+                    s += `<text x="30" y="${topY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
+                    s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="20" font-family="inherit" font-weight="700">@${cardData.username || 'anonymous'}</text>`;
+
+                    const rankPillH = 28;
+                    const rankPillW = 230;
+                    const rankPillX = cardW - 30 - rankPillW;
+                    const rankPillY = usernameY - 20;
+                    s += `<g id="v5RankBadge" opacity="0">`;
+                    s += `<rect x="${rankPillX}" y="${rankPillY}" width="${rankPillW}" height="${rankPillH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
+                    s += `<text id="v5RankText" x="${rankPillX + rankPillW / 2}" y="${rankPillY + rankPillH / 2 + 4}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.5"></text>`;
+                    s += `</g>`;
+
+                    s += `<text x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">${dateDisplay}</text>`;
+
+                    const heroTokens = formatNumber(cardData.dayTokens || 0);
+                    s += `<text x="${cardW / 2}" y="${heroY}" fill="#1a1a1a" font-size="96" font-family="inherit" font-weight="800" text-anchor="middle">${heroTokens}</text>`;
+                    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
+
+                    const heroCost = cardData.costText || '$0';
+                    const statsPillW = 240;
+                    const statsPillH = 30;
+                    const statsPillX = (cardW - statsPillW) / 2;
+                    s += `<rect x="${statsPillX}" y="${pillY}" width="${statsPillW}" height="${statsPillH}" rx="15" ry="15" fill="#f5f0eb" stroke="none"/>`;
+                    s += `<text x="${cardW / 2}" y="${pillY + statsPillH / 2 + 5}" fill="#8a8480" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
+                    s += `<tspan fill="#E8692D">${heroCost}</tspan> EST. TOKEN VALUE`;
+                    s += `</text>`;
+
+                    s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+
+                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="11" font-family="inherit" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
+                    // Gradient legend on right
+                    const legendW = 80, legendH = 10;
+                    const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
+                    const legendY = gridLabelY - 10;
+                    // "HIGH" text right-aligned to grid edge, gradient bar to its left, "LOW" to the left of that
+                    s += `<defs><linearGradient id="v5LegendGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgb(245,170,100)"/><stop offset="100%" stop-color="rgb(210,70,15)"/></linearGradient></defs>`;
+                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="9" font-family="inherit" font-weight="600" text-anchor="end">HIGH</text>`;
+                    const highTextW = 28;
+                    const legendX = gridRightEdge - highTextW - legendW;
+                    s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="3" ry="3" fill="url(#v5LegendGrad)"/>`;
+                    s += `<text x="${legendX - 6}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="9" font-family="inherit" font-weight="600" text-anchor="end">LOW</text>`;
+
+                    for (let row = 0; row < maxRows; row++) {
+                        const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 4;
+                        s += `<text x="30" y="${y}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600">A${row + 1}</text>`;
+                    }
+
+                    // Grid cells — V5 uses intensity gradient
+                    const nowHour = new Date().getHours();
+                    for (let col = 0; col < 24; col++) {
+                        const data = hourlyData[col];
+                        for (let row = 0; row < maxRows; row++) {
+                            const x = gridMarginLeft + col * (cellW + gap);
+                            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#d8d2ca" opacity="0.8"/>`;
+                        }
+                        for (const session of data.sessions) {
+                            if (session.index > maxRows) continue;
+                            const row = session.index - 1;
+                            const x = gridMarginLeft + col * (cellW + gap);
+                            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
+                            const color = getV5Color(session.intensity || 0.5);
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${color}"/>`;
+                        }
+                    }
+
+                    const xAxisY = gridTopY + gridHeight + 18;
+                    const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
+                    const startHour = (nowHour + 1) % 24;
+                    const midHour = (nowHour + 13) % 24;
+                    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit">${fmtHr(startHour)}</text>`;
+                    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit">${fmtHr(midHour)}</text>`;
+                    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit" text-anchor="end">${fmtHr(nowHour)}</text>`;
+
+                    s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+
+                    let concurrentMins = 0;
+                    for (const d of hourlyData) {
+                        const s2 = d.sessions.find(s => s.index === 2);
+                        if (s2) concurrentMins += s2.minutes;
+                    }
+                    const concDisplay = concurrentMins >= 60
+                        ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
+                        : Math.round(concurrentMins) + 'm';
+                    const colW = (cardW - 60) / 3;
+                    const statsLabels = ['CONCURRENT AGENTS', 'TOTAL AGENT HOURS', 'CONCURRENCY TIME'];
+                    const statsValues = [maxSessions + '×', devHours + 'h', concDisplay];
+                    const statsColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
+
+                    for (let i = 0; i < 3; i++) {
+                        const cx = 30 + colW * i + colW / 2;
+                        s += `<text x="${cx}" y="${statsY + 18}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="1" text-anchor="middle">${statsLabels[i]}</text>`;
+                        s += `<text x="${cx}" y="${statsY + 50}" fill="${statsColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
+                        if (i < 2) {
+                            const divX = 30 + colW * (i + 1);
+                            s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#c8c0b8" stroke-width="1"/>`;
+                        }
+                    }
+
+                    s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
+
+                    svg.innerHTML = s;
+                }
+
+                function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
+                    sessions = sessions || [];
+                    const cellW = 22, cellH = 22, gap = 3;
+                    const gridMarginLeft = 60;
+                    const gridMarginRight = 30;
+                    const cardW = gridMarginLeft + 24 * (cellW + gap) - gap + gridMarginRight;
+
+                    // Find peak concurrency — exact peak (no minimum)
+                    let maxSessions = 0;
+                    for (const data of hourlyData) {
+                        if (data.sessions.length > maxSessions) maxSessions = data.sessions.length;
+                    }
+                    const maxRows = Math.max(1, maxSessions);
+                    const gridHeight = maxRows * (cellH + gap) - gap;
+
+                    // Compute stats
+                    let totalDevMins = 0;
+                    for (const d of hourlyData) {
+                        for (const sess of d.sessions) {
+                            totalDevMins += sess.minutes;
+                        }
+                    }
+                    const devHours = (totalDevMins / 60).toFixed(1);
+                    const activeMins = cardData.activeMins || 0;
+                    const activeH = Math.floor(activeMins / 60);
+                    const activeM = Math.round(activeMins % 60);
+                    const activeDisplay = activeMins > 0 ? (activeH > 0 ? activeH + 'h ' + activeM + 'm' : activeM + 'm') : '0m';
+
+                    // V6 dark mode gradient — brighter range for readability
+                    function getV6Color(intensity) {
+                        const r1 = 245, g1 = 170, b1 = 100;
+                        const r2 = 210, g2 = 70, b2 = 15;
+                        const r = Math.round(r1 + (r2 - r1) * intensity);
+                        const g = Math.round(g1 + (g2 - g1) * intensity);
+                        const b = Math.round(b1 + (b2 - b1) * intensity);
+                        return `rgb(${r},${g},${b})`;
+                    }
+
+                    // Format date
+                    const dateObj = cardData.localDateStr ? new Date(cardData.localDateStr + 'T12:00:00') : new Date();
+                    const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+                    const dateDisplay = `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
+
+                    // Layout Y positions
+                    const topY = 30;
+                    const usernameY = 48;
+                    const dateY = 100;
+                    const heroY = 200;
+                    const heroLabelY = 235;
+                    const pillY = 260;
+                    const divider1Y = 310;
+                    const gridLabelY = 340;
+                    const gridTopY = 360;
+                    const gridBottomY = gridTopY + gridHeight + 24;
+                    const divider2Y = gridBottomY + 10;
+                    const statsY = divider2Y + 20;
+                    const statsHeight = 70;
+                    const divider3Y = statsY + statsHeight + 10;
+                    const footerY = divider3Y + 25;
+                    const cardH = footerY + 20;
+
+                    svg.setAttribute('viewBox', `0 0 ${cardW} ${cardH}`);
+
+                    let s = '';
+
+                    s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#0d0d0d"/>`;
+
+                    s += `<text x="30" y="${topY}" fill="#888888" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
+                    s += `<text x="30" y="${usernameY}" fill="#e0e0e0" font-size="20" font-family="inherit" font-weight="700">@${cardData.username || 'anonymous'}</text>`;
+
+                    const rankPillH = 28;
+                    const rankPillW = 230;
+                    const rankPillX = cardW - 30 - rankPillW;
+                    const rankPillY = usernameY - 20;
+                    s += `<g id="v6RankBadge" opacity="0">`;
+                    s += `<rect x="${rankPillX}" y="${rankPillY}" width="${rankPillW}" height="${rankPillH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
+                    s += `<text id="v6RankText" x="${rankPillX + rankPillW / 2}" y="${rankPillY + rankPillH / 2 + 4}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.5"></text>`;
+                    s += `</g>`;
+
+                    s += `<text x="${cardW / 2}" y="${dateY}" fill="#888888" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">${dateDisplay}</text>`;
+
+                    const heroTokens = formatNumber(cardData.dayTokens || 0);
+                    s += `<text x="${cardW / 2}" y="${heroY}" fill="#e0e0e0" font-size="96" font-family="inherit" font-weight="800" text-anchor="middle">${heroTokens}</text>`;
+                    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#888888" font-size="13" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
+
+                    const heroCost = cardData.costText || '$0';
+                    const statsPillW = 240;
+                    const statsPillH = 30;
+                    const statsPillX = (cardW - statsPillW) / 2;
+                    s += `<rect x="${statsPillX}" y="${pillY}" width="${statsPillW}" height="${statsPillH}" rx="15" ry="15" fill="#1e1e1e" stroke="none"/>`;
+                    s += `<text x="${cardW / 2}" y="${pillY + statsPillH / 2 + 5}" fill="#999999" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
+                    s += `<tspan fill="#E8692D">${heroCost}</tspan> EST. TOKEN VALUE`;
+                    s += `</text>`;
+
+                    s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#2a2a2a" stroke-width="1"/>`;
+
+                    s += `<text x="30" y="${gridLabelY}" fill="#888888" font-size="11" font-family="inherit" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
+                    // Gradient legend on right
+                    const legendW = 80, legendH = 10;
+                    const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
+                    const legendY = gridLabelY - 10;
+                    s += `<defs><linearGradient id="v6LegendGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgb(245,170,100)"/><stop offset="100%" stop-color="rgb(210,70,15)"/></linearGradient></defs>`;
+                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#888888" font-size="9" font-family="inherit" font-weight="600" text-anchor="end">HIGH</text>`;
+                    const highTextW = 28;
+                    const legendX = gridRightEdge - highTextW - legendW;
+                    s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="3" ry="3" fill="url(#v6LegendGrad)"/>`;
+                    s += `<text x="${legendX - 6}" y="${legendY + legendH - 1}" fill="#888888" font-size="9" font-family="inherit" font-weight="600" text-anchor="end">LOW</text>`;
+
+                    for (let row = 0; row < maxRows; row++) {
+                        const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 4;
+                        s += `<text x="30" y="${y}" fill="#888888" font-size="10" font-family="inherit" font-weight="600">A${row + 1}</text>`;
+                    }
+
+                    // Grid cells — intensity gradient (dark mode)
+                    const nowHour = new Date().getHours();
+                    for (let col = 0; col < 24; col++) {
+                        const data = hourlyData[col];
+                        for (let row = 0; row < maxRows; row++) {
+                            const x = gridMarginLeft + col * (cellW + gap);
+                            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#1e1e1e"/>`;
+                        }
+                        for (const session of data.sessions) {
+                            if (session.index > maxRows) continue;
+                            const row = session.index - 1;
+                            const x = gridMarginLeft + col * (cellW + gap);
+                            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
+                            const color = getV6Color(session.intensity || 0.5);
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${color}"/>`;
+                        }
+                    }
+
+                    const xAxisY = gridTopY + gridHeight + 18;
+                    const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
+                    const startHour = (nowHour + 1) % 24;
+                    const midHour = (nowHour + 13) % 24;
+                    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#888888" font-size="10" font-family="inherit">${fmtHr(startHour)}</text>`;
+                    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#888888" font-size="10" font-family="inherit">${fmtHr(midHour)}</text>`;
+                    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#888888" font-size="10" font-family="inherit" text-anchor="end">${fmtHr(nowHour)}</text>`;
+
+                    s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#2a2a2a" stroke-width="1"/>`;
+
+                    let concurrentMins = 0;
+                    for (const d of hourlyData) {
+                        const s2 = d.sessions.find(s => s.index === 2);
+                        if (s2) concurrentMins += s2.minutes;
+                    }
+                    const concDisplay = concurrentMins >= 60
+                        ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
+                        : Math.round(concurrentMins) + 'm';
+                    const colW = (cardW - 60) / 3;
+                    const statsLabels = ['CONCURRENT AGENTS', 'TOTAL AGENT HOURS', 'CONCURRENCY TIME'];
+                    const statsValues = [maxSessions + '×', devHours + 'h', concDisplay];
+                    const statsColors = ['#E8692D', '#e0e0e0', '#e0e0e0'];
+
+                    for (let i = 0; i < 3; i++) {
+                        const cx = 30 + colW * i + colW / 2;
+                        s += `<text x="${cx}" y="${statsY + 18}" fill="#888888" font-size="10" font-family="inherit" font-weight="700" letter-spacing="1" text-anchor="middle">${statsLabels[i]}</text>`;
+                        s += `<text x="${cx}" y="${statsY + 50}" fill="${statsColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
+                        if (i < 2) {
+                            const divX = 30 + colW * (i + 1);
+                            s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#2a2a2a" stroke-width="1"/>`;
+                        }
+                    }
+
+                    s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#2a2a2a" stroke-width="1"/>`;
+                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#888888" font-size="10" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
+
+                    svg.innerHTML = s;
                 }
 
                 function renderBurnClock(concurrencyHistogram, username, localDateStr) {
@@ -688,32 +1467,34 @@
                     const hourlyData = processHourlyData(concurrencyHistogram, localDateStr);
                     burnClockWeekData = hourlyData;
 
-                    const maxSessions = renderHeatmapGrid(svg, hourlyData, true);
+                    const maxSessions = renderHeatmapGrid(svg, hourlyData, true, []);
 
                     // Update weekly stats panel
                     const peakEl = document.getElementById('weeklyPeakDisplay');
                     if (peakEl) peakEl.textContent = maxSessions > 0 ? maxSessions : '\u2014';
                 }
 
-                function renderBurnClockV2(concurrencyHistogram, username, localDateStr) {
-                    const svg = document.getElementById('burnClockDaily');
-                    if (!svg) return;
-
+                function renderBurnClockV2(concurrencyHistogram, username, localDateStr, yesterdayConcurrency, yesterdayStr) {
                     const hourlyData = processHourlyData(concurrencyHistogram, localDateStr);
                     burnClockDayData = hourlyData;
 
-                    renderHeatmapGrid(svg, hourlyData, false);
+                    const sessions = concurrencyHistogram.sessions || [];
+                    const versionOptions = {
+                        burnClockDaily1: {},
+                        burnClockDaily2: { solidColor: '#CC581C' },
+                    };
+                    for (const svgId of ['burnClockDaily1', 'burnClockDaily2']) {
+                        const svg = document.getElementById(svgId);
+                        if (svg) renderHeatmapGrid(svg, hourlyData, false, sessions, versionOptions[svgId]);
+                    }
 
-                    // Update daily stats panel
-                    // Match local date to overlapping UTC dates in history
+                    // Update daily summary text
                     const utcDatesForDay = utcDatesForLocalDay(localDateStr);
                     let dayTokens = 0;
                     for (const ud of utcDatesForDay) {
                         const entry = history.find(h => h.date === ud);
                         if (entry) dayTokens += entry.daily_tokens || 0;
                     }
-                    // Avoid double-counting: if local day spans 2 UTC dates,
-                    // scale by fraction of overlap (approximate: split evenly)
                     if (utcDatesForDay.length > 1 && dayTokens > 0) {
                         dayTokens = Math.round(dayTokens / utcDatesForDay.length);
                     }
@@ -723,10 +1504,6 @@
                     if (totalTokens > 0 && dayTokens > 0 && totalCost > 0) {
                         costText = formatCost(totalCost * (dayTokens / totalTokens));
                     }
-                    document.getElementById('dailyCostDisplay').textContent = costText;
-                    document.getElementById('dailyTokensDisplay').textContent = formatNumber(dayTokens) + ' tokens';
-                    const peak = Math.max(0, ...hourlyData.map(d => d.sessions.length));
-                    document.getElementById('dailyPeakDisplay').textContent = peak > 0 ? peak : '\u2014';
                     let activeMins = 0;
                     for (const d of hourlyData) {
                         const s1 = d.sessions.find(s => s.index === 1);
@@ -734,14 +1511,72 @@
                     }
                     const ah = Math.floor(activeMins / 60);
                     const am = Math.round(activeMins % 60);
-                    const activeText = activeMins > 0 ? (ah > 0 ? ah + 'h ' + am + 'm' : am + 'm') : '\u2014';
-                    document.getElementById('dailyActiveHoursDisplay').textContent = activeText;
-                    let concurrentMins = 0;
-                    for (const d of hourlyData) {
-                        const s2 = d.sessions.find(s => s.index === 2);
-                        if (s2) concurrentMins += s2.minutes;
+                    const activeText = activeMins > 0 ? (ah > 0 ? ah + 'h ' + am + 'm' : am + 'm') : null;
+                    // Store daily stats for summary rendering after ranks arrive
+                    window._dailySummary = { activeText, dayTokens, costText };
+                    // Render initial summary (without percentile — ranks arrive async)
+                    renderDailySummary();
+
+                    // Version 3: shareable card — use last 24 hours (yesterday + today)
+                    let v3HourlyData = hourlyData;
+                    if (yesterdayConcurrency && yesterdayStr) {
+                        const yesterdayHourly = processHourlyData(yesterdayConcurrency, yesterdayStr);
+                        const nowHour = new Date().getHours();
+                        // Take hours from yesterday after current hour, then today up to current hour
+                        const last24 = [];
+                        for (let i = nowHour + 1; i < 24; i++) {
+                            last24.push(yesterdayHourly[i]);
+                        }
+                        for (let i = 0; i <= nowHour; i++) {
+                            last24.push(hourlyData[i]);
+                        }
+                        v3HourlyData = last24;
                     }
-                    document.getElementById('dailyConcurrentMinsDisplay').textContent = concurrentMins > 0 ? Math.round(concurrentMins) + 'm concurrent' : '\u2014';
+                    // Recompute stats from last-24-hours data for V3
+                    let v3ActiveMins = 0;
+                    for (const d of v3HourlyData) {
+                        const s1 = d.sessions.find(s => s.index === 1);
+                        if (s1) v3ActiveMins += s1.minutes;
+                    }
+                    // Cost for last 24h: include yesterday's tokens proportionally
+                    let v3DayTokens = dayTokens;
+                    if (yesterdayConcurrency && yesterdayStr) {
+                        const yesterdayUtcDates = utcDatesForLocalDay(yesterdayStr);
+                        let yesterdayTokens = 0;
+                        for (const ud of yesterdayUtcDates) {
+                            const entry = history.find(h => h.date === ud);
+                            if (entry) yesterdayTokens += entry.daily_tokens || 0;
+                        }
+                        if (yesterdayUtcDates.length > 1 && yesterdayTokens > 0) {
+                            yesterdayTokens = Math.round(yesterdayTokens / yesterdayUtcDates.length);
+                        }
+                        // Weight: fraction of hours from each day
+                        const nowH = new Date().getHours();
+                        const todayHours = nowH + 1;
+                        const yesterdayHours = 24 - todayHours;
+                        v3DayTokens = Math.round(dayTokens * (todayHours / 24) + yesterdayTokens * (yesterdayHours / 24));
+                    }
+                    let v3CostText = '$0';
+                    if (totalTokens > 0 && v3DayTokens > 0 && totalCost > 0) {
+                        v3CostText = formatCost(totalCost * (v3DayTokens / totalTokens));
+                    }
+                    const svg3 = document.getElementById('burnClockDaily3');
+                    const v3CardData = {
+                        username: username,
+                        localDateStr: localDateStr,
+                        activeMins: v3ActiveMins,
+                        dayTokens: v3DayTokens,
+                        costText: v3CostText,
+                        peakRank: null,
+                        peakPercentile: null,
+                    };
+                    if (svg3) renderShareableCardV3(svg3, v3HourlyData, sessions, v3CardData);
+                    const svg4 = document.getElementById('burnClockDaily4');
+                    if (svg4) renderShareableCardV4(svg4, v3HourlyData, sessions, v3CardData);
+                    const svg5 = document.getElementById('burnClockDaily5');
+                    if (svg5) renderShareableCardV5(svg5, v3HourlyData, sessions, v3CardData);
+                    const svg6 = document.getElementById('burnClockDaily6');
+                    if (svg6) renderShareableCardV6(svg6, v3HourlyData, sessions, v3CardData);
                 }
 
                 if (history.length > 0) {
