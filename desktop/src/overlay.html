@@ -85,13 +85,29 @@ document.querySelector('.drag-strip').addEventListener('mousedown', (e) => {
 // ── Hide button ──
 document.getElementById('btnHide').addEventListener('click', () => invoke('hide_overlay'));
 
-// ── Bridge: receive image from widget iframe for clipboard copy ──
+// ── Bridge: receive messages from widget iframe ──
+const DRAG_STRIP_HEIGHT = 32;
 window.addEventListener('message', async (e) => {
-  if (e.data && e.data.type === 'copy-image' && e.data.base64) {
+  if (!e.data) return;
+  if (e.data.type === 'copy-image' && e.data.base64) {
     try {
       await invoke('copy_image_to_clipboard', { imageBase64: e.data.base64 });
     } catch (err) {
       console.error('Failed to copy image:', err);
+    }
+  }
+  if (e.data.type === 'resize' && e.data.height > 0) {
+    const win = getCurrentWindow();
+    try {
+      const totalH = e.data.height + DRAG_STRIP_HEIGHT;
+      const currentSize = await win.innerSize();
+      const scaleFactor = await win.scaleFactor();
+      const newPhysH = Math.round(totalH * scaleFactor);
+      if (Math.abs(currentSize.height - newPhysH) > 2) {
+        await win.setSize(new window.__TAURI__.dpi.PhysicalSize(currentSize.width, newPhysH));
+      }
+    } catch (err) {
+      console.error('Failed to resize window:', err);
     }
   }
 });

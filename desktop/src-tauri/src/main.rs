@@ -431,12 +431,12 @@ fn position_overlay_window(window: &tauri::WebviewWindow, app: &AppHandle) {
         .scale_factor()
         .unwrap_or(1.0);
 
-    // Restore saved size
+    // Restore saved width only (height is driven by widget content)
     let prefs = load_window_prefs();
     if let Some(ref prefs) = prefs {
         let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
             width: prefs.width,
-            height: prefs.height,
+            height: 480,
         }));
     }
 
@@ -564,7 +564,7 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
     }
 
     let width = 380.0;
-    let height = 620.0;
+    let height = 480.0;
 
     let window = tauri::WebviewWindowBuilder::new(
         app,

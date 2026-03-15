@@ -24,6 +24,7 @@
   }
 
   /* ── Panel ── */
+  html, body { height: auto; }
   .panel {
     background: var(--bg);
     padding: 16px;
@@ -32,7 +33,6 @@
     border-radius: 16px;
     border: 1px solid rgba(0,0,0,0.08);
     box-shadow: 0 4px 24px rgba(0,0,0,0.18);
-    min-height: 100vh;
   }
 
   /* ── 1. CLAUDERANK header ── */
@@ -124,7 +124,7 @@
   /* ── 4-5. Hero tokens ── */
   .hero-section {
     text-align: center;
-    margin-top: 50px;
+    margin-top: 12px;
     margin-bottom: 4px;
   }
   .hero-tokens {
@@ -553,6 +553,15 @@ function renderHeatmap(svgEl, hourlyData) {
   });
 }
 
+// ── Notify parent of content height ──
+function notifyHeight() {
+  if (window.parent !== window) {
+    const h = document.querySelector('.panel').offsetHeight;
+    window.parent.postMessage({ type: 'resize', height: h }, '*');
+  }
+}
+new ResizeObserver(() => notifyHeight()).observe(document.querySelector('.panel'));
+
 // ── Update stats ──
 function updateStats(hourlyData) {
   let maxSessions = 0;
@@ -655,6 +664,7 @@ async function loadDayByIndex(index) {
     lastHourlyData = hourlyData;
     renderHeatmap(document.getElementById('heatmapSvg'), hourlyData);
     updateStats(hourlyData);
+    notifyHeight();
   } catch (e) {
     console.error('Failed to load concurrency data:', e);
   }
