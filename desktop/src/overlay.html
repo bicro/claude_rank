@@ -14,28 +14,29 @@
     user-select: none;
   }
   .panel {
-    background: rgba(255, 255, 255, 0.95);
-    border: 1px solid rgba(0,0,0,0.08);
+    background: transparent;
     border-radius: 16px;
     height: 100vh;
+    position: relative;
     display: flex;
     flex-direction: column;
   }
-  .header {
+  .drag-strip {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 32px;
+    z-index: 10;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
-    padding: 12px 16px;
-    flex-shrink: 0;
+    padding-right: 12px;
+    border-radius: 16px 16px 0 0;
   }
-  .header h1 { font-size: 16px; font-weight: 600; color: #333; display: flex; align-items: center; }
-  .site-logo { height: 18px; width: 18px; margin-right: 6px; }
-  .header-right { display: flex; align-items: center; gap: 6px; }
-  .btn-icon {
+  .btn-close {
     background: none; border: none; color: #999; cursor: pointer;
-    font-size: 18px; padding: 4px 8px; border-radius: 6px;
+    font-size: 14px; padding: 2px 6px; border-radius: 6px;
   }
-  .btn-icon:hover { background: rgba(0,0,0,0.06); color: #333; }
+  .btn-close:hover { background: rgba(0,0,0,0.06); color: #333; }
 
   .drag-region { cursor: grab; }
   .drag-region:active { cursor: grabbing; }
@@ -44,7 +45,7 @@
   .widget-iframe {
     flex: 1;
     border: none;
-    border-radius: 0 0 16px 16px;
+    border-radius: 16px;
     background: transparent;
     width: 100%;
   }
@@ -52,13 +53,9 @@
 </head>
 <body>
 <div class="panel">
-  <div class="header drag-region">
-    <h1><img src="logo.png" alt="ClaudeRank logo" class="site-logo">ClaudeRank</h1>
-    <div class="header-right no-drag">
-      <button class="btn-icon" id="btnHide" title="Hide (Alt+Space)">&#x2715;</button>
-    </div>
+  <div class="drag-strip drag-region">
+    <button class="btn-close no-drag" id="btnHide" title="Hide (Alt+Space)">&#x2715;</button>
   </div>
-
   <iframe id="widgetFrame" class="widget-iframe no-drag"></iframe>
 </div>
 
@@ -68,7 +65,7 @@ const { listen } = window.__TAURI__.event;
 const { getCurrentWindow } = window.__TAURI__.window;
 
 // ── Enable dragging via JS (CSS app-region:drag doesn't work with transparent frameless windows) ──
-document.querySelector('.drag-region').addEventListener('mousedown', (e) => {
+document.querySelector('.drag-strip').addEventListener('mousedown', (e) => {
   if (e.button !== 0 || e.target.closest('.no-drag')) return;
   getCurrentWindow().startDragging();
 });
@@ -79,7 +76,7 @@ document.querySelector('.drag-region').addEventListener('mousedown', (e) => {
     const widgetBase = await invoke('get_widget_base');
     const id = await invoke('get_ranking_identity');
     const frame = document.getElementById('widgetFrame');
-    frame.src = widgetBase + '/widget.html?h=' + encodeURIComponent(id.user_hash);
+    frame.src = widgetBase + '/widget.html?h=' + encodeURIComponent(id.user_hash) + '&_t=' + Date.now();
   } catch (e) {
     console.error('Failed to load identity:', e);
   }

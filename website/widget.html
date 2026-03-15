@@ -5,51 +5,83 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ClaudeRank Widget</title>
 <style>
+  :root {
+    --bg: #ffffff;
+    --text-primary: #1a1a1a;
+    --text-secondary: #8a8480;
+    --empty-cell: #d8d2ca;
+    --pill-bg: #f5f0eb;
+    --divider: #c8c0b8;
+    --accent: #E8692D;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
     background: transparent;
-    color: #333;
+    color: var(--text-primary);
     overflow-x: hidden;
     user-select: none;
   }
+
+  /* ── Panel ── */
   .panel {
-    background: #fff;
-    padding: 14px;
+    background: var(--bg);
+    padding: 16px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(0,0,0,0.08);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.18);
     min-height: 100vh;
   }
 
-  /* User bar */
-  .user-bar {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 12px;
-    background: rgba(0,0,0,0.03);
-    border-radius: 10px;
+  /* ── 1. CLAUDERANK header ── */
+  .header-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 2px;
+    margin-bottom: 8px;
   }
-  .user-bar .username {
-    font-weight: 600; font-size: 14px; color: #333;
-    cursor: pointer; border-bottom: 1px dashed transparent;
+
+  /* ── 2. User row ── */
+  .user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .username-extras { margin-bottom: 24px; }
+  .user-row .username {
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--text-primary);
+    cursor: pointer;
+    border-bottom: 1px dashed transparent;
     padding: 1px 0;
   }
-  .user-bar .username:hover { border-bottom-color: rgba(0,0,0,0.2); }
-  .user-bar .username .pencil { font-size: 11px; color: #999; margin-left: 4px; opacity: 0; transition: opacity 0.15s; }
-  .user-bar .username:hover .pencil { opacity: 1; }
-  .username-edit-row { display: flex; align-items: center; gap: 4px; }
-  .user-bar .username-input {
-    font-weight: 600; font-size: 14px; color: #333;
-    background: rgba(0,0,0,0.04); border: 1px solid rgba(99,102,241,0.5);
-    border-radius: 4px; padding: 1px 4px; outline: none;
-    font-family: inherit; width: 120px;
+  .user-row .username:hover { border-bottom-color: rgba(0,0,0,0.2); }
+  .user-row .username .pencil {
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-left: 3px;
+    opacity: 0;
+    transition: opacity 0.15s;
   }
-  .user-bar .username-input.invalid { border-color: #ef4444; }
+  .user-row .username:hover .pencil { opacity: 1; }
+  .username-edit-row { display: flex; align-items: center; gap: 4px; }
+  .username-input {
+    font-weight: 600; font-size: 13px; color: var(--text-primary);
+    background: var(--pill-bg); border: 1px solid var(--accent);
+    border-radius: 4px; padding: 1px 4px; outline: none;
+    font-family: inherit; width: 110px;
+  }
+  .username-input.invalid { border-color: #ef4444; }
   .btn-save-username {
-    background: #6366f1; border: none; color: #fff; font-size: 11px;
+    background: var(--accent); border: none; color: #fff; font-size: 10px;
     padding: 2px 8px; border-radius: 4px; cursor: pointer; font-weight: 600;
   }
-  .btn-save-username:hover { background: #818cf8; }
+  .btn-save-username:hover { opacity: 0.9; }
   .username-error { font-size: 10px; color: #ef4444; margin-top: 2px; display: none; }
   .username-feedback {
     font-size: 10px; color: #4ade80; margin-top: 2px;
@@ -57,197 +89,298 @@
   }
   .username-feedback.show { opacity: 1; }
   .username-prompt {
-    font-size: 11px; color: #a5b4fc; margin-bottom: 4px; display: none;
+    font-size: 10px; color: var(--accent); margin-bottom: 4px; display: none;
   }
   .username-prompt.show { display: block; }
-  .user-bar .hash {
-    font-size: 11px; color: #999; font-family: monospace;
-    cursor: pointer;
-  }
-  .user-bar .hash:hover { color: #666; }
-  .hash-feedback {
-    font-size: 10px; color: #4ade80; margin-left: 4px;
-    opacity: 0; transition: opacity 0.2s;
-  }
-  .hash-feedback.show { opacity: 1; }
-  .rank-info {
-    margin-left: auto;
-    display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
-  }
-  .tier-badge {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 3px 10px; border-radius: 12px;
-    font-size: 12px; font-weight: 600; white-space: nowrap;
-  }
-  .tier-bronze   { background: rgba(205,127,50,0.15);  color: #cd7f32; }
-  .tier-silver   { background: rgba(192,192,192,0.15);  color: #c0c0c0; }
-  .tier-gold     { background: rgba(255,215,0,0.15);    color: #ffd700; }
-  .tier-platinum { background: rgba(229,228,226,0.15);  color: #e5e4e2; }
-  .tier-diamond  { background: rgba(185,242,255,0.15);  color: #b9f2ff; }
-  .rank-number { font-size: 10px; color: #666; font-weight: 600; }
 
-  /* Burn Clock */
-  .burn-clock-section { margin-top: 4px; }
-  .burn-clock-header {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+  .rank-pill {
+    display: inline-flex; align-items: center;
+    padding: 3px 10px;
+    border-radius: 14px;
+    font-size: 10px; font-weight: 600; white-space: nowrap;
+    color: var(--accent);
+    border: 1.5px solid var(--accent);
+    letter-spacing: 0.5px;
+    height: 22px;
   }
-  .copy-btn {
-    background: rgba(0,0,0,0.05); border: none; color: #888;
-    font-size: 10px; padding: 2px 8px; border-radius: 4px; cursor: pointer;
-    text-transform: none; letter-spacing: 0; margin-left: auto;
+
+  /* ── 3. Date nav ── */
+  .date-nav-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px;
+    margin-bottom: 8px;
   }
-  .copy-btn:hover { background: rgba(0,0,0,0.08); color: #333; }
-  .copy-feedback {
-    font-size: 10px; color: #4ade80; text-align: center; margin-top: 4px;
-    opacity: 0; transition: opacity 0.2s;
+  .date-nav-btn {
+    background: none; border: none; color: var(--text-secondary);
+    font-size: 11px; cursor: pointer; padding: 2px 4px;
   }
-  .copy-feedback.show { opacity: 1; }
-  .burn-clock-container {
-    position: relative; width: 180px; height: 180px; margin: 8px auto;
+  .date-nav-btn:hover { color: var(--text-primary); }
+  .date-nav-btn:disabled { opacity: 0.3; cursor: default; }
+  .date-label {
+    font-size: 11px; color: var(--text-secondary); font-weight: 600;
+    letter-spacing: 1.5px; min-width: 100px; text-align: center;
   }
-  .burn-clock { width: 100%; height: 100%; }
-  .burn-clock-center {
-    position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%); text-align: center; pointer-events: none;
+
+  /* ── 4-5. Hero tokens ── */
+  .hero-section {
+    text-align: center;
+    margin-top: 50px;
+    margin-bottom: 4px;
   }
-  .burn-clock-center .center-tokens { font-size: 14px; font-weight: 700; color: #333; line-height: 1.2; }
-  .burn-clock-center .center-cost { font-size: 10px; color: #a5b4fc; font-weight: 600; }
-  .burn-pill { cursor: default; transition: opacity 0.15s; }
-  .burn-pill:hover { opacity: 1 !important; }
-  .burn-clock-tooltip {
-    position: absolute; background: rgba(0,0,0,0.9); color: #fff;
-    padding: 4px 8px; border-radius: 4px; font-size: 10px;
-    opacity: 0; pointer-events: none; z-index: 10; white-space: nowrap;
+  .hero-tokens {
+    font-size: 48px;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  .hero-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 2px;
+    margin-top: 14px;
+  }
+
+  /* ── 6. Cost pill ── */
+  .cost-pill {
+    display: flex;
+    justify-content: center;
+    margin-top: 12px;
+    margin-bottom: 14px;
+  }
+  .cost-pill-inner {
+    background: var(--pill-bg);
+    padding: 6px 22px;
+    border-radius: 15px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.3px;
+  }
+  .cost-pill-inner .cost-value { color: var(--accent); }
+
+  /* ── 7. Divider ── */
+  .divider {
+    height: 1px;
+    background: var(--divider);
+    margin: 0;
+  }
+
+  /* ── 8. Grid header ── */
+  .grid-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 14px;
+    margin-bottom: 10px;
+  }
+  .grid-title {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 1.5px;
+  }
+  .grid-legend {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 8px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+  .legend-bar {
+    width: 40px;
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(to right, rgb(245,170,100), rgb(210,70,15));
+  }
+
+  /* ── 9. Heatmap ── */
+  .heatmap-container {
+    position: relative;
+  }
+  .heatmap-container svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .heatmap-tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.85);
+    color: #fff;
+    padding: 3px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 10;
+    white-space: nowrap;
     transition: opacity 0.15s;
   }
-  .burn-clock-tooltip.show { opacity: 1; }
-  .view-toggle { display: flex; gap: 2px; margin-left: 8px; }
-  .view-toggle-btn {
-    background: rgba(0,0,0,0.05); border: none; color: #888;
-    font-size: 10px; padding: 2px 6px; border-radius: 3px; cursor: pointer;
-    text-transform: none; letter-spacing: 0; font-weight: 600;
-  }
-  .view-toggle-btn:hover { background: rgba(0,0,0,0.08); color: #333; }
-  .view-toggle-btn.active { background: #6366f1; color: #fff; }
-  .burn-clock-container.v2 { width: 320px; height: 140px; }
-  .burn-clock-v2 { width: 100%; height: 100%; }
-  .burn-clock-center-v2 {
-    text-align: center; margin-bottom: 4px;
-  }
-  .burn-clock-center-v2 .center-tokens { font-size: 14px; font-weight: 700; color: #333; margin-right: 6px; }
-  .burn-clock-center-v2 .center-cost { font-size: 10px; color: #a5b4fc; font-weight: 600; }
-  .burn-bar { cursor: default; transition: opacity 0.15s; }
-  .burn-bar:hover { opacity: 1 !important; }
+  .heatmap-tooltip.show { opacity: 1; }
 
-  /* Day navigation */
-  .day-nav {
-    display: flex; align-items: center; justify-content: center;
-    gap: 8px; margin-top: 6px;
+  /* ── 12. Stats row ── */
+  .stats-section {
+    margin-top: 10px;
+    margin-bottom: 10px;
   }
-  .day-nav-btn {
-    background: rgba(0,0,0,0.05); border: none; color: #888;
-    font-size: 14px; width: 24px; height: 24px; border-radius: 6px;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  .stats-row {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    padding: 6px 0;
   }
-  .day-nav-btn:hover { background: rgba(0,0,0,0.08); color: #333; }
-  .day-nav-btn:disabled { opacity: 0.3; cursor: default; }
-  .day-nav-label {
-    font-size: 12px; color: #333; font-weight: 600; min-width: 80px; text-align: center;
+  .stat-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
   }
+  .stat-col + .stat-col {
+    border-left: 1px solid var(--divider);
+  }
+  .stat-label {
+    font-size: 8px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 0.8px;
+  }
+  .stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: inherit;
+    color: var(--text-primary);
+  }
+  .stat-value.accent { color: var(--accent); }
 
-  /* Leaderboard */
-  .leaderboard {
-    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;
+  /* ── 14. Footer ── */
+  .footer-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
   }
-  .leaderboard::-webkit-scrollbar { width: 4px; }
-  .leaderboard::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 2px; }
-  .lb-header { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-  .lb-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 6px 10px; border-radius: 8px; font-size: 13px;
+  .footer-link {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 1.5px;
+    text-decoration: none;
   }
-  .lb-row:hover { background: rgba(0,0,0,0.03); }
-  .lb-row.me { background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); }
-  .lb-rank { width: 24px; text-align: center; font-weight: 700; color: #888; }
-  .lb-rank.gold { color: #fbbf24; }
-  .lb-rank.silver { color: #94a3b8; }
-  .lb-rank.bronze { color: #d97706; }
-  .lb-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .lb-score { font-weight: 600; color: #6366f1; font-variant-numeric: tabular-nums; }
+  .footer-link:hover { color: var(--text-primary); }
+  .copy-btn {
+    background: var(--pill-bg);
+    border: 1px solid var(--divider);
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .copy-btn:hover { color: var(--text-primary); background: #ece7e1; }
+  .copy-feedback {
+    font-size: 10px; color: #4ade80; text-align: center;
+    opacity: 0; transition: opacity 0.2s; margin-top: 4px;
+  }
+  .copy-feedback.show { opacity: 1; }
 
-  /* Footer */
-  .footer { text-align: center; padding-top: 4px; }
-  .footer a { color: #6366f1; text-decoration: none; font-size: 12px; }
-  .footer a:hover { text-decoration: underline; }
-  .loading { color: #999; font-size: 12px; text-align: center; padding: 20px 0; }
+  .loading { color: var(--text-secondary); font-size: 12px; text-align: center; padding: 20px 0; }
 </style>
 </head>
 <body>
 <div class="panel">
-  <div class="user-bar">
-    <div>
-      <div class="username" id="username" title="Click to edit">Loading...<span class="pencil">&#9998;</span></div>
-      <div class="username-prompt" id="usernamePrompt">What alias would you like to go by?</div>
-      <div class="username-edit-row" id="usernameEditRow" style="display:none">
-        <input class="username-input" id="usernameInput" maxlength="20" placeholder="3-20 chars, a-z 0-9 _">
-        <button class="btn-save-username" id="btnSaveUsername">Save</button>
-      </div>
-      <div class="username-error" id="usernameError"></div>
-      <div class="username-feedback" id="usernameFeedback">Saved!</div>
-      <div>
-        <span class="hash" id="userHash" title="Click to copy full ID">...</span>
-        <span class="hash-feedback" id="hashFeedback">Copied!</span>
-      </div>
+  <!-- 1. CLAUDERANK -->
+  <div class="header-label">CLAUDERANK</div>
+
+  <!-- 2. User row -->
+  <div class="user-row">
+    <div class="username" id="username" title="Click to edit">Loading...<span class="pencil">&#9998;</span></div>
+    <div class="rank-pill" id="rankPill">RANK #&mdash;</div>
+  </div>
+  <div class="username-extras">
+    <div class="username-prompt" id="usernamePrompt">What alias would you like to go by?</div>
+    <div class="username-edit-row" id="usernameEditRow" style="display:none">
+      <input class="username-input" id="usernameInput" maxlength="20" placeholder="3-20 chars, a-z 0-9 _">
+      <button class="btn-save-username" id="btnSaveUsername">Save</button>
     </div>
-    <div class="rank-info">
-      <div class="tier-badge tier-bronze" id="tierBadge">&#129380; Bronze</div>
-      <div class="rank-number" id="rankNumber">#&mdash;</div>
+    <div class="username-error" id="usernameError"></div>
+    <div class="username-feedback" id="usernameFeedback">Saved!</div>
+  </div>
+
+  <!-- 3. Date nav -->
+  <div class="date-nav-row">
+    <button class="date-nav-btn" id="dayPrev" title="Previous day">&#9664;</button>
+    <span class="date-label" id="dayLabel">TODAY</span>
+    <button class="date-nav-btn" id="dayNext" title="Next day" disabled>&#9654;</button>
+  </div>
+
+  <!-- 4-6. Hero section -->
+  <div class="hero-section">
+    <div class="hero-tokens" id="heroTokens">&mdash;</div>
+    <div class="hero-label">TOKENS BURNED</div>
+  </div>
+
+  <div class="cost-pill">
+    <div class="cost-pill-inner">
+      <span class="cost-value" id="costValue">$0</span> EST. TOKEN VALUE
     </div>
   </div>
 
-  <div class="burn-clock-section">
-    <div class="burn-clock-header">
-      <span id="burnClockTitle">Session Burn Clock</span>
-      <div class="view-toggle">
-        <button class="view-toggle-btn active" id="btnViewV1">v1</button>
-        <button class="view-toggle-btn" id="btnViewV2">v2</button>
-      </div>
-      <button class="copy-btn" id="copyConcurrency" title="Copy to clipboard">Copy</button>
+  <!-- 7. Divider -->
+  <div class="divider"></div>
+
+  <!-- 8. Grid header -->
+  <div class="grid-header">
+    <span class="grid-title">AGENT ACTIVITY TIMELINE</span>
+    <div class="grid-legend">
+      <span>LOW</span>
+      <div class="legend-bar"></div>
+      <span>HIGH</span>
     </div>
-    <div class="burn-clock-center-v2" id="burnClockCenterV2" style="display:none">
-      <span class="center-tokens" id="statTokensV2">&mdash;</span>
-      <span class="center-cost" id="statCostV2">&mdash;</span>
-    </div>
-    <div class="burn-clock-container" id="burnClockContainer">
-      <svg class="burn-clock" id="burnClock" viewBox="0 0 180 180"></svg>
-      <div class="burn-clock-center" id="burnClockCenterV1">
-        <div class="center-tokens" id="statTokens">&mdash;</div>
-        <div class="center-cost" id="statCost">&mdash;</div>
-      </div>
-      <svg class="burn-clock-v2" id="burnClockV2" viewBox="0 0 320 120" style="display:none"></svg>
-      <div class="burn-clock-tooltip" id="burnClockTooltip"></div>
-    </div>
-    <div class="day-nav">
-      <button class="day-nav-btn" id="dayPrev" title="Previous day">&#9664;</button>
-      <span class="day-nav-label" id="dayLabel">Today</span>
-      <button class="day-nav-btn" id="dayNext" title="Next day" disabled>&#9654;</button>
-    </div>
-    <div class="copy-feedback" id="concurrencyFeedback">Copied!</div>
   </div>
 
-  <div class="lb-header">Leaderboard</div>
-  <div class="leaderboard" id="leaderboard">
-    <div class="loading">Loading leaderboard...</div>
+  <!-- 9-10. Heatmap -->
+  <div class="heatmap-container">
+    <svg id="heatmapSvg"></svg>
+    <div class="heatmap-tooltip" id="heatmapTooltip"></div>
   </div>
 
-  <div class="footer">
-    <a id="linkFull" href="#" target="_blank">View full rankings &rarr;</a>
+  <!-- 11. Divider -->
+  <div class="divider" style="margin-top: 6px;"></div>
+
+  <!-- 12. Stats -->
+  <div class="stats-section">
+    <div class="stats-row">
+      <div class="stat-col">
+        <div class="stat-label">CONCURRENT AGENTS</div>
+        <div class="stat-value accent" id="statPeakAgents">0&times;</div>
+      </div>
+      <div class="stat-col">
+        <div class="stat-label">TOTAL AGENT HOURS</div>
+        <div class="stat-value" id="statAgentHours">0h</div>
+      </div>
+      <div class="stat-col">
+        <div class="stat-label">CONCURRENCY TIME</div>
+        <div class="stat-value" id="statConcTime">0m</div>
+      </div>
+    </div>
   </div>
+
+  <!-- 13. Divider -->
+  <div class="divider"></div>
+
+  <!-- 14. Footer -->
+  <div class="footer-row">
+    <a class="footer-link" id="linkFull" href="#" target="_blank">CLAUDERANK.COM</a>
+    <button class="copy-btn" id="copyBtn" title="Copy card to clipboard">Copy</button>
+  </div>
+  <div class="copy-feedback" id="copyFeedback">Copied!</div>
 </div>
 
 <script type="module">
-import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, getLeaderboard, formatNumber, formatCost, getTier } from './js/api.js';
+import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, formatNumber, formatCost } from './js/api.js';
 
 const params = new URLSearchParams(window.location.search);
 const userHash = params.get('h');
@@ -258,24 +391,16 @@ if (!userHash) {
 }
 
 // ── State ──
-let activeDates = []; // sorted list of YYYY-MM-DD strings with activity (+ today)
-let currentDateIndex = -1; // index into activeDates, -1 = not loaded yet
-let lastBurnClockData = [];
-let heatmapByDate = {}; // localDateStr → { tokens, messages, tool_calls }
-let totalTokens = 0;    // all-time total from profile
-let totalCost = 0;      // all-time cost from profile
-let currentView = 'v1';
+let activeDates = [];
+let currentDateIndex = -1;
+let heatmapByDate = {};
+let totalTokens = 0;
+let totalCost = 0;
 let lastMergedHistograms = {};
 let lastLocalDateStr = '';
+let lastHourlyData = [];
 
 // ── Helpers ──
-function fmt(n) {
-  if (n == null) return '\u2014';
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
-  return n.toLocaleString();
-}
-
 function escHtml(s) {
   const d = document.createElement('div');
   d.textContent = s || '?';
@@ -288,7 +413,6 @@ function localDateISO(d) {
     String(d.getDate()).padStart(2, '0');
 }
 
-// Return the UTC date string(s) needed to cover all 24 local hours of a local date
 function utcDatesForLocalDay(localDateStr) {
   const localMidnight = new Date(localDateStr + 'T00:00:00');
   const dates = new Set();
@@ -299,42 +423,7 @@ function utcDatesForLocalDay(localDateStr) {
   return [...dates];
 }
 
-// ── Center display helper ──
-function updateCenterDisplay() {
-  if (currentDateIndex < 0 || !activeDates[currentDateIndex]) return;
-  const dayData = heatmapByDate[activeDates[currentDateIndex]];
-  const dayTokens = dayData ? dayData.tokens : 0;
-  const tokensText = fmt(dayTokens);
-  let costText = '\u2014';
-  if (totalTokens > 0 && dayTokens > 0 && totalCost > 0) {
-    costText = formatCost(totalCost * (dayTokens / totalTokens));
-  }
-  document.getElementById('statTokens').textContent = tokensText;
-  document.getElementById('statCost').textContent = costText;
-  document.getElementById('statTokensV2').textContent = tokensText;
-  document.getElementById('statCostV2').textContent = costText;
-}
-
-// ── Tier helpers ──
-const TIERS = [
-  { id: 'bronze',   name: 'Bronze',   icon: '\u{1f944}', min: 0 },
-  { id: 'silver',   name: 'Silver',   icon: '\u{1fa99}', min: 50 },
-  { id: 'gold',     name: 'Gold',     icon: '\u{1f3c6}', min: 200 },
-  { id: 'platinum', name: 'Platinum', icon: '\u{1f48e}', min: 500 },
-  { id: 'diamond',  name: 'Diamond',  icon: '\u{2b50}',  min: 1000 },
-];
-
-function getTierFromScore(score) {
-  for (let i = TIERS.length - 1; i >= 0; i--) {
-    if (score >= TIERS[i].min) return TIERS[i];
-  }
-  return TIERS[0];
-}
-
-// ── Burn clock rendering ──
-// localDateStr is YYYY-MM-DD in user's local timezone.
-// allHistograms contains UTC-keyed data ("YYYY-MM-DD:H").
-// We map each local hour to its corresponding UTC key.
+// ── Process hourly data ──
 function processHourlyData(allHistograms, localDateStr) {
   const hourlyData = [];
   const localMidnight = new Date(localDateStr + 'T00:00:00');
@@ -370,200 +459,150 @@ function processHourlyData(allHistograms, localDateStr) {
   return hourlyData;
 }
 
-function getBurnColor(intensity) {
-  const r1 = 252, g1 = 240, b1 = 228;
-  const r2 = 204, g2 = 88, b2 = 28;
+// V5 color gradient
+function getV5Color(intensity) {
+  const r1 = 245, g1 = 170, b1 = 100;
+  const r2 = 210, g2 = 70, b2 = 15;
   return `rgb(${Math.round(r1 + (r2 - r1) * intensity)},${Math.round(g1 + (g2 - g1) * intensity)},${Math.round(b1 + (b2 - b1) * intensity)})`;
 }
 
-function annularSector(cx, cy, r1, r2, a0, a1) {
-  const toRad = Math.PI / 180;
-  const cos0 = Math.cos(a0 * toRad), sin0 = Math.sin(a0 * toRad);
-  const cos1 = Math.cos(a1 * toRad), sin1 = Math.sin(a1 * toRad);
-  const x1 = cx + r1 * cos0, y1 = cy + r1 * sin0;
-  const x2 = cx + r2 * cos0, y2 = cy + r2 * sin0;
-  const x3 = cx + r2 * cos1, y3 = cy + r2 * sin1;
-  const x4 = cx + r1 * cos1, y4 = cy + r1 * sin1;
-  const largeArc = (a1 - a0) > 180 ? 1 : 0;
-  return `M ${x1} ${y1} L ${x2} ${y2} A ${r2} ${r2} 0 ${largeArc} 1 ${x3} ${y3} L ${x4} ${y4} A ${r1} ${r1} 0 ${largeArc} 0 ${x1} ${y1} Z`;
-}
+// ── Render heatmap (widget scale) ──
+// V5 original: cellW=22, cellH=22, gap=3, marginLeft=60, marginRight=30 → 687px
+// Widget:      cellW=11, cellH=11, gap=2, marginLeft=22, marginRight=6  → 338px
+function renderHeatmap(svgEl, hourlyData) {
+  const container = svgEl.parentElement;
+  const totalW = container.clientWidth || 338;
+  const marginLeft = 18, marginRight = 0;
+  const gap = 2;
+  const availableW = totalW - marginLeft - marginRight;
+  const cellW = (availableW - 23 * gap) / 24;
+  const cellH = cellW;
 
-function renderBurnClock(allHistograms, localDateStr) {
-  const svg = document.getElementById('burnClock');
-  const tooltip = document.getElementById('burnClockTooltip');
-  const container = document.getElementById('burnClockContainer');
-  if (!svg) return;
+  let maxSessions = 0;
+  for (const d of hourlyData) {
+    if (d.sessions.length > maxSessions) maxSessions = d.sessions.length;
+  }
+  const maxRows = Math.max(1, maxSessions);
+  const gridHeight = maxRows * (cellH + gap) - gap;
+  const axisH = 12;
+  const svgH = gridHeight + axisH + 4;
 
-  const hourlyData = processHourlyData(allHistograms, localDateStr);
-  lastBurnClockData = hourlyData;
+  svgEl.setAttribute('viewBox', `0 0 ${totalW} ${svgH}`);
 
-  const cx = 90, cy = 90, baseRadius = 36, pillWidth = 5, pillGap = 2, maxRings = 5;
-  let svgContent = `<circle cx="${cx}" cy="${cy}" r="${baseRadius - 4}" fill="rgba(255,255,255,0.05)" />`;
+  let s = '';
 
-  for (let i = 0; i < 24; i++) {
-    const data = hourlyData[i];
-    const startAngle = -90 + (i * 15);
-    const endAngle = startAngle + 14;
-
-    for (const session of data.sessions) {
-      if (session.index > maxRings) continue;
-      const r1 = baseRadius + (session.index - 1) * (pillWidth + pillGap);
-      const r2 = r1 + pillWidth;
-      const color = getBurnColor(session.intensity);
-      const hour12 = i === 0 ? '12 AM' : i < 12 ? i + ' AM' : i === 12 ? '12 PM' : (i - 12) + ' PM';
-      const tooltipText = `${hour12}: ${data.sessions.length} session${data.sessions.length !== 1 ? 's' : ''}`;
-      svgContent += `<path class="burn-pill" d="${annularSector(cx, cy, r1, r2, startAngle, endAngle)}" fill="${color}" data-tooltip="${tooltipText}" />`;
-    }
-
-    if (data.isCurrent && data.sessions.length > 0) {
-      const outerR = baseRadius + Math.min(data.sessions.length, maxRings) * (pillWidth + pillGap);
-      const midAngle = startAngle + 7;
-      const toRad = Math.PI / 180;
-      svgContent += `<circle cx="${cx + (outerR + 4) * Math.cos(midAngle * toRad)}" cy="${cy + (outerR + 4) * Math.sin(midAngle * toRad)}" r="2" fill="#fff" />`;
-    }
+  // Row labels (matching V5: A1, A2, etc.)
+  for (let row = 0; row < maxRows; row++) {
+    const y = (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 3;
+    s += `<text x="2" y="${y}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace" font-weight="600">A${row + 1}</text>`;
   }
 
-  // Time labels at 4 cardinal positions
-  const labelRadius = 80;
-  const timeLabels = [
-    { label: '12a', x: cx, y: cy - labelRadius },
-    { label: '6a',  x: cx + labelRadius, y: cy },
-    { label: '12p', x: cx, y: cy + labelRadius },
-    { label: '6p',  x: cx - labelRadius, y: cy },
-  ];
-  for (const tl of timeLabels) {
-    svgContent += `<text x="${tl.x}" y="${tl.y}" fill="#fff" font-size="8" text-anchor="middle" dominant-baseline="central" font-weight="600">${tl.label}</text>`;
-  }
-
-  svg.innerHTML = svgContent;
-
-  svg.querySelectorAll('.burn-pill').forEach(pill => {
-    pill.addEventListener('mouseenter', (e) => {
-      tooltip.textContent = e.target.getAttribute('data-tooltip');
-      tooltip.classList.add('show');
-    });
-    pill.addEventListener('mousemove', (e) => {
-      const rect = container.getBoundingClientRect();
-      tooltip.style.left = (e.clientX - rect.left + 10) + 'px';
-      tooltip.style.top = (e.clientY - rect.top - 20) + 'px';
-    });
-    pill.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
-  });
-}
-
-// ── V2 bar chart rendering ──
-function renderBurnClockV2(allHistograms, localDateStr) {
-  const svg = document.getElementById('burnClockV2');
-  const tooltip = document.getElementById('burnClockTooltip');
-  const container = document.getElementById('burnClockContainer');
-  if (!svg) return;
-
-  const hourlyData = processHourlyData(allHistograms, localDateStr);
-  lastBurnClockData = hourlyData;
-
-  const chartLeft = 10, chartRight = 310, chartTop = 4, chartBottom = 100;
-  const chartWidth = chartRight - chartLeft;
-  const barWidth = 11.5, barGap = 1;
-  const segHeight = 11.5, segGap = 1, maxSegs = 5;
-  let svgContent = '';
-
-  for (let i = 0; i < 24; i++) {
-    const data = hourlyData[i];
-    const x = chartLeft + i * (barWidth + barGap);
-    const hour12 = i === 0 ? '12 AM' : i < 12 ? i + ' AM' : i === 12 ? '12 PM' : (i - 12) + ' PM';
-    const tooltipText = `${hour12}: ${data.sessions.length} session${data.sessions.length !== 1 ? 's' : ''}`;
-
-    for (const session of data.sessions) {
-      if (session.index > maxSegs) continue;
-      const segY = chartBottom - session.index * (segHeight + segGap);
-      const color = getBurnColor(session.intensity);
-      svgContent += `<rect class="burn-bar" x="${x}" y="${segY}" width="${barWidth}" height="${segHeight}" rx="2" ry="2" fill="${color}" data-tooltip="${tooltipText}" />`;
+  // Grid cells
+  for (let col = 0; col < 24; col++) {
+    const data = hourlyData[col];
+    // Empty cells (V5: fill="#d8d2ca" opacity="0.8", rx="3" → scaled rx="2")
+    for (let row = 0; row < maxRows; row++) {
+      const x = marginLeft + col * (cellW + gap);
+      const y = (maxRows - 1 - row) * (cellH + gap);
+      s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="#d8d2ca" opacity="0.8"/>`;
     }
-
+    // Active cells
+    for (const session of data.sessions) {
+      if (session.index > maxRows) continue;
+      const row = session.index - 1;
+      const x = marginLeft + col * (cellW + gap);
+      const y = (maxRows - 1 - row) * (cellH + gap);
+      const color = getV5Color(session.intensity || 0.5);
+      s += `<rect class="hm-cell" x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}" style="cursor:default"/>`;
+    }
+    // Current hour marker
     if (data.isCurrent) {
-      svgContent += `<rect x="${x}" y="${chartBottom + 3}" width="${barWidth}" height="2" rx="1" fill="#fff" />`;
+      const x = marginLeft + col * (cellW + gap);
+      s += `<rect x="${x}" y="${gridHeight + 2}" width="${cellW}" height="2" rx="1" fill="${getV5Color(0.8)}"/>`;
     }
   }
 
-  // Time labels along the bottom axis
-  const axisLabels = [
-    { label: '12a', hour: 0 }, { label: '3a', hour: 3 },
-    { label: '6a', hour: 6 },  { label: '9a', hour: 9 },
-    { label: '12p', hour: 12 }, { label: '3p', hour: 15 },
-    { label: '6p', hour: 18 }, { label: '9p', hour: 21 },
-  ];
-  for (const al of axisLabels) {
-    const lx = chartLeft + al.hour * (barWidth + barGap) + barWidth / 2;
-    svgContent += `<text x="${lx}" y="115" fill="#fff" font-size="8" text-anchor="middle" dominant-baseline="central" font-weight="600">${al.label}</text>`;
-  }
+  // Time axis labels (V5: 3 labels relative to current hour)
+  const axisY = gridHeight + axisH + 2;
+  const nowHour = new Date().getHours();
+  const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
+  const startHour = (nowHour + 1) % 24;
+  const midHour = (nowHour + 13) % 24;
+  s += `<text x="${marginLeft}" y="${axisY}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace">${fmtHr(startHour)}</text>`;
+  s += `<text x="${marginLeft + 12 * (cellW + gap)}" y="${axisY}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace">${fmtHr(midHour)}</text>`;
+  s += `<text x="${marginLeft + 23 * (cellW + gap) + cellW}" y="${axisY}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace" text-anchor="end">${fmtHr(nowHour)}</text>`;
 
-  svg.innerHTML = svgContent;
+  svgEl.innerHTML = s;
 
-  svg.querySelectorAll('.burn-bar').forEach(bar => {
-    bar.addEventListener('mouseenter', (e) => {
-      tooltip.textContent = e.target.getAttribute('data-tooltip');
+  // Tooltip
+  const tooltip = document.getElementById('heatmapTooltip');
+  svgEl.querySelectorAll('.hm-cell').forEach(cell => {
+    cell.addEventListener('mouseenter', (e) => {
+      const hr = parseInt(e.target.getAttribute('data-hour'));
+      const count = e.target.getAttribute('data-sessions');
+      const hour12 = hr === 0 ? '12 AM' : hr < 12 ? hr + ' AM' : hr === 12 ? '12 PM' : (hr - 12) + ' PM';
+      tooltip.textContent = `${hour12}: ${count} session${count !== '1' ? 's' : ''}`;
       tooltip.classList.add('show');
     });
-    bar.addEventListener('mousemove', (e) => {
+    cell.addEventListener('mousemove', (e) => {
       const rect = container.getBoundingClientRect();
-      tooltip.style.left = (e.clientX - rect.left + 10) + 'px';
-      tooltip.style.top = (e.clientY - rect.top - 20) + 'px';
+      tooltip.style.left = (e.clientX - rect.left + 8) + 'px';
+      tooltip.style.top = (e.clientY - rect.top - 16) + 'px';
     });
-    bar.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
+    cell.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
   });
 }
 
-// ── View toggle ──
-function setView(view) {
-  currentView = view;
-  const container = document.getElementById('burnClockContainer');
-  const svgV1 = document.getElementById('burnClock');
-  const centerV1 = document.getElementById('burnClockCenterV1');
-  const svgV2 = document.getElementById('burnClockV2');
-  const centerV2 = document.getElementById('burnClockCenterV2');
-  const btnV1 = document.getElementById('btnViewV1');
-  const btnV2 = document.getElementById('btnViewV2');
+// ── Update stats ──
+function updateStats(hourlyData) {
+  let maxSessions = 0;
+  let totalDevMins = 0;
+  let concurrentMins = 0;
 
-  if (view === 'v2') {
-    container.classList.add('v2');
-    svgV1.style.display = 'none';
-    centerV1.style.display = 'none';
-    svgV2.style.display = '';
-    centerV2.style.display = '';
-    btnV1.classList.remove('active');
-    btnV2.classList.add('active');
-  } else {
-    container.classList.remove('v2');
-    svgV1.style.display = '';
-    centerV1.style.display = '';
-    svgV2.style.display = 'none';
-    centerV2.style.display = 'none';
-    btnV1.classList.add('active');
-    btnV2.classList.remove('active');
+  for (const d of hourlyData) {
+    if (d.sessions.length > maxSessions) maxSessions = d.sessions.length;
+    for (const sess of d.sessions) {
+      totalDevMins += sess.minutes;
+    }
+    const s2 = d.sessions.find(s => s.index === 2);
+    if (s2) concurrentMins += s2.minutes;
   }
-  reRenderCurrentView();
+
+  const devHours = (totalDevMins / 60).toFixed(1);
+  const concDisplay = concurrentMins >= 60
+    ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
+    : Math.round(concurrentMins) + 'm';
+
+  document.getElementById('statPeakAgents').innerHTML = maxSessions + '&times;';
+  document.getElementById('statAgentHours').textContent = devHours + 'h';
+  document.getElementById('statConcTime').textContent = concDisplay;
 }
 
-function reRenderCurrentView() {
-  if (!lastLocalDateStr) return;
-  if (currentView === 'v2') {
-    renderBurnClockV2(lastMergedHistograms, lastLocalDateStr);
-  } else {
-    renderBurnClock(lastMergedHistograms, lastLocalDateStr);
+// ── Center display ──
+function updateCenterDisplay() {
+  if (currentDateIndex < 0 || !activeDates[currentDateIndex]) return;
+  const dayData = heatmapByDate[activeDates[currentDateIndex]];
+  const dayTokens = dayData ? dayData.tokens : 0;
+  document.getElementById('heroTokens').textContent = formatNumber(dayTokens);
+  let costText = '$0';
+  if (totalTokens > 0 && dayTokens > 0 && totalCost > 0) {
+    costText = formatCost(totalCost * (dayTokens / totalTokens));
   }
+  document.getElementById('costValue').textContent = costText;
 }
 
-document.getElementById('btnViewV1').addEventListener('click', () => setView('v1'));
-document.getElementById('btnViewV2').addEventListener('click', () => setView('v2'));
+// ── Date formatting (V5: "MAR 15, 2026") ──
+const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+function formatDateLabel(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
 
 // ── Day navigation ──
 async function loadActiveDates() {
   try {
     const heatmap = await getUserHeatmap(userHash, 30);
-    // Heatmap dates are UTC; convert to local dates (a UTC date's activity
-    // could appear on the same or adjacent local date depending on timezone)
     const localDates = new Set();
-    // Build per-local-date token/message sums from UTC heatmap data
     const localTokens = {};
     const localMessages = {};
     for (const d of heatmap.filter(d => d.activity > 0)) {
@@ -573,8 +612,6 @@ async function loadActiveDates() {
       const localEnd = localDateISO(utcEnd);
       localDates.add(localStart);
       localDates.add(localEnd);
-      // Attribute tokens to the local date that contains most of the UTC day
-      // (simple approach: add to both, the overlap is small)
       localTokens[localStart] = (localTokens[localStart] || 0) + (d.tokens || 0);
       localMessages[localStart] = (localMessages[localStart] || 0) + (d.messages || 0);
       if (localEnd !== localStart) {
@@ -585,7 +622,6 @@ async function loadActiveDates() {
     const todayStr = localDateISO(new Date());
     localDates.add(todayStr);
     activeDates = [...localDates].filter(d => d <= todayStr).sort();
-    // Store for center display
     heatmapByDate = {};
     for (const ld of activeDates) {
       heatmapByDate[ld] = {
@@ -599,31 +635,26 @@ async function loadActiveDates() {
   }
 }
 
-function formatDateLabelFromStr(dateStr) {
-  if (dateStr === localDateISO(new Date())) return 'Today';
-  const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
-}
-
 async function loadDayByIndex(index) {
   if (index < 0 || index >= activeDates.length) return;
   currentDateIndex = index;
   const localDateStr = activeDates[index];
 
-  document.getElementById('dayLabel').textContent = formatDateLabelFromStr(localDateStr);
+  document.getElementById('dayLabel').textContent = formatDateLabel(localDateStr);
   document.getElementById('dayNext').disabled = (index >= activeDates.length - 1);
   document.getElementById('dayPrev').disabled = (index <= 0);
 
-  // Update center with daily tokens/cost
   updateCenterDisplay();
 
   try {
-    // Fetch the UTC date(s) that cover this local day, then merge
     const utcDates = utcDatesForLocalDay(localDateStr);
     const results = await Promise.all(utcDates.map(d => getUserConcurrencyByDate(userHash, d)));
     lastMergedHistograms = Object.assign({}, ...results);
     lastLocalDateStr = localDateStr;
-    reRenderCurrentView();
+    const hourlyData = processHourlyData(lastMergedHistograms, localDateStr);
+    lastHourlyData = hourlyData;
+    renderHeatmap(document.getElementById('heatmapSvg'), hourlyData);
+    updateStats(hourlyData);
   } catch (e) {
     console.error('Failed to load concurrency data:', e);
   }
@@ -636,48 +667,32 @@ document.getElementById('dayNext').addEventListener('click', () => {
   if (currentDateIndex < activeDates.length - 1) loadDayByIndex(currentDateIndex + 1);
 });
 
-// ── Load user profile ──
+// ── Load profile ──
 async function loadProfile() {
   try {
     const data = await getUserProfile(userHash);
-
-    // Username
     const usernameEl = document.getElementById('username');
     if (data.username) {
-      usernameEl.innerHTML = escHtml(data.username) + '<span class="pencil">&#9998;</span>';
+      usernameEl.innerHTML = '@' + escHtml(data.username) + '<span class="pencil">&#9998;</span>';
     } else {
-      usernameEl.innerHTML = 'Anonymous<span class="pencil">&#9998;</span>';
+      usernameEl.innerHTML = '@anonymous<span class="pencil">&#9998;</span>';
       document.getElementById('usernamePrompt').classList.add('show');
     }
 
-    // Hash
-    document.getElementById('userHash').textContent = userHash.substring(0, 8) + '...';
-
-    // Tier
-    const m = data.metrics || {};
-    const tier = getTierFromScore(m.weighted_score || 0);
-    const tierBadge = document.getElementById('tierBadge');
-    tierBadge.className = 'tier-badge tier-' + tier.id;
-    tierBadge.textContent = tier.icon + ' ' + tier.name;
-
-    // Rank
     const ranks = data.ranks || {};
     const weightedRank = ranks.weighted;
+    const rankPill = document.getElementById('rankPill');
     if (weightedRank) {
       const rank = weightedRank.rank || weightedRank;
       const percentile = weightedRank.percentile;
-      document.getElementById('rankNumber').textContent =
-        '#' + rank + (percentile ? ' \u00b7 Top ' + percentile + '%' : ' globally');
+      rankPill.textContent = '#' + rank + ' GLOBALLY' + (percentile != null ? ' \u00b7 TOP ' + percentile + '%' : '');
     }
 
-    // Store all-time totals for proportional daily cost estimation
+    const m = data.metrics || {};
     totalTokens = m.total_tokens || 0;
     totalCost = m.estimated_spend || 0;
-
-    // Re-render center with updated totals (daily values, never all-time)
     updateCenterDisplay();
 
-    // Link
     document.getElementById('linkFull').href = '/profile.html?hash=' + userHash;
   } catch (e) {
     console.error('Failed to load profile:', e);
@@ -693,8 +708,8 @@ const usernameFeedback = document.getElementById('usernameFeedback');
 const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
 
 function showUsernameEdit() {
-  const current = usernameDisplay.textContent.replace('\u270E', '').trim();
-  usernameInput.value = current === 'Anonymous' ? '' : current;
+  const current = usernameDisplay.textContent.replace('\u270E', '').replace('@', '').trim();
+  usernameInput.value = current === 'anonymous' ? '' : current;
   usernameDisplay.style.display = 'none';
   usernameEditRow.style.display = 'flex';
   usernameError.style.display = 'none';
@@ -744,7 +759,7 @@ async function saveUsername() {
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.detail || 'Failed to save');
     }
-    usernameDisplay.innerHTML = escHtml(val) + '<span class="pencil">&#9998;</span>';
+    usernameDisplay.innerHTML = '@' + escHtml(val) + '<span class="pencil">&#9998;</span>';
     hideUsernameEdit();
     usernameFeedback.classList.add('show');
     setTimeout(() => usernameFeedback.classList.remove('show'), 1500);
@@ -768,218 +783,169 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// ── Copy hash ──
-document.getElementById('userHash').addEventListener('click', () => {
-  navigator.clipboard.writeText(userHash);
-  const fb = document.getElementById('hashFeedback');
-  fb.classList.add('show');
-  setTimeout(() => fb.classList.remove('show'), 1500);
-});
+// ── Copy as full V5 card image ──
+// Renders an exact copy of renderShareableCardV5() from profile.html
+// at full 687px resolution, then copies to clipboard.
+async function copyCardAsImage() {
+  const hourlyData = lastHourlyData;
+  if (!hourlyData.length) return;
 
-// ── Copy burn clock as image ──
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
+  const cellW = 22, cellH = 22, gp = 3;
+  const gridMarginLeft = 60, gridMarginRight = 30;
+  const cardW = gridMarginLeft + 24 * (cellW + gp) - gp + gridMarginRight;
 
-async function copyBurnClockAsImage() {
-  const isV2 = currentView === 'v2';
-  const W = isV2 ? 380 : 340;
-  const H = isV2 ? 320 : 400;
-  const S = 2;
-  const canvas = document.createElement('canvas');
-  canvas.width = W * S;
-  canvas.height = H * S;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(S, S);
+  let maxSessions = 0;
+  for (const d of hourlyData) {
+    if (d.sessions.length > maxSessions) maxSessions = d.sessions.length;
+  }
+  const maxRows = Math.max(1, maxSessions);
+  const gridHeight = maxRows * (cellH + gp) - gp;
 
-  // Background
-  roundRect(ctx, 0, 0, W, H, 16);
-  ctx.fillStyle = '#121218';
-  ctx.fill();
+  // Compute stats
+  let totalDevMins = 0;
+  let concurrentMins = 0;
+  for (const d of hourlyData) {
+    for (const sess of d.sessions) totalDevMins += sess.minutes;
+    const s2 = d.sessions.find(s => s.index === 2);
+    if (s2) concurrentMins += s2.minutes;
+  }
+  const devHours = (totalDevMins / 60).toFixed(1);
+  const concDisplay = concurrentMins >= 60
+    ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
+    : Math.round(concurrentMins) + 'm';
 
-  // Title
-  ctx.fillStyle = '#888';
-  ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  ctx.textAlign = 'center';
-  const titleEl = document.getElementById('burnClockTitle');
-  ctx.fillText(titleEl ? titleEl.textContent : 'Session Burn Clock', W / 2, 28);
+  // Get display data from DOM
+  const usernameRaw = document.getElementById('username').childNodes[0].textContent.replace('@', '').trim();
+  const username = usernameRaw || 'anonymous';
+  const rankText = document.getElementById('rankPill').textContent.trim();
+  const dayTokens = document.getElementById('heroTokens').textContent;
+  const costText = document.getElementById('costValue').textContent;
+  const dateText = document.getElementById('dayLabel').textContent;
 
-  const tokensEl = document.getElementById('statTokens');
-  const costEl = document.getElementById('statCost');
-  const tokensText = tokensEl ? tokensEl.textContent : '\u2014';
-  const costText = costEl ? costEl.textContent : '\u2014';
+  // Layout Y positions (exact V5 card)
+  const topY = 30, usernameY = 48, dateY = 100;
+  const heroY = 200, heroLabelY = 235, pillY = 260;
+  const divider1Y = 310, gridLabelY = 340, gridTopY = 360;
+  const gridBottomY = gridTopY + gridHeight + 24;
+  const divider2Y = gridBottomY + 10;
+  const statsY = divider2Y + 20;
+  const statsHeight = 70;
+  const divider3Y = statsY + statsHeight + 10;
+  const footerY = divider3Y + 25;
+  const cardH = footerY + 20;
 
-  if (isV2) {
-    // Tokens + cost inline above chart
-    ctx.fillStyle = '#fff';
-    ctx.font = '700 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(tokensText, W / 2 - 30, 54);
-    ctx.fillStyle = '#a5b4fc';
-    ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText(costText, W / 2 + 40, 54);
+  const fontStack = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  let s = '';
+  s += `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${cardW} ${cardH}" width="${cardW}" height="${cardH}" font-family="${fontStack}">`;
+  s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
 
-    // Draw v2 SVG
-    const svgEl = document.getElementById('burnClockV2');
-    if (svgEl) {
-      const svgClone = svgEl.cloneNode(true);
-      svgClone.setAttribute('width', '340');
-      svgClone.setAttribute('height', '130');
-      const svgData = new XMLSerializer().serializeToString(svgClone);
-      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-      const svgUrl = URL.createObjectURL(svgBlob);
-      const img = new Image();
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-        img.src = svgUrl;
-      });
-      ctx.drawImage(img, (W - 340) / 2, 68, 340, 130);
-      URL.revokeObjectURL(svgUrl);
-    }
+  // Header + username
+  s += `<text x="30" y="${topY}" fill="#8a8480" font-size="10" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
+  s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="20" font-weight="700">@${escHtml(username)}</text>`;
 
-    // Username + tier
-    const usernameEl = document.getElementById('username');
-    const tierBadgeEl = document.getElementById('tierBadge');
-    const username = usernameEl ? usernameEl.childNodes[0].textContent.trim() : 'Anonymous';
-    const tierText = tierBadgeEl ? tierBadgeEl.textContent.trim() : '';
-    const tierColor = tierBadgeEl ? getComputedStyle(tierBadgeEl).color : '#cd7f32';
-
-    ctx.font = '600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    const userWidth = ctx.measureText(username + '  \u00b7  ').width;
-    const tierWidth = ctx.measureText(tierText).width;
-    const totalW = userWidth + tierWidth;
-    const startX = (W - totalW) / 2;
-
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#fff';
-    ctx.fillText(username + '  \u00b7  ', startX, 224);
-    ctx.fillStyle = tierColor;
-    ctx.fillText(tierText, startX + userWidth, 224);
-
-    // Rank
-    const rankEl = document.getElementById('rankNumber');
-    const rankText = rankEl ? rankEl.textContent.trim() : '';
-    if (rankText) {
-      ctx.fillStyle = '#888';
-      ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(rankText, W / 2, 242);
-    }
-
-    // Watermark
-    const logoImg = new Image();
-    await new Promise((resolve) => {
-      logoImg.onload = resolve;
-      logoImg.onerror = resolve;
-      logoImg.src = 'images/logo.png';
-    });
-    const wmText = 'ClaudeRank';
-    ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    const wmTextWidth = ctx.measureText(wmText).width;
-    const logoSize = 14;
-    const wmTotalWidth = logoSize + 4 + wmTextWidth;
-    const wmX = W - 16;
-    const wmY = 290;
-    if (logoImg.naturalWidth) {
-      ctx.drawImage(logoImg, wmX - wmTotalWidth, wmY - logoSize + 2, logoSize, logoSize);
-    }
-    ctx.fillText(wmText, wmX, wmY);
-  } else {
-    // V1: existing radial logic
-    const svgEl = document.getElementById('burnClock');
-    if (svgEl) {
-      const svgClone = svgEl.cloneNode(true);
-      svgClone.setAttribute('width', '240');
-      svgClone.setAttribute('height', '240');
-      const svgData = new XMLSerializer().serializeToString(svgClone);
-      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-      const svgUrl = URL.createObjectURL(svgBlob);
-      const img = new Image();
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-        img.src = svgUrl;
-      });
-      ctx.drawImage(img, (W - 240) / 2, 46, 240, 240);
-      URL.revokeObjectURL(svgUrl);
-    }
-
-    // Center stats over SVG center
-    const svgCenterY = 46 + 120;
-    ctx.fillStyle = '#fff';
-    ctx.font = '700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(tokensText, W / 2, svgCenterY - 2);
-
-    ctx.fillStyle = '#a5b4fc';
-    ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText(costText, W / 2, svgCenterY + 16);
-
-    // Username + tier line
-    const usernameEl = document.getElementById('username');
-    const tierBadgeEl = document.getElementById('tierBadge');
-    const username = usernameEl ? usernameEl.childNodes[0].textContent.trim() : 'Anonymous';
-    const tierText = tierBadgeEl ? tierBadgeEl.textContent.trim() : '';
-    const tierColor = tierBadgeEl ? getComputedStyle(tierBadgeEl).color : '#cd7f32';
-
-    ctx.font = '600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    const userWidth = ctx.measureText(username + '  \u00b7  ').width;
-    const tierWidth = ctx.measureText(tierText).width;
-    const totalW = userWidth + tierWidth;
-    const startX = (W - totalW) / 2;
-
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#fff';
-    ctx.fillText(username + '  \u00b7  ', startX, 306);
-    ctx.fillStyle = tierColor;
-    ctx.fillText(tierText, startX + userWidth, 306);
-
-    // Rank line
-    const rankEl = document.getElementById('rankNumber');
-    const rankText = rankEl ? rankEl.textContent.trim() : '';
-    if (rankText) {
-      ctx.fillStyle = '#888';
-      ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(rankText, W / 2, 324);
-    }
-
-    // Watermark with logo
-    const logoImg = new Image();
-    await new Promise((resolve) => {
-      logoImg.onload = resolve;
-      logoImg.onerror = resolve;
-      logoImg.src = 'images/logo.png';
-    });
-    const wmText = 'ClaudeRank';
-    ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    const wmTextWidth = ctx.measureText(wmText).width;
-    const logoSize = 14;
-    const wmTotalWidth = logoSize + 4 + wmTextWidth;
-    const wmX = W - 16;
-    const wmY = 370;
-    if (logoImg.naturalWidth) {
-      ctx.drawImage(logoImg, wmX - wmTotalWidth, wmY - logoSize + 2, logoSize, logoSize);
-    }
-    ctx.fillText(wmText, wmX, wmY);
+  // Rank pill
+  if (rankText && !rankText.includes('\u2014')) {
+    const rpH = 28, rpW = 230;
+    const rpX = cardW - 30 - rpW, rpY = usernameY - 20;
+    s += `<rect x="${rpX}" y="${rpY}" width="${rpW}" height="${rpH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
+    s += `<text x="${rpX + rpW / 2}" y="${rpY + rpH / 2 + 4}" fill="#E8692D" font-size="12" font-weight="600" text-anchor="middle" letter-spacing="0.5">${escHtml(rankText)}</text>`;
   }
 
-  // Copy to clipboard
+  // Date
+  s += `<text x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="13" font-weight="600" letter-spacing="1.5" text-anchor="middle">${escHtml(dateText)}</text>`;
+
+  // Hero tokens
+  s += `<text x="${cardW / 2}" y="${heroY}" fill="#1a1a1a" font-size="96" font-weight="800" text-anchor="middle">${escHtml(dayTokens)}</text>`;
+  s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#8a8480" font-size="13" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
+
+  // Cost pill
+  const spW = 240, spH = 30, spX = (cardW - spW) / 2;
+  s += `<rect x="${spX}" y="${pillY}" width="${spW}" height="${spH}" rx="15" ry="15" fill="#f5f0eb"/>`;
+  s += `<text x="${cardW / 2}" y="${pillY + spH / 2 + 5}" fill="#8a8480" font-size="12" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
+  s += `<tspan fill="#E8692D">${escHtml(costText)}</tspan> EST. TOKEN VALUE</text>`;
+
+  // Divider 1
+  s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+
+  // Grid label + legend
+  s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="11" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
+  const legendW = 80, legendH = 10;
+  const gridRightEdge = gridMarginLeft + 23 * (cellW + gp) + cellW;
+  const legendY = gridLabelY - 10;
+  s += `<defs><linearGradient id="v5LG" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgb(245,170,100)"/><stop offset="100%" stop-color="rgb(210,70,15)"/></linearGradient></defs>`;
+  s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="9" font-weight="600" text-anchor="end">HIGH</text>`;
+  const highTW = 28, legendX = gridRightEdge - highTW - legendW;
+  s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="3" ry="3" fill="url(#v5LG)"/>`;
+  s += `<text x="${legendX - 6}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="9" font-weight="600" text-anchor="end">LOW</text>`;
+
+  // Row labels
+  for (let row = 0; row < maxRows; row++) {
+    const y = gridTopY + (maxRows - 1 - row) * (cellH + gp) + cellH / 2 + 4;
+    s += `<text x="30" y="${y}" fill="#8a8480" font-size="10" font-weight="600">A${row + 1}</text>`;
+  }
+
+  // Grid cells
+  for (let col = 0; col < 24; col++) {
+    const data = hourlyData[col];
+    for (let row = 0; row < maxRows; row++) {
+      const x = gridMarginLeft + col * (cellW + gp);
+      const y = gridTopY + (maxRows - 1 - row) * (cellH + gp);
+      s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#d8d2ca" opacity="0.8"/>`;
+    }
+    for (const session of data.sessions) {
+      if (session.index > maxRows) continue;
+      const row = session.index - 1;
+      const x = gridMarginLeft + col * (cellW + gp);
+      const y = gridTopY + (maxRows - 1 - row) * (cellH + gp);
+      s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${getV5Color(session.intensity || 0.5)}"/>`;
+    }
+  }
+
+  // Time axis (V5: 3 labels relative to current hour)
+  const xAxisY = gridTopY + gridHeight + 18;
+  const expNowHour = new Date().getHours();
+  const expFmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
+  const expStartHour = (expNowHour + 1) % 24;
+  const expMidHour = (expNowHour + 13) % 24;
+  s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="10">${expFmtHr(expStartHour)}</text>`;
+  s += `<text x="${gridMarginLeft + 12 * (cellW + gp)}" y="${xAxisY}" fill="#8a8480" font-size="10">${expFmtHr(expMidHour)}</text>`;
+  s += `<text x="${gridMarginLeft + 23 * (cellW + gp)}" y="${xAxisY}" fill="#8a8480" font-size="10" text-anchor="end">${expFmtHr(expNowHour)}</text>`;
+
+  // Divider 2
+  s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+
+  // Stats row
+  const colW = (cardW - 60) / 3;
+  const sLabels = ['CONCURRENT AGENTS', 'TOTAL AGENT HOURS', 'CONCURRENCY TIME'];
+  const sValues = [maxSessions + '\u00d7', devHours + 'h', concDisplay];
+  const sColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
+  for (let i = 0; i < 3; i++) {
+    const cx = 30 + colW * i + colW / 2;
+    s += `<text x="${cx}" y="${statsY + 18}" fill="#8a8480" font-size="10" font-weight="700" letter-spacing="1" text-anchor="middle">${sLabels[i]}</text>`;
+    s += `<text x="${cx}" y="${statsY + 50}" fill="${sColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${sValues[i]}</text>`;
+    if (i < 2) {
+      const divX = 30 + colW * (i + 1);
+      s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#c8c0b8" stroke-width="1"/>`;
+    }
+  }
+
+  // Divider 3 + footer
+  s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+  s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="10" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
+  s += `</svg>`;
+
+  // SVG → canvas → clipboard
+  const svgBlob = new Blob([s], { type: 'image/svg+xml;charset=utf-8' });
+  const svgUrl = URL.createObjectURL(svgBlob);
+  const img = new Image();
+  await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = svgUrl; });
+  const canvas = document.createElement('canvas');
+  canvas.width = cardW;
+  canvas.height = cardH;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, cardW, cardH);
+  URL.revokeObjectURL(svgUrl);
+
   const inIframe = window.parent !== window;
   if (inIframe) {
     const base64 = canvas.toDataURL('image/png').split(',')[1];
@@ -990,66 +956,23 @@ async function copyBurnClockAsImage() {
   }
 }
 
-document.getElementById('copyConcurrency').addEventListener('click', async () => {
+document.getElementById('copyBtn').addEventListener('click', async () => {
   try {
-    await copyBurnClockAsImage();
-    const fb = document.getElementById('concurrencyFeedback');
+    await copyCardAsImage();
+    const fb = document.getElementById('copyFeedback');
     fb.classList.add('show');
     setTimeout(() => fb.classList.remove('show'), 1500);
   } catch (err) {
-    console.error('Image copy failed, falling back to text:', err);
-    // Text fallback
-    if (!lastBurnClockData.length) return;
-    const emojis = lastBurnClockData.map(d => {
-      const count = d.sessions.length;
-      if (count === 0) return '\u{1f534}';
-      if (count === 1) return '\u{1f7e0}';
-      if (count === 2) return '\u{1f7e1}';
-      return '\u26aa';
-    }).join('');
-    const maxSessions = Math.max(...lastBurnClockData.map(d => d.sessions.length));
-    const text = `ClaudeRank 24h\n${emojis}\nPeak: ${maxSessions} sessions | clauderank.com`;
-    navigator.clipboard.writeText(text);
-    const fb = document.getElementById('concurrencyFeedback');
-    fb.classList.add('show');
-    setTimeout(() => fb.classList.remove('show'), 1500);
+    console.error('Copy failed:', err);
   }
 });
-
-// ── Leaderboard ──
-async function loadLeaderboard() {
-  try {
-    const data = await getLeaderboard('weighted', 'individual', 10, 0);
-    const entries = data.entries || [];
-    const container = document.getElementById('leaderboard');
-    if (!entries.length) {
-      container.innerHTML = '<div class="loading">No entries yet</div>';
-      return;
-    }
-    container.innerHTML = entries.map((e, i) => {
-      const rank = i + 1;
-      const rankClass = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
-      const isMe = e.user_hash === userHash;
-      return `<div class="lb-row ${isMe ? 'me' : ''}">
-        <div class="lb-rank ${rankClass}">${rank}</div>
-        <div class="lb-name">${escHtml(e.username || 'User #' + rank)}</div>
-        <div class="lb-score">${fmt(e.value)}</div>
-      </div>`;
-    }).join('');
-  } catch (e) {
-    console.error('Failed to load leaderboard:', e);
-    document.getElementById('leaderboard').innerHTML = '<div class="loading">Failed to load</div>';
-  }
-}
 
 // ── Init ──
 loadProfile();
 loadActiveDates().then(() => {
-  // Start on the last (most recent) date, which is today or the latest active day
   loadDayByIndex(activeDates.length - 1);
 });
-loadLeaderboard();
-setInterval(() => { loadLeaderboard(); loadProfile(); }, 120000);
+setInterval(() => loadProfile(), 120000);
 </script>
 </body>
 </html>
