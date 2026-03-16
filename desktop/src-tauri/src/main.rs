@@ -912,6 +912,9 @@ fn main() {
         .manage(Arc::clone(&stats_points))
         .manage(Arc::clone(&stats_ranking))
         .setup(move |app| {
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             info!("=== ClaudeRank Widget Starting ===");
 
             // Create tray menu
