@@ -133,6 +133,11 @@ fn quit_app() {
 }
 
 #[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    open::that(&url).map_err(|e| format!("Failed to open URL: {}", e))
+}
+
+#[tauri::command]
 fn get_autostart_enabled(app: AppHandle) -> Result<bool, String> {
     use tauri_plugin_autostart::ManagerExt;
     let autostart_manager = app.autolaunch();
@@ -436,7 +441,7 @@ fn position_overlay_window(window: &tauri::WebviewWindow, app: &AppHandle) {
     if let Some(ref prefs) = prefs {
         let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
             width: prefs.width,
-            height: 480,
+            height: prefs.height,
         }));
     }
 
@@ -571,6 +576,27 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
         "overlay",
         tauri::WebviewUrl::App("overlay.html".into()),
     )
+    .initialization_script_for_all_frames(r#"
+        document.addEventListener('DOMContentLoaded', function() {
+            var panel = document.querySelector('.panel');
+            if (!panel || window.parent === window) return;
+
+            // Inject <style> with !important — robust against any remote CSS
+            var s = document.createElement('style');
+            s.textContent =
+                'html, body { height: auto !important; min-height: 0 !important; overflow: hidden !important; }' +
+                '.panel { min-height: 0 !important; height: auto !important; box-shadow: none !important; padding-bottom: 12px !important; }' +
+                '.copy-feedback { position: absolute !important; }';
+            document.head.appendChild(s);
+
+            function notifyHeight() {
+                window.parent.postMessage({type: 'resize', height: panel.offsetHeight}, '*');
+            }
+            new ResizeObserver(function() { notifyHeight(); }).observe(panel);
+            setTimeout(notifyHeight, 100);
+            setTimeout(notifyHeight, 500);
+        });
+    "#)
     .title("ClaudeRank")
     .visible(false)
     .transparent(true)
@@ -969,6 +995,7 @@ fn main() {
             copy_image_to_clipboard,
             log_from_frontend,
             quit_app,
+            open_url,
             get_autostart_enabled,
             set_autostart_enabled,
             is_debug_mode,

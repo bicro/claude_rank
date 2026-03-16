@@ -258,8 +258,9 @@
   .footer-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     margin-top: 12px;
+    position: relative;
   }
   .footer-link {
     font-size: 9px;
@@ -268,18 +269,20 @@
     letter-spacing: 1.5px;
     text-decoration: none;
   }
-  .footer-link:hover { color: var(--text-primary); }
+  .footer-link:hover { color: var(--text-primary); text-decoration: underline; }
   .copy-btn {
-    background: var(--pill-bg);
-    border: 1px solid var(--divider);
+    background: none;
+    border: none;
     color: var(--text-secondary);
-    font-size: 10px;
-    font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 4px;
     cursor: pointer;
+    position: absolute;
+    right: 0;
+    padding: 2px;
+    display: flex;
+    align-items: center;
   }
-  .copy-btn:hover { color: var(--text-primary); background: #ece7e1; }
+  .copy-btn:hover { color: var(--text-primary); }
+  .copy-btn svg { width: 14px; height: 14px; }
   .copy-feedback {
     font-size: 10px; color: #4ade80; text-align: center;
     opacity: 0; transition: opacity 0.2s; margin-top: 4px;
@@ -373,8 +376,8 @@
 
   <!-- 14. Footer -->
   <div class="footer-row">
-    <a class="footer-link" id="linkFull" href="#" target="_blank">CLAUDERANK.COM</a>
-    <button class="copy-btn" id="copyBtn" title="Copy card to clipboard">Copy</button>
+    <a class="footer-link" id="linkFull" href="https://clauderank.com" target="_blank">CLAUDERANK.COM</a>
+    <button class="copy-btn" id="copyBtn" title="Copy card to clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
   </div>
   <div class="copy-feedback" id="copyFeedback">Copied!</div>
 </div>
@@ -703,7 +706,7 @@ async function loadProfile() {
     totalCost = m.estimated_spend || 0;
     updateCenterDisplay();
 
-    document.getElementById('linkFull').href = '/profile.html?hash=' + userHash;
+    document.getElementById('linkFull').href = 'https://clauderank.com';
   } catch (e) {
     console.error('Failed to load profile:', e);
   }
@@ -974,6 +977,17 @@ document.getElementById('copyBtn').addEventListener('click', async () => {
     setTimeout(() => fb.classList.remove('show'), 1500);
   } catch (err) {
     console.error('Copy failed:', err);
+  }
+});
+
+// ── Open link externally (iframe can't navigate) ──
+document.getElementById('linkFull').addEventListener('click', (e) => {
+  e.preventDefault();
+  const url = e.currentTarget.href;
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: 'open-url', url }, '*');
+  } else {
+    window.open(url, '_blank');
   }
 });
 

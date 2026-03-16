@@ -96,6 +96,9 @@ window.addEventListener('message', async (e) => {
       console.error('Failed to copy image:', err);
     }
   }
+  if (e.data.type === 'open-url' && e.data.url) {
+    invoke('open_url', { url: e.data.url }).catch(err => console.error('Failed to open URL:', err));
+  }
   if (e.data.type === 'resize' && e.data.height > 0) {
     const win = getCurrentWindow();
     try {
