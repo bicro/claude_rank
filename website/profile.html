@@ -17,7 +17,7 @@
         })
     </script>
 </head>
-<body>
+<body class="page-profile">
     <header class="site-header">
         <h1><a href="/" style="color:inherit;text-decoration:none"><img src="images/logo.png" alt="ClaudeRank logo" class="site-logo">ClaudeRank</a></h1>
         <nav class="header-nav" id="headerNav">
@@ -79,10 +79,8 @@
                     text += `You burned ${formatNumber(s.dayTokens)} tokens, amounting to an estimated ${s.costText}.`;
                 }
             }
-            for (const id of ['dailySummary1', 'dailySummary2', 'dailySummary3']) {
-                const el = document.getElementById(id);
-                if (el) el.textContent = text;
-            }
+            const el = document.getElementById('dailySummaryMain');
+            if (el) el.textContent = text;
         }
 
         async function loadProfile(hash) {
@@ -120,29 +118,11 @@
                                 Joined ${new Date(profile.created_at).toLocaleDateString()}
                                 ${profile.team_hash ? ` &middot; Team: <a href="/team.html?hash=${profile.team_hash}">${profile.team_hash}</a>` : ''}
                             </div>
-                        </div>
-                    </div>
-
-                    <div class="profile-section-constrained">
-                        <div class="stat-category">
                             <div class="xp-display">
-                                <div class="level-badge">${currentLevel}</div>
-                                <div class="xp-info">
-                                    <div class="xp-label">Level ${currentLevel}</div>
-                                    <div class="xp-bar"><div class="xp-fill" style="width:${xpProgress.toFixed(1)}%"></div></div>
-                                    <div class="xp-text">${formatNumber(m.total_points)} / ${formatNumber(nextLevelPoints)} XP</div>
-                                </div>
+                                <div class="xp-bar"><div class="xp-fill" style="width:${xpProgress.toFixed(1)}%"></div></div>
+                                <div class="xp-text">Level ${currentLevel} &middot; ${formatNumber(m.total_points)} / ${formatNumber(nextLevelPoints)} XP</div>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="shareable-version-toggle" style="display:flex;justify-content:center;gap:0;margin-bottom:10px;">
-                        <button class="burn-clock-toggle-btn active" data-version="1" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-radius:6px 0 0 6px;background:var(--accent,#c45a1c);color:#fff;cursor:pointer;">Version 1</button>
-                        <button class="burn-clock-toggle-btn" data-version="2" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-left:none;border-radius:0;background:transparent;color:var(--text-secondary,#888);cursor:pointer;">Version 2</button>
-                        <button class="burn-clock-toggle-btn" data-version="3" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-left:none;border-radius:0;background:transparent;color:var(--text-secondary,#888);cursor:pointer;">Version 3</button>
-                        <button class="burn-clock-toggle-btn" data-version="4" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-left:none;border-radius:0;background:transparent;color:var(--text-secondary,#888);cursor:pointer;">Version 4</button>
-                        <button class="burn-clock-toggle-btn" data-version="5" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-left:none;border-radius:0;background:transparent;color:var(--text-secondary,#888);cursor:pointer;">Version 5</button>
-                        <button class="burn-clock-toggle-btn" data-version="6" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-left:none;border-radius:0 6px 6px 0;background:transparent;color:var(--text-secondary,#888);cursor:pointer;">Version 6</button>
                     </div>
 
                     <div class="profile-section-constrained burn-clock-section-wide">
@@ -150,8 +130,8 @@
                         <div class="burn-clock-wrapper">
                             <div class="burn-clock-top-bar" style="position:relative;display:flex;justify-content:center;align-items:center;width:100%;margin-bottom:12px;">
                                 <div class="burn-clock-view-toggle" style="display:flex;gap:0;">
-                                <button class="burn-clock-toggle-btn active" id="toggleDaily" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-radius:6px 0 0 6px;background:var(--accent,#c45a1c);color:#fff;cursor:pointer;">Daily</button>
-                                <button class="burn-clock-toggle-btn" id="toggleWeekly" style="padding:6px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border:1px solid var(--border,#ddd);border-left:none;border-radius:0 6px 6px 0;background:transparent;color:var(--text-secondary,#888);cursor:pointer;">Weekly Avg</button>
+                                <button class="burn-clock-toggle-btn active" id="toggleDaily" style="border-radius:6px 0 0 6px;">Daily</button>
+                                <button class="burn-clock-toggle-btn" id="toggleWeekly" style="border-left:none;border-radius:0 6px 6px 0;">Weekly Avg</button>
                                 </div>
                                 <button class="copy-burn-btn copy-icon-btn" id="copyConcurrency" title="Copy" style="position:absolute;right:0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                             </div>
@@ -161,53 +141,7 @@
                                     <span id="dayLabel" style="font-size:13px;font-weight:600;min-width:90px;text-align:center;">Today</span>
                                     <button class="copy-burn-btn" id="dayNext" style="font-size:16px;padding:4px 10px;" title="Next day" disabled>&#9654;</button>
                                 </div>
-                                <div id="dailyVersion1">
-                                    <div class="daily-summary" id="dailySummary1" style="padding:12px 16px;font-size:15px;line-height:1.6;color:var(--text-secondary);text-align:center;"></div>
-                                    <div class="burn-clock-split">
-                                        <div class="burn-clock-right">
-                                            <div class="burn-clock-section">
-                                                <div class="burn-clock-svg-container">
-                                                    <svg class="burn-clock-svg" id="burnClockDaily1" viewBox="0 0 860 296"></svg>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div id="dailyVersion2" style="display:none;">
-                                    <div class="daily-summary" id="dailySummary2" style="padding:12px 16px;font-size:15px;line-height:1.6;color:var(--text-secondary);text-align:center;"></div>
-                                    <div class="burn-clock-split">
-                                        <div class="burn-clock-right">
-                                            <div class="burn-clock-section">
-                                                <div class="burn-clock-svg-container">
-                                                    <svg class="burn-clock-svg" id="burnClockDaily2" viewBox="0 0 860 296"></svg>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div id="dailyVersion3" style="display:none;">
-                                    <div class="daily-summary" id="dailySummary3" style="display:none;"></div>
-                                    <div style="width:100%;margin:0 auto;overflow-x:auto;background:#e0e0e0;border-radius:16px;padding:16px;">
-                                        <svg id="burnClockDaily3" style="min-width:580px;width:100%;height:auto;display:block;" viewBox="0 0 657 500"></svg>
-                                    </div>
-                                </div>
-                                <div id="dailyVersion4" style="display:none;">
-                                    <div class="daily-summary" id="dailySummary4" style="display:none;"></div>
-                                    <div style="width:100%;margin:0 auto;overflow-x:auto;background:#e0e0e0;border-radius:16px;padding:16px;">
-                                        <svg id="burnClockDaily4" style="min-width:580px;width:100%;height:auto;display:block;" viewBox="0 0 657 500"></svg>
-                                    </div>
-                                </div>
-                                <div id="dailyVersion5" style="display:none;">
-                                    <div class="daily-summary" id="dailySummary5" style="display:none;"></div>
-                                    <div style="width:100%;margin:0 auto;overflow-x:auto;background:#e0e0e0;border-radius:16px;padding:16px;">
-                                        <svg id="burnClockDaily5" style="min-width:580px;width:100%;height:auto;display:block;" viewBox="0 0 657 500"></svg>
-                                    </div>
-                                </div>
-                                <div id="dailyVersion6" style="display:none;">
-                                    <div class="daily-summary" id="dailySummary6" style="display:none;"></div>
-                                    <div style="width:100%;margin:0 auto;overflow-x:auto;background:#e0e0e0;border-radius:16px;padding:16px;">
-                                        <svg id="burnClockDaily6" style="min-width:580px;width:100%;height:auto;display:block;" viewBox="0 0 657 500"></svg>
-                                    </div>
+                                <div id="dailyVersionMain">
                                 </div>
                             </div>
                             <div id="weeklyView" style="display:none;">
@@ -246,6 +180,12 @@
                             <div class="copy-feedback" id="concurrencyFeedback">Copied to clipboard!</div>
                         </div>
                     </div>
+                    </div>
+
+                    <div class="profile-section-constrained" id="dailyCardSection">
+                        <div class="burn-clock-card-bg">
+                            <svg id="burnClockDailyMain" style="width:100%;height:auto;display:block;" viewBox="0 0 657 500"></svg>
+                        </div>
                     </div>
 
                     <div class="profile-stats-below">
@@ -435,8 +375,8 @@
                                     pctEl.setAttribute('opacity', '0.5');
                                 }
                             });
-                            // Update v3/v4/v5 rank badges
-                            for (const vn of ['v3', 'v4', 'v5', 'v6']) {
+                            // Update rank badges
+                            for (const vn of ['v5', 'v6']) {
                                 const badge = document.getElementById(vn + 'RankBadge');
                                 if (badge && dr.peak_concurrency) {
                                     const txt = document.getElementById(vn + 'RankText');
@@ -559,39 +499,13 @@
                     document.getElementById('dailyView').style.display = '';
                     document.getElementById('weeklyView').style.display = 'none';
                     document.getElementById('toggleDaily').classList.add('active');
-                    document.getElementById('toggleDaily').style.background = 'var(--accent,#c45a1c)';
-                    document.getElementById('toggleDaily').style.color = '#fff';
                     document.getElementById('toggleWeekly').classList.remove('active');
-                    document.getElementById('toggleWeekly').style.background = 'transparent';
-                    document.getElementById('toggleWeekly').style.color = 'var(--text-secondary,#888)';
                 });
                 document.getElementById('toggleWeekly').addEventListener('click', () => {
                     document.getElementById('dailyView').style.display = 'none';
                     document.getElementById('weeklyView').style.display = '';
                     document.getElementById('toggleWeekly').classList.add('active');
-                    document.getElementById('toggleWeekly').style.background = 'var(--accent,#c45a1c)';
-                    document.getElementById('toggleWeekly').style.color = '#fff';
                     document.getElementById('toggleDaily').classList.remove('active');
-                    document.getElementById('toggleDaily').style.background = 'transparent';
-                    document.getElementById('toggleDaily').style.color = 'var(--text-secondary,#888)';
-                });
-
-                // Version toggle within daily view
-                document.querySelectorAll('.shareable-version-toggle .burn-clock-toggle-btn').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        const version = btn.dataset.version;
-                        document.querySelectorAll('.shareable-version-toggle .burn-clock-toggle-btn').forEach(b => {
-                            b.classList.remove('active');
-                            b.style.background = 'transparent';
-                            b.style.color = 'var(--text-secondary,#888)';
-                        });
-                        btn.classList.add('active');
-                        btn.style.background = 'var(--accent,#c45a1c)';
-                        btn.style.color = '#fff';
-                        for (let i = 1; i <= 6; i++) {
-                            document.getElementById('dailyVersion' + i).style.display = (String(i) === version) ? '' : 'none';
-                        }
-                    });
                 });
 
                 // Burn clock rendering functions
@@ -673,6 +587,9 @@
                     const cellW = 30, cellH = 30, gap = 4;
                     const marginLeft = 44, marginTop = 196;
                     const minRows = 5;
+                    const isDarkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
+                    const emptyCellColor = isDarkTheme ? '#1e1e1e' : '#d8d2ca';
+                    const labelColor = isDarkTheme ? '#888888' : '#8a8480';
 
                     let svgContent = '';
                     let maxSessions = 0;
@@ -701,7 +618,7 @@
                         for (let row = 0; row < maxRows; row++) {
                             const x = marginLeft + col * (cellW + gap);
                             const y = marginTop + (maxRows - 1 - row) * (cellH + gap);
-                            svgContent += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="currentColor" opacity="0.04" />`;
+                            svgContent += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${emptyCellColor}" opacity="0.8" />`;
                         }
 
                         // Draw filled cells
@@ -728,14 +645,14 @@
                     const xAxisY = marginTop + maxRows * (cellH + gap) + 12;
                     xLabels.forEach(l => {
                         const x = marginLeft + l.hour * (cellW + gap) + cellW / 2;
-                        svgContent += `<text x="${x}" y="${xAxisY}" text-anchor="middle" fill="currentColor" font-size="11" font-family="inherit" opacity="0.6">${l.label}</text>`;
+                        svgContent += `<text x="${x}" y="${xAxisY}" text-anchor="middle" fill="${labelColor}" font-size="11" font-family="inherit">${l.label}</text>`;
                     });
 
                     // Y-axis: label the highest active concurrency row
                     if (maxSessions > 0) {
                         const peakRow = maxSessions - 1;
                         const peakY = marginTop + (maxRows - 1 - peakRow) * (cellH + gap) + cellH / 2;
-                        svgContent += `<text x="${marginLeft - 8}" y="${peakY}" text-anchor="end" dominant-baseline="middle" fill="currentColor" font-size="11" font-family="inherit" opacity="0.6">${maxSessions}x</text>`;
+                        svgContent += `<text x="${marginLeft - 8}" y="${peakY}" text-anchor="end" dominant-baseline="middle" fill="${labelColor}" font-size="11" font-family="inherit">${maxSessions}x</text>`;
                     }
 
                     // Mini terminal UIs - one per concurrent session
@@ -781,340 +698,23 @@
 
                     // Header text above terminals
                     if (maxSessions > 0) {
-                        svgContent += `<text x="${marginLeft}" y="16" fill="currentColor" font-size="16" font-weight="700" font-family="inherit" opacity="0.8">You ran ${maxSessions} concurrent terminal${maxSessions !== 1 ? 's' : ''}</text>`;
-                        svgContent += `<text id="concurrencyPercentile" x="${marginLeft}" y="32" fill="currentColor" font-size="12" font-family="inherit" opacity="0"></text>`;
+                        svgContent += `<text x="${marginLeft}" y="16" fill="${isDarkTheme ? '#e0e0e0' : '#1a1a1a'}" font-size="16" font-weight="700" font-family="inherit" opacity="0.8">You ran ${maxSessions} concurrent terminal${maxSessions !== 1 ? 's' : ''}</text>`;
+                        svgContent += `<text id="concurrencyPercentile" x="${marginLeft}" y="32" fill="${labelColor}" font-size="12" font-family="inherit" opacity="0"></text>`;
                     }
 
                     // Title just above grid, beneath terminals, with inline legend
-                    svgContent += `<text x="${marginLeft}" y="${marginTop - 8}" text-anchor="start" dominant-baseline="auto" fill="currentColor" font-size="18" font-weight="700" font-family="inherit" opacity="0.7">Activity Heatmap</text>`;
+                    svgContent += `<text x="${marginLeft}" y="${marginTop - 8}" text-anchor="start" dominant-baseline="auto" fill="${isDarkTheme ? '#e0e0e0' : '#1a1a1a'}" font-size="18" font-weight="700" font-family="inherit" opacity="0.7">Activity Heatmap</text>`;
                     if (!options.solidColor) {
                         const legendX = marginLeft + 180;
                         const legendY = marginTop - 20;
                         svgContent += `<defs><linearGradient id="heatLegendGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#FCF0E4"/><stop offset="100%" stop-color="#CC581C"/></linearGradient></defs>`;
-                        svgContent += `<text x="${legendX}" y="${legendY + 11}" fill="currentColor" font-size="11" font-family="inherit" opacity="0.6">~10 min</text>`;
+                        svgContent += `<text x="${legendX}" y="${legendY + 11}" fill="${labelColor}" font-size="11" font-family="inherit">~10 min</text>`;
                         svgContent += `<rect x="${legendX + 50}" y="${legendY}" width="80" height="12" rx="2" fill="url(#heatLegendGrad)"/>`;
-                        svgContent += `<text x="${legendX + 136}" y="${legendY + 11}" fill="currentColor" font-size="11" font-family="inherit" opacity="0.6">~60 min</text>`;
+                        svgContent += `<text x="${legendX + 136}" y="${legendY + 11}" fill="${labelColor}" font-size="11" font-family="inherit">~60 min</text>`;
                     }
 
                     svg.innerHTML = svgContent;
                     return maxSessions;
-                }
-
-                function renderShareableCardV3(svg, hourlyData, sessions, cardData) {
-                    sessions = sessions || [];
-                    const cellW = 22, cellH = 22, gap = 3;
-                    const gridMarginLeft = 60;
-                    const gridMarginRight = 30;
-                    const cardW = gridMarginLeft + 24 * (cellW + gap) - gap + gridMarginRight;
-
-                    // Find peak concurrency
-                    let maxSessions = 0;
-                    for (const data of hourlyData) {
-                        if (data.sessions.length > maxSessions) maxSessions = data.sessions.length;
-                    }
-                    const maxRows = Math.max(5, maxSessions);
-                    const gridHeight = maxRows * (cellH + gap) - gap;
-
-                    // Compute stats
-                    let totalDevMins = 0;
-                    for (const d of hourlyData) {
-                        for (const sess of d.sessions) {
-                            totalDevMins += sess.minutes;
-                        }
-                    }
-                    const devHours = (totalDevMins / 60).toFixed(1);
-                    const activeMins = cardData.activeMins || 0;
-                    const activeH = Math.floor(activeMins / 60);
-                    const activeM = Math.round(activeMins % 60);
-                    const activeDisplay = activeMins > 0 ? (activeH > 0 ? activeH + 'h ' + activeM + 'm' : activeM + 'm') : '0m';
-
-                    // Format date
-                    const dateObj = cardData.localDateStr ? new Date(cardData.localDateStr + 'T12:00:00') : new Date();
-                    const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-                    const dateDisplay = `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
-
-                    // Layout Y positions
-                    const topY = 30;
-                    const usernameY = 48;
-                    const dateY = 100;
-                    const heroY = 200;
-                    const heroLabelY = 235;
-                    const pillY = 260;
-                    const divider1Y = 310;
-                    const gridLabelY = 330;
-                    const gridTopY = 350;
-                    const gridBottomY = gridTopY + gridHeight + 24;
-                    const divider2Y = gridBottomY + 10;
-                    const statsY = divider2Y + 20;
-                    const statsHeight = 70;
-                    const divider3Y = statsY + statsHeight + 10;
-                    const footerY = divider3Y + 25;
-                    const cardH = footerY + 20;
-
-                    svg.setAttribute('viewBox', `0 0 ${cardW} ${cardH}`);
-
-                    let s = '';
-
-                    // 1. Card background — light cream
-                    s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
-
-                    // 2. Header — CLAUDERANK label + @username (left) + rank pill (right)
-                    s += `<text x="30" y="${topY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-                    s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="20" font-family="inherit" font-weight="700">@${cardData.username || 'anonymous'}</text>`;
-
-                    // Rank badge (hidden until rank data arrives) — upper right
-                    const rankPillH = 28;
-                    const rankPillW = 230;
-                    const rankPillX = cardW - 30 - rankPillW;
-                    const rankPillY = usernameY - 20;
-                    s += `<g id="v3RankBadge" opacity="0">`;
-                    s += `<rect x="${rankPillX}" y="${rankPillY}" width="${rankPillW}" height="${rankPillH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
-                    s += `<text id="v3RankText" x="${rankPillX + rankPillW / 2}" y="${rankPillY + rankPillH / 2 + 4}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.5"></text>`;
-                    s += `</g>`;
-
-                    // 3. Date — centered
-                    s += `<text x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">${dateDisplay}</text>`;
-
-                    // 4. Hero — token count (centered, dark text)
-                    const heroTokens = formatNumber(cardData.dayTokens || 0);
-                    s += `<text x="${cardW / 2}" y="${heroY}" fill="#1a1a1a" font-size="96" font-family="inherit" font-weight="800" text-anchor="middle">${heroTokens}</text>`;
-                    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
-
-                    // 5. Stats pill — estimated token value
-                    const heroCost = cardData.costText || '$0';
-                    const statsPillW = 240;
-                    const statsPillH = 30;
-                    const statsPillX = (cardW - statsPillW) / 2;
-                    s += `<rect x="${statsPillX}" y="${pillY}" width="${statsPillW}" height="${statsPillH}" rx="15" ry="15" fill="#f5f0eb" stroke="#e0d8d0" stroke-width="1"/>`;
-                    s += `<text x="${cardW / 2}" y="${pillY + statsPillH / 2 + 5}" fill="#8a8480" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
-                    s += `<tspan fill="#E8692D">${heroCost}</tspan> EST. TOKEN VALUE`;
-                    s += `</text>`;
-
-                    // 6. Divider 1
-                    s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
-
-                    // 7. Grid labels — AGENT TIMELINE · DATE (left) / PEAK N (right)
-                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="11" font-family="inherit" font-weight="700" letter-spacing="1.5">AGENT TIMELINE · ${dateDisplay}</text>`;
-                    s += `<text x="${cardW - 30}" y="${gridLabelY}" fill="#8a8480" font-size="11" font-family="inherit" font-weight="700" letter-spacing="1.5" text-anchor="end">PEAK ${maxSessions}</text>`;
-
-                    // Grid row labels (A1, A2, ...) on the left
-                    for (let row = 0; row < maxRows; row++) {
-                        const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 4;
-                        s += `<text x="30" y="${y}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600">A${row + 1}</text>`;
-                    }
-
-                    // Grid cells
-                    const nowHour = new Date().getHours();
-                    for (let col = 0; col < 24; col++) {
-                        const data = hourlyData[col];
-                        // Empty background cells
-                        for (let row = 0; row < maxRows; row++) {
-                            const x = gridMarginLeft + col * (cellW + gap);
-                            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
-                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#d8d2ca" opacity="0.8"/>`;
-                        }
-                        // Filled cells
-                        for (const session of data.sessions) {
-                            if (session.index > maxRows) continue;
-                            const row = session.index - 1;
-                            const x = gridMarginLeft + col * (cellW + gap);
-                            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
-                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#E8692D"/>`;
-                        }
-                    }
-
-                    // X-axis labels
-                    const xAxisY = gridTopY + gridHeight + 18;
-                    const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
-                    const startHour = (nowHour + 1) % 24;
-                    const midHour = (nowHour + 13) % 24;
-                    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit">${fmtHr(startHour)}</text>`;
-                    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit">${fmtHr(midHour)}</text>`;
-                    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit" text-anchor="end">${fmtHr(nowHour)}</text>`;
-
-                    // 8. Divider 2
-                    s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
-
-                    // 9. Stats row (3 columns): AGENT HOURS | CONCURRENT AGENTS | TOTAL CONCURRENCY
-                    let concurrentMins = 0;
-                    for (const d of hourlyData) {
-                        const s2 = d.sessions.find(s => s.index === 2);
-                        if (s2) concurrentMins += s2.minutes;
-                    }
-                    const concDisplay = concurrentMins >= 60
-                        ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
-                        : Math.round(concurrentMins) + 'm';
-                    const colW = (cardW - 60) / 3;
-                    const statsLabels = ['TOTAL AGENT HOURS', 'CONCURRENT AGENTS', 'CONCURRENCY TIME'];
-                    const statsValues = [devHours + 'h', maxSessions + '×', concDisplay];
-                    const statsColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
-
-                    for (let i = 0; i < 3; i++) {
-                        const cx = 30 + colW * i + colW / 2;
-                        s += `<text x="${cx}" y="${statsY + 18}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="1" text-anchor="middle">${statsLabels[i]}</text>`;
-                        s += `<text x="${cx}" y="${statsY + 50}" fill="${statsColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
-                        if (i < 2) {
-                            const divX = 30 + colW * (i + 1);
-                            s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#c8c0b8" stroke-width="1"/>`;
-                        }
-                    }
-
-                    // 10. Divider 3
-                    s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
-
-                    // 11. Footer
-                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
-
-                    svg.innerHTML = s;
-                }
-
-                function renderShareableCardV4(svg, hourlyData, sessions, cardData) {
-                    sessions = sessions || [];
-                    const cellW = 22, cellH = 22, gap = 3;
-                    const gridMarginLeft = 60;
-                    const gridMarginRight = 30;
-                    const cardW = gridMarginLeft + 24 * (cellW + gap) - gap + gridMarginRight;
-
-                    // Find peak concurrency — V4 uses exact peak for row count (no minimum)
-                    let maxSessions = 0;
-                    for (const data of hourlyData) {
-                        if (data.sessions.length > maxSessions) maxSessions = data.sessions.length;
-                    }
-                    const maxRows = Math.max(1, maxSessions);
-                    const gridHeight = maxRows * (cellH + gap) - gap;
-
-                    // Compute stats
-                    let totalDevMins = 0;
-                    for (const d of hourlyData) {
-                        for (const sess of d.sessions) {
-                            totalDevMins += sess.minutes;
-                        }
-                    }
-                    const devHours = (totalDevMins / 60).toFixed(1);
-                    const activeMins = cardData.activeMins || 0;
-                    const activeH = Math.floor(activeMins / 60);
-                    const activeM = Math.round(activeMins % 60);
-                    const activeDisplay = activeMins > 0 ? (activeH > 0 ? activeH + 'h ' + activeM + 'm' : activeM + 'm') : '0m';
-
-                    // Format date
-                    const dateObj = cardData.localDateStr ? new Date(cardData.localDateStr + 'T12:00:00') : new Date();
-                    const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-                    const dateDisplay = `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
-
-                    // Layout Y positions
-                    const topY = 30;
-                    const usernameY = 48;
-                    const dateY = 100;
-                    const heroY = 200;
-                    const heroLabelY = 235;
-                    const pillY = 260;
-                    const divider1Y = 310;
-                    const gridLabelY = 340;
-                    const gridTopY = 360;
-                    const gridBottomY = gridTopY + gridHeight + 24;
-                    const divider2Y = gridBottomY + 10;
-                    const statsY = divider2Y + 20;
-                    const statsHeight = 70;
-                    const divider3Y = statsY + statsHeight + 10;
-                    const footerY = divider3Y + 25;
-                    const cardH = footerY + 20;
-
-                    svg.setAttribute('viewBox', `0 0 ${cardW} ${cardH}`);
-
-                    let s = '';
-
-                    s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
-
-                    s += `<text x="30" y="${topY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-                    s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="20" font-family="inherit" font-weight="700">@${cardData.username || 'anonymous'}</text>`;
-
-                    const rankPillH = 28;
-                    const rankPillW = 230;
-                    const rankPillX = cardW - 30 - rankPillW;
-                    const rankPillY = usernameY - 20;
-                    s += `<g id="v4RankBadge" opacity="0">`;
-                    s += `<rect x="${rankPillX}" y="${rankPillY}" width="${rankPillW}" height="${rankPillH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
-                    s += `<text id="v4RankText" x="${rankPillX + rankPillW / 2}" y="${rankPillY + rankPillH / 2 + 4}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.5"></text>`;
-                    s += `</g>`;
-
-                    s += `<text x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">${dateDisplay}</text>`;
-
-                    const heroTokens = formatNumber(cardData.dayTokens || 0);
-                    s += `<text x="${cardW / 2}" y="${heroY}" fill="#1a1a1a" font-size="96" font-family="inherit" font-weight="800" text-anchor="middle">${heroTokens}</text>`;
-                    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
-
-                    const heroCost = cardData.costText || '$0';
-                    const statsPillW = 240;
-                    const statsPillH = 30;
-                    const statsPillX = (cardW - statsPillW) / 2;
-                    s += `<rect x="${statsPillX}" y="${pillY}" width="${statsPillW}" height="${statsPillH}" rx="15" ry="15" fill="#f5f0eb" stroke="none"/>`;
-                    s += `<text x="${cardW / 2}" y="${pillY + statsPillH / 2 + 5}" fill="#8a8480" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
-                    s += `<tspan fill="#E8692D">${heroCost}</tspan> EST. TOKEN VALUE`;
-                    s += `</text>`;
-
-                    s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
-
-                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="11" font-family="inherit" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
-
-                    for (let row = 0; row < maxRows; row++) {
-                        const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 4;
-                        s += `<text x="30" y="${y}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600">A${row + 1}</text>`;
-                    }
-
-                    const nowHour = new Date().getHours();
-                    for (let col = 0; col < 24; col++) {
-                        const data = hourlyData[col];
-                        for (let row = 0; row < maxRows; row++) {
-                            const x = gridMarginLeft + col * (cellW + gap);
-                            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
-                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#d8d2ca" opacity="0.8"/>`;
-                        }
-                        for (const session of data.sessions) {
-                            if (session.index > maxRows) continue;
-                            const row = session.index - 1;
-                            const x = gridMarginLeft + col * (cellW + gap);
-                            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
-                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#E8692D"/>`;
-                        }
-                    }
-
-                    const xAxisY = gridTopY + gridHeight + 18;
-                    const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
-                    const startHour = (nowHour + 1) % 24;
-                    const midHour = (nowHour + 13) % 24;
-                    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit">${fmtHr(startHour)}</text>`;
-                    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit">${fmtHr(midHour)}</text>`;
-                    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit" text-anchor="end">${fmtHr(nowHour)}</text>`;
-
-                    s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
-
-                    let concurrentMins = 0;
-                    for (const d of hourlyData) {
-                        const s2 = d.sessions.find(s => s.index === 2);
-                        if (s2) concurrentMins += s2.minutes;
-                    }
-                    const concDisplay = concurrentMins >= 60
-                        ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
-                        : Math.round(concurrentMins) + 'm';
-                    const colW = (cardW - 60) / 3;
-                    const statsLabels = ['TOTAL AGENT HOURS', 'CONCURRENT AGENTS', 'CONCURRENCY TIME'];
-                    const statsValues = [devHours + 'h', maxSessions + '×', concDisplay];
-                    const statsColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
-
-                    for (let i = 0; i < 3; i++) {
-                        const cx = 30 + colW * i + colW / 2;
-                        s += `<text x="${cx}" y="${statsY + 18}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="1" text-anchor="middle">${statsLabels[i]}</text>`;
-                        s += `<text x="${cx}" y="${statsY + 50}" fill="${statsColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
-                        if (i < 2) {
-                            const divX = 30 + colW * (i + 1);
-                            s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#c8c0b8" stroke-width="1"/>`;
-                        }
-                    }
-
-                    s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
-                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
-
-                    svg.innerHTML = s;
                 }
 
                 function renderShareableCardV5(svg, hourlyData, sessions, cardData) {
@@ -1479,14 +1079,6 @@
                     burnClockDayData = hourlyData;
 
                     const sessions = concurrencyHistogram.sessions || [];
-                    const versionOptions = {
-                        burnClockDaily1: {},
-                        burnClockDaily2: { solidColor: '#CC581C' },
-                    };
-                    for (const svgId of ['burnClockDaily1', 'burnClockDaily2']) {
-                        const svg = document.getElementById(svgId);
-                        if (svg) renderHeatmapGrid(svg, hourlyData, false, sessions, versionOptions[svgId]);
-                    }
 
                     // Update daily summary text
                     const utcDatesForDay = utcDatesForLocalDay(localDateStr);
@@ -1512,34 +1104,25 @@
                     const ah = Math.floor(activeMins / 60);
                     const am = Math.round(activeMins % 60);
                     const activeText = activeMins > 0 ? (ah > 0 ? ah + 'h ' + am + 'm' : am + 'm') : null;
-                    // Store daily stats for summary rendering after ranks arrive
                     window._dailySummary = { activeText, dayTokens, costText };
-                    // Render initial summary (without percentile — ranks arrive async)
                     renderDailySummary();
 
-                    // Version 3: shareable card — use last 24 hours (yesterday + today)
-                    let v3HourlyData = hourlyData;
+                    // Build last-24-hours data for the shareable card
+                    let cardHourlyData = hourlyData;
                     if (yesterdayConcurrency && yesterdayStr) {
                         const yesterdayHourly = processHourlyData(yesterdayConcurrency, yesterdayStr);
                         const nowHour = new Date().getHours();
-                        // Take hours from yesterday after current hour, then today up to current hour
                         const last24 = [];
-                        for (let i = nowHour + 1; i < 24; i++) {
-                            last24.push(yesterdayHourly[i]);
-                        }
-                        for (let i = 0; i <= nowHour; i++) {
-                            last24.push(hourlyData[i]);
-                        }
-                        v3HourlyData = last24;
+                        for (let i = nowHour + 1; i < 24; i++) last24.push(yesterdayHourly[i]);
+                        for (let i = 0; i <= nowHour; i++) last24.push(hourlyData[i]);
+                        cardHourlyData = last24;
                     }
-                    // Recompute stats from last-24-hours data for V3
-                    let v3ActiveMins = 0;
-                    for (const d of v3HourlyData) {
+                    let cardActiveMins = 0;
+                    for (const d of cardHourlyData) {
                         const s1 = d.sessions.find(s => s.index === 1);
-                        if (s1) v3ActiveMins += s1.minutes;
+                        if (s1) cardActiveMins += s1.minutes;
                     }
-                    // Cost for last 24h: include yesterday's tokens proportionally
-                    let v3DayTokens = dayTokens;
+                    let cardDayTokens = dayTokens;
                     if (yesterdayConcurrency && yesterdayStr) {
                         const yesterdayUtcDates = utcDatesForLocalDay(yesterdayStr);
                         let yesterdayTokens = 0;
@@ -1550,43 +1133,59 @@
                         if (yesterdayUtcDates.length > 1 && yesterdayTokens > 0) {
                             yesterdayTokens = Math.round(yesterdayTokens / yesterdayUtcDates.length);
                         }
-                        // Weight: fraction of hours from each day
                         const nowH = new Date().getHours();
                         const todayHours = nowH + 1;
                         const yesterdayHours = 24 - todayHours;
-                        v3DayTokens = Math.round(dayTokens * (todayHours / 24) + yesterdayTokens * (yesterdayHours / 24));
+                        cardDayTokens = Math.round(dayTokens * (todayHours / 24) + yesterdayTokens * (yesterdayHours / 24));
                     }
-                    let v3CostText = '$0';
-                    if (totalTokens > 0 && v3DayTokens > 0 && totalCost > 0) {
-                        v3CostText = formatCost(totalCost * (v3DayTokens / totalTokens));
+                    let cardCostText = '$0';
+                    if (totalTokens > 0 && cardDayTokens > 0 && totalCost > 0) {
+                        cardCostText = formatCost(totalCost * (cardDayTokens / totalTokens));
                     }
-                    const svg3 = document.getElementById('burnClockDaily3');
-                    const v3CardData = {
+                    const cardData = {
                         username: username,
                         localDateStr: localDateStr,
-                        activeMins: v3ActiveMins,
-                        dayTokens: v3DayTokens,
-                        costText: v3CostText,
+                        activeMins: cardActiveMins,
+                        dayTokens: cardDayTokens,
+                        costText: cardCostText,
                         peakRank: null,
                         peakPercentile: null,
                     };
-                    if (svg3) renderShareableCardV3(svg3, v3HourlyData, sessions, v3CardData);
-                    const svg4 = document.getElementById('burnClockDaily4');
-                    if (svg4) renderShareableCardV4(svg4, v3HourlyData, sessions, v3CardData);
-                    const svg5 = document.getElementById('burnClockDaily5');
-                    if (svg5) renderShareableCardV5(svg5, v3HourlyData, sessions, v3CardData);
-                    const svg6 = document.getElementById('burnClockDaily6');
-                    if (svg6) renderShareableCardV6(svg6, v3HourlyData, sessions, v3CardData);
+
+                    // Store for theme-toggle re-render
+                    window._burnClockRenderArgs = { cardHourlyData, sessions, cardData };
+
+                    // Theme-aware dispatch: V5 for light, V6 for dark
+                    const svgMain = document.getElementById('burnClockDailyMain');
+                    if (svgMain) {
+                        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+                        isDark ? renderShareableCardV6(svgMain, cardHourlyData, sessions, cardData)
+                               : renderShareableCardV5(svgMain, cardHourlyData, sessions, cardData);
+                    }
                 }
+
+                // Re-render burn clock on theme toggle
+                const themeObserver = new MutationObserver(() => {
+                    if (window._burnClockRenderArgs) {
+                        const { cardHourlyData, sessions, cardData } = window._burnClockRenderArgs;
+                        const svgMain = document.getElementById('burnClockDailyMain');
+                        if (svgMain) {
+                            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+                            isDark ? renderShareableCardV6(svgMain, cardHourlyData, sessions, cardData)
+                                   : renderShareableCardV5(svgMain, cardHourlyData, sessions, cardData);
+                        }
+                    }
+                });
+                themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
                 if (history.length > 0) {
                     const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
                     const dates = sorted.map(h => h.date);
                     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-                    const lineColor = isDark ? '#e0e0e0' : '#333';
-                    const fillColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+                    const lineColor = '#E8692D';
+                    const fillColor = 'rgba(232,105,45,0.08)';
                     const gridColor = isDark ? '#1a1a1a' : '#e8e8e8';
-                    const tickColor = isDark ? '#888' : '#888';
+                    const tickColor = '#8a8480';
                     const chartOpts = {
                         responsive: true,
                         maintainAspectRatio: true,
