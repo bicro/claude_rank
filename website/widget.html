@@ -383,7 +383,7 @@
 </div>
 
 <script type="module">
-import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, formatNumber, formatCost, animateValue } from './js/api.js';
+import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, formatNumber, formatCost, animateValue } from './js/api.js?v=2';
 
 const params = new URLSearchParams(window.location.search);
 const userHash = params.get('h');
@@ -404,6 +404,9 @@ let lastLocalDateStr = '';
 let lastHourlyData = [];
 let previousDayTokens = 0;
 let previousDayCostRaw = 0;
+let previousPeakAgents = 0;
+let previousAgentMins = 0;
+let previousConcMins = 0;
 
 // ── Helpers ──
 function escHtml(s) {
@@ -474,7 +477,7 @@ function getV5Color(intensity) {
 // ── Render heatmap (widget scale) ──
 // V5 original: cellW=22, cellH=22, gap=3, marginLeft=60, marginRight=30 → 687px
 // Widget:      cellW=11, cellH=11, gap=2, marginLeft=22, marginRight=6  → 338px
-function renderHeatmap(svgEl, hourlyData) {
+function renderHeatmap(svgEl, hourlyData, isToday) {
   const container = svgEl.parentElement;
   const totalW = container.clientWidth || 338;
   const marginLeft = 18, marginRight = 0;
@@ -527,15 +530,23 @@ function renderHeatmap(svgEl, hourlyData) {
     }
   }
 
-  // Time axis labels (V5: 3 labels relative to current hour)
+  // Time axis labels
   const axisY = gridHeight + axisH + 2;
-  const nowHour = new Date().getHours();
   const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
-  const startHour = (nowHour + 1) % 24;
-  const midHour = (nowHour + 13) % 24;
+  let startHour, midHour, endHour;
+  if (isToday) {
+    const nowHour = new Date().getHours();
+    startHour = (nowHour + 1) % 24;
+    midHour = (nowHour + 13) % 24;
+    endHour = nowHour;
+  } else {
+    startHour = 0;
+    midHour = 12;
+    endHour = 23;
+  }
   s += `<text x="${marginLeft}" y="${axisY}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace">${fmtHr(startHour)}</text>`;
   s += `<text x="${marginLeft + 12 * (cellW + gap)}" y="${axisY}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace">${fmtHr(midHour)}</text>`;
-  s += `<text x="${marginLeft + 23 * (cellW + gap) + cellW}" y="${axisY}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace" text-anchor="end">${fmtHr(nowHour)}</text>`;
+  s += `<text x="${marginLeft + 23 * (cellW + gap) + cellW}" y="${axisY}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace" text-anchor="end">${fmtHr(endHour)}</text>`;
 
   svgEl.innerHTML = s;
 
@@ -582,14 +593,17 @@ function updateStats(hourlyData) {
     if (s2) concurrentMins += s2.minutes;
   }
 
-  const devHours = (totalDevMins / 60).toFixed(1);
-  const concDisplay = concurrentMins >= 60
-    ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
-    : Math.round(concurrentMins) + 'm';
+  animateValue(document.getElementById('statPeakAgents'), previousPeakAgents, maxSessions, v => v + '\u00d7');
+  previousPeakAgents = maxSessions;
 
-  document.getElementById('statPeakAgents').innerHTML = maxSessions + '&times;';
-  document.getElementById('statAgentHours').textContent = devHours + 'h';
-  document.getElementById('statConcTime').textContent = concDisplay;
+  animateValue(document.getElementById('statAgentHours'), previousAgentMins, totalDevMins, v => (v / 60).toFixed(1) + 'h');
+  previousAgentMins = totalDevMins;
+
+  animateValue(document.getElementById('statConcTime'), previousConcMins, concurrentMins, v => {
+    const m = Math.round(v);
+    return m >= 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + 'm';
+  });
+  previousConcMins = concurrentMins;
 }
 
 // ── Center display ──
@@ -670,7 +684,7 @@ async function loadDayByIndex(index) {
     lastLocalDateStr = localDateStr;
     const hourlyData = processHourlyData(lastMergedHistograms, localDateStr);
     lastHourlyData = hourlyData;
-    renderHeatmap(document.getElementById('heatmapSvg'), hourlyData);
+    renderHeatmap(document.getElementById('heatmapSvg'), hourlyData, localDateStr === localDateISO(new Date()));
     updateStats(hourlyData);
     notifyHeight();
   } catch (e) {
@@ -926,15 +940,24 @@ async function copyCardAsImage() {
     s += `<rect x="${markerX}" y="${gridTopY + gridHeight + 2}" width="${cellW}" height="2" rx="1" fill="${getV5Color(0.8)}"/>`;
   }
 
-  // Time axis (V5: 3 labels relative to current hour)
+  // Time axis
   const xAxisY = gridTopY + gridHeight + 18;
-  const expNowHour = new Date().getHours();
   const expFmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
-  const expStartHour = (expNowHour + 1) % 24;
-  const expMidHour = (expNowHour + 13) % 24;
+  const expIsToday = lastLocalDateStr === localDateISO(new Date());
+  let expStartHour, expMidHour, expEndHour;
+  if (expIsToday) {
+    const expNowHour = new Date().getHours();
+    expStartHour = (expNowHour + 1) % 24;
+    expMidHour = (expNowHour + 13) % 24;
+    expEndHour = expNowHour;
+  } else {
+    expStartHour = 0;
+    expMidHour = 12;
+    expEndHour = 23;
+  }
   s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="8">${expFmtHr(expStartHour)}</text>`;
   s += `<text x="${gridMarginLeft + 12 * (cellW + gp)}" y="${xAxisY}" fill="#8a8480" font-size="8">${expFmtHr(expMidHour)}</text>`;
-  s += `<text x="${gridMarginLeft + 23 * (cellW + gp)}" y="${xAxisY}" fill="#8a8480" font-size="8" text-anchor="end">${expFmtHr(expNowHour)}</text>`;
+  s += `<text x="${gridMarginLeft + 23 * (cellW + gp)}" y="${xAxisY}" fill="#8a8480" font-size="8" text-anchor="end">${expFmtHr(expEndHour)}</text>`;
 
   // Divider 2
   s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;

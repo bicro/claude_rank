@@ -20,6 +20,13 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+  }
+  .panel.visible {
+    opacity: 1;
+    transform: none;
   }
   .drag-strip {
     position: absolute;
@@ -81,6 +88,17 @@ document.querySelector('.drag-strip').addEventListener('mousedown', (e) => {
     console.error('Failed to load identity:', e);
   }
 })();
+
+// ── Animate in/out ──
+const panel = document.querySelector('.panel');
+listen('overlay-visibility-changed', (event) => {
+  if (event.payload.visible) {
+    requestAnimationFrame(() => panel.classList.add('visible'));
+  } else {
+    panel.classList.remove('visible');
+    setTimeout(() => invoke('complete_hide'), 200);
+  }
+});
 
 // ── Hide button ──
 document.getElementById('btnHide').addEventListener('click', () => invoke('hide_overlay'));

@@ -661,14 +661,19 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
                 let state = app_for_events.state::<AppState>();
                 let pinned = *state.overlay_pinned.lock().unwrap();
                 if !pinned && *state.overlay_visible.lock().unwrap() {
-                    if let Some(win) = app_for_events.get_webview_window("overlay") {
-                        let _ = win.hide();
-                    }
                     *state.overlay_visible.lock().unwrap() = false;
                     let _ = app_for_events.emit("overlay-visibility-changed", serde_json::json!({ "visible": false }));
                     if let Some(menu_item) = state.toggle_menu_item.lock().unwrap().as_ref() {
                         let _ = menu_item.set_text("Show Widget");
                     }
+                    // Safety: force-hide after 300ms
+                    let app_clone = app_for_events.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(300));
+                        if let Some(window) = app_clone.get_webview_window("overlay") {
+                            let _ = window.hide();
+                        }
+                    });
                 }
             }
             _ => {}
@@ -708,10 +713,6 @@ async fn do_hide_overlay(
     app: AppHandle,
     state: &tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("overlay") {
-        window.hide().map_err(|e| e.to_string())?;
-    }
-
     *state.overlay_pinned.lock().unwrap() = false;
     *state.overlay_visible.lock().unwrap() = false;
 
@@ -720,6 +721,23 @@ async fn do_hide_overlay(
     }
 
     let _ = app.emit("overlay-visibility-changed", json!({ "visible": false }));
+
+    // Safety: force-hide after 300ms if frontend didn't call complete_hide
+    let app_clone = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        if let Some(window) = app_clone.get_webview_window("overlay") {
+            let _ = window.hide();
+        }
+    });
+    Ok(())
+}
+
+#[command]
+async fn complete_hide(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("overlay") {
+        window.hide().map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
@@ -751,16 +769,22 @@ fn toggle_overlay_sync(app: &AppHandle) {
     let is_visible = *state.overlay_visible.lock().unwrap();
 
     if is_visible {
-        if let Some(window) = app.get_webview_window("overlay") {
-            let _ = window.hide();
-            *state.overlay_pinned.lock().unwrap() = false;
-            *state.overlay_visible.lock().unwrap() = false;
-            let _ = app.emit("overlay-visibility-changed", json!({ "visible": false }));
+        *state.overlay_pinned.lock().unwrap() = false;
+        *state.overlay_visible.lock().unwrap() = false;
+        let _ = app.emit("overlay-visibility-changed", json!({ "visible": false }));
 
-            if let Some(menu_item) = state.toggle_menu_item.lock().unwrap().as_ref() {
-                let _ = menu_item.set_text("Show Widget");
-            }
+        if let Some(menu_item) = state.toggle_menu_item.lock().unwrap().as_ref() {
+            let _ = menu_item.set_text("Show Widget");
         }
+
+        // Safety: force-hide after 300ms
+        let app_clone = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            if let Some(window) = app_clone.get_webview_window("overlay") {
+                let _ = window.hide();
+            }
+        });
     } else if let Ok(window) = ensure_overlay_window(app) {
         *state.overlay_pinned.lock().unwrap() = false;
         let _ = configure_overlay(&window);
@@ -795,10 +819,6 @@ fn show_overlay_sync(app: &AppHandle) -> Result<(), String> {
 }
 
 fn hide_overlay_sync(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("overlay") {
-        let _ = window.hide();
-    }
-
     let state = app.state::<AppState>();
     *state.overlay_pinned.lock().unwrap() = false;
     *state.overlay_visible.lock().unwrap() = false;
@@ -808,6 +828,15 @@ fn hide_overlay_sync(app: &AppHandle) {
     }
 
     let _ = app.emit("overlay-visibility-changed", json!({ "visible": false }));
+
+    // Safety: force-hide after 300ms
+    let app_clone = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        if let Some(window) = app_clone.get_webview_window("overlay") {
+            let _ = window.hide();
+        }
+    });
 }
 
 #[command]
@@ -1028,6 +1057,7 @@ fn main() {
             show_overlay,
             hide_overlay,
             toggle_overlay,
+            complete_hide,
             get_overlay_visible,
             reload_overlay,
             copy_image_to_clipboard,
