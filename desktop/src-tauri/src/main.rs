@@ -215,6 +215,8 @@ async fn open_overlay_devtools(app: tauri::AppHandle) -> Result<(), String> {
 
 pub struct AppState {
     pub overlay_visible: Mutex<bool>,
+    pub overlay_pinned: Mutex<bool>,
+    pub last_programmatic_position: Mutex<std::time::Instant>,
     pub toggle_menu_item: Mutex<Option<MenuItem<tauri::Wry>>>,
     pub tray_icon: Mutex<Option<TrayIcon<tauri::Wry>>>,
     pub tray_icon_base: Mutex<image::RgbaImage>,
@@ -224,6 +226,8 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             overlay_visible: Mutex::new(false),
+            overlay_pinned: Mutex::new(false),
+            last_programmatic_position: Mutex::new(std::time::Instant::now()),
             toggle_menu_item: Mutex::new(None),
             tray_icon: Mutex::new(None),
             tray_icon_base: Mutex::new(image::RgbaImage::new(1, 1)),
@@ -430,6 +434,7 @@ fn size_to_logical(s: &tauri::Size, scale: f64) -> (f64, f64) {
 /// 3. Bottom-right fallback
 fn position_overlay_window(window: &tauri::WebviewWindow, app: &AppHandle) {
     let state = app.state::<AppState>();
+    *state.last_programmatic_position.lock().unwrap() = std::time::Instant::now();
 
     // Get scale factor for coordinate conversions
     let scale = window
@@ -453,8 +458,10 @@ fn position_overlay_window(window: &tauri::WebviewWindow, app: &AppHandle) {
         .as_ref()
         .and_then(|t| t.rect().ok().flatten());
 
-    // If we have a saved position for the target monitor, use it
-    if let Some(ref prefs) = prefs {
+    // If pinned (user dragged), restore saved position; otherwise skip to tray-icon positioning
+    let pinned = *state.overlay_pinned.lock().unwrap();
+    if pinned {
+      if let Some(ref prefs) = prefs {
         if !prefs.positions.is_empty() {
             if let Ok(monitors) = window.available_monitors() {
                 // Target monitor = monitor containing the tray icon, or primary
@@ -489,6 +496,7 @@ fn position_overlay_window(window: &tauri::WebviewWindow, app: &AppHandle) {
                 }
             }
         }
+      }
     }
 
     // Try to position below tray icon
@@ -642,6 +650,26 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
                         }
                     }
                 }
+                // Detect user drag: if the move happened well after the last programmatic position call
+                let state = app_for_events.state::<AppState>();
+                let elapsed = state.last_programmatic_position.lock().unwrap().elapsed();
+                if elapsed > std::time::Duration::from_millis(500) {
+                    *state.overlay_pinned.lock().unwrap() = true;
+                }
+            }
+            tauri::WindowEvent::Focused(false) => {
+                let state = app_for_events.state::<AppState>();
+                let pinned = *state.overlay_pinned.lock().unwrap();
+                if !pinned && *state.overlay_visible.lock().unwrap() {
+                    if let Some(win) = app_for_events.get_webview_window("overlay") {
+                        let _ = win.hide();
+                    }
+                    *state.overlay_visible.lock().unwrap() = false;
+                    let _ = app_for_events.emit("overlay-visibility-changed", serde_json::json!({ "visible": false }));
+                    if let Some(menu_item) = state.toggle_menu_item.lock().unwrap().as_ref() {
+                        let _ = menu_item.set_text("Show Widget");
+                    }
+                }
             }
             _ => {}
         }
@@ -658,6 +686,7 @@ async fn do_show_overlay(
     app: AppHandle,
     state: &tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    *state.overlay_pinned.lock().unwrap() = false;
     let window = ensure_overlay_window(&app)?;
     configure_overlay(&window)?;
     position_overlay_window(&window, &app);
@@ -683,6 +712,7 @@ async fn do_hide_overlay(
         window.hide().map_err(|e| e.to_string())?;
     }
 
+    *state.overlay_pinned.lock().unwrap() = false;
     *state.overlay_visible.lock().unwrap() = false;
 
     if let Some(menu_item) = state.toggle_menu_item.lock().unwrap().as_ref() {
@@ -723,6 +753,7 @@ fn toggle_overlay_sync(app: &AppHandle) {
     if is_visible {
         if let Some(window) = app.get_webview_window("overlay") {
             let _ = window.hide();
+            *state.overlay_pinned.lock().unwrap() = false;
             *state.overlay_visible.lock().unwrap() = false;
             let _ = app.emit("overlay-visibility-changed", json!({ "visible": false }));
 
@@ -731,6 +762,7 @@ fn toggle_overlay_sync(app: &AppHandle) {
             }
         }
     } else if let Ok(window) = ensure_overlay_window(app) {
+        *state.overlay_pinned.lock().unwrap() = false;
         let _ = configure_overlay(&window);
         position_overlay_window(&window, app);
 
@@ -746,6 +778,9 @@ fn toggle_overlay_sync(app: &AppHandle) {
 }
 
 fn show_overlay_sync(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    *state.overlay_pinned.lock().unwrap() = false;
+
     let window = ensure_overlay_window(app)?;
     configure_overlay(&window)?;
     position_overlay_window(&window, app);
@@ -753,7 +788,6 @@ fn show_overlay_sync(app: &AppHandle) -> Result<(), String> {
     let _ = window.show();
     let _ = window.set_focus();
 
-    let state = app.state::<AppState>();
     *state.overlay_visible.lock().unwrap() = true;
 
     let _ = app.emit("overlay-visibility-changed", json!({ "visible": true }));
@@ -766,6 +800,7 @@ fn hide_overlay_sync(app: &AppHandle) {
     }
 
     let state = app.state::<AppState>();
+    *state.overlay_pinned.lock().unwrap() = false;
     *state.overlay_visible.lock().unwrap() = false;
 
     if let Some(menu_item) = state.toggle_menu_item.lock().unwrap().as_ref() {
