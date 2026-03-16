@@ -23,9 +23,9 @@ impl FileWatcher {
                 info!("[stats-watcher] emitting cached stats immediately");
                 let _ = app.emit("metrics-updated", &m.data);
 
-                // Show cost in tray title immediately from cache
-                let total = cost::total_cost(&m.data.stats);
-                let label = cost::format_cost(total);
+                // Show token burn in tray immediately from cache
+                let tokens = cost::today_tokens(&m.data.stats);
+                let label = cost::format_tokens(tokens);
                 Self::update_tray_icon(&app, &label);
             }
         }
@@ -125,9 +125,9 @@ impl FileWatcher {
             m.refresh();
             let _ = app.emit("metrics-updated", &m.data);
 
-            // Update tray icon title with total cost
-            let total = cost::total_cost(&m.data.stats);
-            let label = cost::format_cost(total);
+            // Update tray icon with today's token burn
+            let tokens = cost::today_tokens(&m.data.stats);
+            let label = cost::format_tokens(tokens);
             Self::update_tray_icon(app, &label);
 
             Some(m.data.stats.clone())

@@ -932,7 +932,7 @@ fn main() {
             *state.tray_icon_base.lock().unwrap() = tray_rgba.clone();
 
             // Render initial composite tray image (icon + "$0.00" on white background)
-            let initial_icon = tray_render::render_tray_image(&tray_rgba, "$0.00");
+            let initial_icon = tray_render::render_tray_image(&tray_rgba, "0");
 
             let tray = TrayIconBuilder::new()
                 .icon(initial_icon)

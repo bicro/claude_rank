@@ -69,3 +69,31 @@ pub fn format_cost(cost: f64) -> String {
         format!("${:.0}", cost)
     }
 }
+
+/// Sum today's tokens across all models.
+pub fn today_tokens(stats: &StatsCache) -> u64 {
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    stats
+        .daily_model_tokens
+        .iter()
+        .find(|d| d.date == today)
+        .map(|d| d.tokens_by_model.values().sum::<u64>())
+        .unwrap_or(0)
+}
+
+/// Format a token count for tray display (e.g. "1.2M", "42K").
+pub fn format_tokens(tokens: u64) -> String {
+    if tokens == 0 {
+        "0".to_string()
+    } else if tokens < 1_000 {
+        format!("{}", tokens)
+    } else if tokens < 10_000 {
+        format!("{:.1}K", tokens as f64 / 1_000.0)
+    } else if tokens < 1_000_000 {
+        format!("{}K", tokens / 1_000)
+    } else if tokens < 10_000_000 {
+        format!("{:.1}M", tokens as f64 / 1_000_000.0)
+    } else {
+        format!("{}M", tokens / 1_000_000)
+    }
+}
