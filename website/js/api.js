@@ -112,3 +112,26 @@ export async function getUserDailyRanks(userHash, dateStr, period = 'day') {
     if (dateStr) url += `&date=${dateStr}`;
     return apiFetch(url);
 }
+
+const _animFrames = new WeakMap();
+
+export function animateValue(element, fromVal, toVal, formatter, duration = 800) {
+    if (_animFrames.has(element)) cancelAnimationFrame(_animFrames.get(element));
+    if (fromVal === toVal) {
+        element.textContent = formatter(toVal);
+        return;
+    }
+    const start = performance.now();
+    function tick(now) {
+        let t = Math.min((now - start) / duration, 1);
+        t = 1 - Math.pow(1 - t, 3); // easeOutCubic
+        const current = Math.round(fromVal + (toVal - fromVal) * t);
+        element.textContent = formatter(current);
+        if (t < 1) {
+            _animFrames.set(element, requestAnimationFrame(tick));
+        } else {
+            _animFrames.delete(element);
+        }
+    }
+    _animFrames.set(element, requestAnimationFrame(tick));
+}

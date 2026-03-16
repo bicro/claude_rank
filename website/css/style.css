@@ -39,7 +39,7 @@ a:hover { text-decoration: underline; }
     top: 0;
     z-index: 100;
 }
-.site-header h1 { font-size: 20px; font-weight: 700; }
+.site-header h1 { font-size: 13px; font-weight: 700; letter-spacing: 2px; }
 .site-header h1 a {
     display: inline-flex;
     align-items: center;
@@ -381,6 +381,26 @@ a:hover { text-decoration: underline; }
     padding: 0 24px;
 
 }
+.profile-section-divider {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 60px 24px 32px;
+}
+.profile-section-divider span {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+}
+.profile-section-divider::after {
+    content: '';
+    display: block;
+    height: 2px;
+    background: var(--border, #c8c0b8);
+}
 .profile-stats-below {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -429,9 +449,9 @@ a:hover { text-decoration: underline; }
 .stat-card .rank { color: #444; font-size: 13px; margin-top: 4px; }
 
 .profile-badges {
-    padding: 0 24px 24px;
+    padding: 0 24px 0;
     max-width: 900px;
-    margin: 0 auto;
+    margin: 24px auto 0;
 }
 .profile-badges h3 { margin-bottom: 12px; font-size: 16px; }
 .badges-grid {
@@ -455,9 +475,15 @@ a:hover { text-decoration: underline; }
     background: var(--bg-secondary);
     border-radius: var(--radius);
     padding: 16px;
-    margin: 0 auto 24px;
-    max-width: 900px;
+    margin-bottom: 16px;
     position: relative;
+}
+.profile-charts {
+    margin-top: 24px;
+    padding-bottom: 48px;
+}
+.profile-charts .chart-container:last-child {
+    margin-bottom: 0;
 }
 .chart-container h3 { margin-bottom: 12px; font-size: 16px; }
 .chart-container canvas { width: 100% !important; }
@@ -895,18 +921,55 @@ a:hover { text-decoration: underline; }
     width: 100%;
     box-sizing: border-box;
 }
-.burn-clock-nav-bar {
+/* Date nav overlay on card */
+body.page-profile .burn-clock-card-bg {
+    position: relative;
+}
+.burn-clock-card-date-nav {
+    position: absolute;
+    left: 0;
+    right: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    padding: 10px 16px;
-    background: var(--bg-card, #f9f9f9);
-    border: 1px solid var(--border, #e5e5e5);
-    border-radius: var(--radius, 12px);
-    margin-bottom: 12px;
-    width: 100%;
-    box-sizing: border-box;
+    gap: 8px;
+    z-index: 2;
+    pointer-events: none;
+}
+.burn-clock-card-date-nav .date-nav-btn,
+.burn-clock-card-date-nav .date-label {
+    pointer-events: auto;
+}
+.date-nav-btn {
+    background: transparent;
+    border: none;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    color: #8a8480;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 6px;
+    transition: color 0.15s;
+}
+.date-nav-btn:hover { color: #1a1a1a; }
+.date-nav-btn:disabled { visibility: hidden; }
+[data-theme="dark"] .date-nav-btn { color: #888888; }
+[data-theme="dark"] .date-nav-btn:hover { color: #e0e0e0; }
+.date-label {
+    font-size: 13px;
+    color: #8a8480;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    min-width: 120px;
+    text-align: center;
+}
+[data-theme="dark"] .date-label { color: #888888; }
+.burn-clock-copy-btn {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    z-index: 2;
 }
 .burn-clock-split {
     display: flex;
@@ -1086,14 +1149,14 @@ a:hover { text-decoration: underline; }
 
 /* ── Profile Page Warm Palette (scoped) ── */
 body.page-profile {
-    --bg-primary: #faf7f3;
-    --bg-secondary: #f9f6f2;
-    --bg-card: #f5f0eb;
+    --bg-primary: #fafafa;
+    --bg-secondary: #f8f8f7;
+    --bg-card: #f5f5f4;
     --text-secondary: #8a8480;
     --accent: #E8692D;
     --accent-glow: rgba(232, 105, 45, 0.10);
-    --border: #c8c0b8;
-    background: radial-gradient(ellipse at 50% 0%, #fdf9f5 0%, #f5f0eb 60%, #ede6dd 100%);
+    --border: #e0ddd9;
+    background: radial-gradient(ellipse at 50% 0%, #fafafa 0%, #f5f5f4 60%, #f0f0ee 100%);
 }
 [data-theme="dark"] body.page-profile {
     --bg-primary: #0d0d0d;
@@ -1110,8 +1173,13 @@ body.page-profile {
 
 /* ── Profile-scoped component overrides ── */
 body.page-profile .stat-category {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
+    background: #ffffff;
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.10);
+}
+[data-theme="dark"] body.page-profile .stat-category {
+    background: #0d0d0d;
 }
 body.page-profile .stat-category-value {
     color: var(--accent);
@@ -1128,48 +1196,43 @@ body.page-profile .stat-card .rank {
     color: var(--accent);
 }
 body.page-profile .profile-avatar {
-    border: 2px solid var(--accent);
-    background: var(--accent-glow);
+    border: 2px solid #1a1a1a;
+    background: rgba(0, 0, 0, 0.05);
 }
 body.page-profile .tier-badge {
-    background: var(--accent-glow);
-    color: var(--accent);
+    background: rgba(0, 0, 0, 0.06);
+    color: #1a1a1a;
 }
 body.page-profile .xp-fill {
-    background: var(--accent);
+    background: #1a1a1a;
 }
 body.page-profile .level-badge {
-    background: var(--accent-glow);
-    color: var(--accent);
+    background: rgba(0, 0, 0, 0.06);
+    color: #1a1a1a;
 }
 body.page-profile .badge-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
+    background: #ffffff;
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.10);
+}
+[data-theme="dark"] body.page-profile .badge-card {
+    background: #0d0d0d;
 }
 body.page-profile .chart-container {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
+    background: #ffffff;
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.10);
+}
+[data-theme="dark"] body.page-profile .chart-container {
+    background: #0d0d0d;
 }
 body.page-profile .burn-clock-card-bg {
-    width: 100%;
+    max-width: 500px;
     margin: 0 auto;
-}
-body.page-profile .burn-clock-toggle-btn {
-    padding: 6px 16px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-family: inherit;
-}
-body.page-profile .burn-clock-toggle-btn.active {
-    background: var(--accent);
-    color: #fff;
-    border-color: var(--accent);
+    border-radius: 16px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.10);
 }
 body.page-profile .daily-stat-value {
     color: var(--accent);

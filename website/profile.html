@@ -19,7 +19,7 @@
 </head>
 <body class="page-profile">
     <header class="site-header">
-        <h1><a href="/" style="color:inherit;text-decoration:none"><img src="images/logo.png" alt="ClaudeRank logo" class="site-logo">ClaudeRank</a></h1>
+        <h1><a href="/" style="color:inherit;text-decoration:none"><img src="images/logo.png" alt="ClaudeRank logo" class="site-logo">CLAUDERANK</a></h1>
         <nav class="header-nav" id="headerNav">
             <a href="https://discord.gg/mCkyz9UCCd" class="discord-link" target="_blank"><svg width="16" height="12" viewBox="0 0 71 55" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M60.1 4.9A58.5 58.5 0 0045.4.2a.2.2 0 00-.2.1 40.8 40.8 0 00-1.8 3.7 54 54 0 00-16.2 0A37.4 37.4 0 0025.4.3a.2.2 0 00-.2-.1A58.4 58.4 0 0010.5 4.9a.2.2 0 00-.1.1C1.5 18.7-.9 32.2.3 45.5v.1a58.8 58.8 0 0017.7 9a.2.2 0 00.3-.1 42 42 0 003.6-5.9.2.2 0 00-.1-.3 38.8 38.8 0 01-5.5-2.6.2.2 0 01 0-.4l1.1-.9a.2.2 0 01.2 0 42 42 0 0035.6 0 .2.2 0 01.2 0l1.1.9a.2.2 0 010 .4 36.4 36.4 0 01-5.5 2.6.2.2 0 00-.1.3 47.2 47.2 0 003.6 5.9.2.2 0 00.3.1 58.6 58.6 0 0017.7-9v-.1c1.4-15.2-2.4-28.4-10-40.1a.2.2 0 00-.1-.1zM23.7 37.3c-3.5 0-6.3-3.2-6.3-7s2.8-7 6.3-7 6.4 3.2 6.3 7-2.8 7-6.3 7zm23.3 0c-3.5 0-6.3-3.2-6.3-7s2.8-7 6.3-7 6.4 3.2 6.3 7-2.8 7-6.3 7z" fill="currentColor"/></svg>Discord</a>
             <a href="https://github.com/bicro/claude_rank" class="discord-link" target="_blank"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>GitHub</a>
@@ -33,7 +33,7 @@
     <div id="profileContent"><div class="loading">Loading profile</div></div>
 
     <script type="module">
-        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserConcurrency, getUserConcurrencyByDate, getUserDailyRanks, formatNumber, formatCost, getCategoryLabel, getTier } from './js/api.js';
+        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserConcurrency, getUserConcurrencyByDate, getUserDailyRanks, formatNumber, formatCost, getCategoryLabel, getTier, animateValue } from './js/api.js';
 
         const params = new URLSearchParams(window.location.search);
         const userHash = params.get('hash');
@@ -125,113 +125,66 @@
                         </div>
                     </div>
 
-                    <div class="profile-section-constrained burn-clock-section-wide">
-                    <div class="burn-clock-container-full">
-                        <div class="burn-clock-wrapper">
-                            <div class="burn-clock-top-bar" style="position:relative;display:flex;justify-content:center;align-items:center;width:100%;margin-bottom:12px;">
-                                <div class="burn-clock-view-toggle" style="display:flex;gap:0;">
-                                <button class="burn-clock-toggle-btn active" id="toggleDaily" style="border-radius:6px 0 0 6px;">Daily</button>
-                                <button class="burn-clock-toggle-btn" id="toggleWeekly" style="border-left:none;border-radius:0 6px 6px 0;">Weekly Avg</button>
-                                </div>
-                                <button class="copy-burn-btn copy-icon-btn" id="copyConcurrency" title="Copy" style="position:absolute;right:0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-                            </div>
-                            <div id="dailyView">
-                                <div class="burn-clock-nav-bar">
-                                    <button class="copy-burn-btn" id="dayPrev" style="font-size:16px;padding:4px 10px;" title="Previous day">&#9664;</button>
-                                    <span id="dayLabel" style="font-size:13px;font-weight:600;min-width:90px;text-align:center;">Today</span>
-                                    <button class="copy-burn-btn" id="dayNext" style="font-size:16px;padding:4px 10px;" title="Next day" disabled>&#9654;</button>
-                                </div>
-                                <div id="dailyVersionMain">
-                                </div>
-                            </div>
-                            <div id="weeklyView" style="display:none;">
-                                <div class="burn-clock-nav-bar">
-                                    <button class="copy-burn-btn" id="weekPrev" style="font-size:16px;padding:4px 10px;" title="Previous week">&#9664;</button>
-                                    <span id="weekLabel" style="font-size:13px;font-weight:600;min-width:130px;text-align:center;">This Week</span>
-                                    <button class="copy-burn-btn" id="weekNext" style="font-size:16px;padding:4px 10px;" title="Next week" disabled>&#9654;</button>
-                                </div>
-                                <div class="daily-stats-row">
-                                    <div class="daily-stat-card">
-                                        <div class="daily-stat-label">Avg Spend</div>
-                                        <div class="daily-stat-value" id="weeklyCostDisplay">&mdash;</div>
-                                        <div class="daily-stat-rank" id="weeklyCostRank"></div>
-                                    </div>
-                                    <div class="daily-stat-card">
-                                        <div class="daily-stat-label">Peak Avg</div>
-                                        <div class="daily-stat-value" id="weeklyPeakDisplay">0</div>
-                                        <div class="daily-stat-rank" id="weeklyPeakRank"></div>
-                                    </div>
-                                </div>
-                                <div class="burn-clock-split">
-                                    <div class="burn-clock-right">
-                                        <div class="burn-clock-section">
-                                            <div class="burn-clock-svg-container">
-                                                <svg class="burn-clock-svg" id="burnClock" viewBox="0 0 860 296"></svg>
-                                            </div>
-                                        </div>
-                                        <div class="burn-clock-legend">
-                                            <span class="legend-label">~10 min</span>
-                                            <div class="legend-gradient"></div>
-                                            <span class="legend-label">~60 min</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="copy-feedback" id="concurrencyFeedback">Copied to clipboard!</div>
-                        </div>
-                    </div>
-                    </div>
+                    <div class="profile-section-divider" style="padding-top:24px;"><span>Daily</span></div>
 
                     <div class="profile-section-constrained" id="dailyCardSection">
                         <div class="burn-clock-card-bg">
+                            <div class="burn-clock-card-date-nav" id="cardDateNav">
+                                <button class="date-nav-btn" id="dayPrev" title="Previous day">&#9664;</button>
+                                <span class="date-label" id="dayLabel">Today</span>
+                                <button class="date-nav-btn" id="dayNext" title="Next day" disabled>&#9654;</button>
+                            </div>
+                            <button class="copy-burn-btn copy-icon-btn burn-clock-copy-btn" id="copyConcurrency" title="Copy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                             <svg id="burnClockDailyMain" style="width:100%;height:auto;display:block;" viewBox="0 0 657 500"></svg>
                         </div>
+                        <div class="copy-feedback" id="concurrencyFeedback">Copied to clipboard!</div>
                     </div>
+
+                    <div class="profile-section-divider"><span>Lifetime</span></div>
 
                     <div class="profile-stats-below">
                         <div class="stat-category">
                             <div class="stat-category-header">
-                                <div class="stat-category-value">${formatCost(m.estimated_spend || 0)}</div>
+                                <div class="stat-category-value" data-raw-cost="${m.estimated_spend || 0}">0</div>
                                 <div class="stat-category-label">Total Estimated Spend</div>
                             </div>
                             <div class="stat-category-items">
                                 <div class="stat-card">
                                     <div class="label">Total Tokens</div>
-                                    <div class="value">${formatNumber(m.total_tokens)}</div>
+                                    <div class="value" data-raw="${m.total_tokens || 0}">0</div>
                                     ${rankDisplay(ranks.tokens)}
                                 </div>
                                 <div class="stat-card">
                                     <div class="label">Messages</div>
-                                    <div class="value">${formatNumber(m.total_messages)}</div>
+                                    <div class="value" data-raw="${m.total_messages || 0}">0</div>
                                     ${rankDisplay(ranks.messages)}
                                 </div>
                                 <div class="stat-card">
                                     <div class="label">Tool Calls</div>
-                                    <div class="value">${formatNumber(m.total_tool_calls)}</div>
+                                    <div class="value" data-raw="${m.total_tool_calls || 0}">0</div>
                                     ${rankDisplay(ranks.tools)}
                                 </div>
                             </div>
                         </div>
                         <div class="stat-category">
                             <div class="stat-category-header">
-                                <div class="stat-category-value">${m.max_concurrent || '\u2014'}</div>
-                                <div class="stat-category-label">Max Concurrent</div>
+                                <div class="stat-category-value" data-raw="${m.max_concurrent || 0}">${m.max_concurrent ? '0' : '\u2014'}</div>
+                                <div class="stat-category-label">Max Concurrent Agents</div>
                             </div>
                             <div class="stat-category-items">
                                 <div class="stat-card">
                                     <div class="label">Sessions</div>
-                                    <div class="value">${formatNumber(m.total_sessions)}</div>
+                                    <div class="value" data-raw="${m.total_sessions || 0}">0</div>
                                 </div>
                                 <div class="stat-card">
                                     <div class="label">Concurrent Mins</div>
-                                    <div class="value">${m.concurrent_mins > 0 ? m.concurrent_mins + 'm' : '\u2014'}</div>
+                                    <div class="value" data-raw-mins="${m.concurrent_mins || 0}">${m.concurrent_mins > 0 ? '0' : '\u2014'}</div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <div class="profile-badges">
-                        <h3>Badges (${profile.badges.length} / ${allBadges.length})</h3>
                         <div class="badges-grid">
                             ${allBadges.map(b => `
                                 <div class="badge-card ${earnedIds.has(b.id) ? '' : 'locked'}">
@@ -244,22 +197,38 @@
                     </div>
 
                     ${history.length > 0 ? `
-                    <div class="chart-container">
-                        <h3>Token Growth (Last 30 Days)</h3>
-                        <canvas id="tokenChart"></canvas>
-                    </div>
-                    <div class="chart-container">
-                        <h3>Messages Over Time</h3>
-                        <canvas id="messageChart"></canvas>
+                    <div class="profile-section-constrained profile-charts">
+                        <div class="chart-container">
+                            <h3>Token Growth (Last 30 Days)</h3>
+                            <canvas id="tokenChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3>Messages Over Time</h3>
+                            <canvas id="messageChart"></canvas>
+                        </div>
                     </div>
                     ` : ''}
                 `;
 
+                // Animate stat values from 0 to target
+                requestAnimationFrame(() => {
+                    container.querySelectorAll('[data-raw]').forEach(el => {
+                        const target = parseInt(el.getAttribute('data-raw'), 10);
+                        if (target > 0) animateValue(el, 0, target, formatNumber);
+                    });
+                    container.querySelectorAll('[data-raw-cost]').forEach(el => {
+                        const target = Math.round(parseFloat(el.getAttribute('data-raw-cost')) * 100);
+                        if (target > 0) animateValue(el, 0, target, v => formatCost(v / 100));
+                    });
+                    container.querySelectorAll('[data-raw-mins]').forEach(el => {
+                        const target = parseInt(el.getAttribute('data-raw-mins'), 10);
+                        if (target > 0) animateValue(el, 0, target, v => v + 'm');
+                    });
+                });
+
                 // Load and render burn clock visualization with day navigation
                 let burnClockDayData = [];
-                let burnClockWeekData = [];
                 let burnDayOffset = 0;
-                let burnWeekOffset = 0;
                 let weekConcurrencyCache = {};
 
                 function formatDateISO(d) { return d.toISOString().split('T')[0]; }
@@ -282,53 +251,13 @@
                     d.setDate(d.getDate() + offset);
                     return d;
                 }
+                const MONTH_NAMES = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
                 function formatDayLabel(offset) {
-                    if (offset === 0) return 'Today';
+                    if (offset === 0) return 'TODAY';
                     const d = dateForOffset(offset);
-                    return d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+                    return `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
                 }
 
-                function computeWeeklyAverage(cachedData, localDateStrArray) {
-                    const averaged = {};
-                    for (let h = 0; h < 24; h++) {
-                        const combinedHistogram = {};
-                        for (const dayStr of localDateStrArray) {
-                            const dayData = cachedData[dayStr];
-                            if (!dayData) continue;
-                            const localMidnight = new Date(dayStr + 'T00:00:00');
-                            const t = new Date(localMidnight.getTime() + h * 3600000);
-                            const utcDate = t.toISOString().split('T')[0];
-                            const utcHour = t.getUTCHours();
-                            const key = utcDate + ':' + utcHour;
-                            const raw = dayData[key];
-                            const hist = (typeof raw === 'object' && raw !== null && raw.histogram) ? raw.histogram : raw;
-                            if (typeof hist === 'object' && hist !== null) {
-                                for (const [conc, mins] of Object.entries(hist)) {
-                                    combinedHistogram[conc] = (combinedHistogram[conc] || 0) + mins;
-                                }
-                            } else if (typeof hist === 'number' && hist > 0) {
-                                for (let n = 1; n <= hist; n++) {
-                                    combinedHistogram[String(n)] = (combinedHistogram[String(n)] || 0) + 30;
-                                }
-                            }
-                        }
-                        // Average by 7 days
-                        const avgHistogram = {};
-                        for (const [conc, mins] of Object.entries(combinedHistogram)) {
-                            avgHistogram[conc] = mins / 7;
-                        }
-                        if (Object.keys(avgHistogram).length > 0) {
-                            const refDateStr = localDateStrArray[localDateStrArray.length - 1];
-                            const localMidnight = new Date(refDateStr + 'T00:00:00');
-                            const t = new Date(localMidnight.getTime() + h * 3600000);
-                            const utcDate = t.toISOString().split('T')[0];
-                            const utcHour = t.getUTCHours();
-                            const key = utcDate + ':' + utcHour;
-                            averaged[key] = { histogram: avgHistogram };
-                        }
-                    }
-                    return averaged;
-                }
 
                 async function fetchDayConcurrency(localDateStr) {
                     if (weekConcurrencyCache[localDateStr]) return weekConcurrencyCache[localDateStr];
@@ -423,91 +352,6 @@
 
                 loadBurnClockDay(0);
 
-                // Week navigation
-                function formatWeekLabel(offset) {
-                    if (offset === 0) return 'This Week';
-                    const endDate = new Date();
-                    endDate.setDate(endDate.getDate() + offset * 7);
-                    const startDate = new Date(endDate);
-                    startDate.setDate(startDate.getDate() - 6);
-                    const fmt = (d) => d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
-                    return fmt(startDate) + ' – ' + fmt(endDate);
-                }
-
-                async function loadBurnClockWeek(offset) {
-                    burnWeekOffset = offset;
-                    document.getElementById('weekLabel').textContent = formatWeekLabel(offset);
-                    document.getElementById('weekNext').disabled = (offset >= 0);
-                    document.getElementById('weekPrev').disabled = (offset <= -4);
-
-                    try {
-                        const endDate = new Date();
-                        endDate.setDate(endDate.getDate() + offset * 7);
-                        const weekDates = [];
-                        for (let i = 6; i >= 0; i--) {
-                            const d = new Date(endDate);
-                            d.setDate(d.getDate() - i);
-                            weekDates.push(localDateISO(d));
-                        }
-
-                        await Promise.all(weekDates.map(ds => fetchDayConcurrency(ds)));
-
-                        const weekAvg = computeWeeklyAverage(weekConcurrencyCache, weekDates);
-                        const refDateStr = weekDates[weekDates.length - 1];
-                        renderBurnClock(weekAvg, profile.username, refDateStr);
-
-                        // Update weekly cost display
-                        const totalTokens = m.total_tokens || 0;
-                        const totalCost = m.estimated_spend || 0;
-                        let weekTokenSum = 0;
-                        for (const ds of weekDates) {
-                            const dayEntry = history.find(h => h.date === ds);
-                            if (dayEntry) weekTokenSum += dayEntry.daily_tokens || 0;
-                        }
-                        const wcEl = document.getElementById('weeklyCostDisplay');
-                        if (wcEl) {
-                            if (totalTokens > 0 && weekTokenSum > 0 && totalCost > 0) {
-                                wcEl.textContent = formatCost((totalCost * (weekTokenSum / totalTokens)) / 7) + '/day';
-                            } else {
-                                wcEl.textContent = '\u2014';
-                            }
-                        }
-
-                        // Fetch and display weekly ranks
-                        const lastDateStr = weekDates[weekDates.length - 1];
-                        getUserDailyRanks(hash, lastDateStr, 'week').then(resp => {
-                            const wr = resp.ranks || {};
-                            document.getElementById('weeklyCostRank').innerHTML = dailyRankDisplay(wr.avg_spend);
-                            document.getElementById('weeklyPeakRank').innerHTML = dailyRankDisplay(wr.peak_avg);
-                        }).catch(() => {});
-                    } catch (e) {
-                        console.error('Failed to load weekly concurrency data:', e);
-                    }
-                }
-
-                document.getElementById('weekPrev').addEventListener('click', () => {
-                    if (burnWeekOffset > -4) loadBurnClockWeek(burnWeekOffset - 1);
-                });
-                document.getElementById('weekNext').addEventListener('click', () => {
-                    if (burnWeekOffset < 0) loadBurnClockWeek(burnWeekOffset + 1);
-                });
-
-                loadBurnClockWeek(0);
-
-                // Daily / Weekly toggle
-                document.getElementById('toggleDaily').addEventListener('click', () => {
-                    document.getElementById('dailyView').style.display = '';
-                    document.getElementById('weeklyView').style.display = 'none';
-                    document.getElementById('toggleDaily').classList.add('active');
-                    document.getElementById('toggleWeekly').classList.remove('active');
-                });
-                document.getElementById('toggleWeekly').addEventListener('click', () => {
-                    document.getElementById('dailyView').style.display = 'none';
-                    document.getElementById('weeklyView').style.display = '';
-                    document.getElementById('toggleWeekly').classList.add('active');
-                    document.getElementById('toggleDaily').classList.remove('active');
-                });
-
                 // Burn clock rendering functions
                 function processHourlyData(allHistograms, localDateStr) {
                     const hourlyData = [];
@@ -588,7 +432,7 @@
                     const marginLeft = 44, marginTop = 196;
                     const minRows = 5;
                     const isDarkTheme = document.documentElement.getAttribute('data-theme') === 'dark';
-                    const emptyCellColor = isDarkTheme ? '#1e1e1e' : '#d8d2ca';
+                    const emptyCellColor = isDarkTheme ? '#1e1e1e' : '#e0ddd9';
                     const labelColor = isDarkTheme ? '#888888' : '#8a8480';
 
                     let svgContent = '';
@@ -762,7 +606,7 @@
 
                     // Layout Y positions
                     const topY = 30;
-                    const usernameY = 48;
+                    const usernameY = 58;
                     const dateY = 100;
                     const heroY = 200;
                     const heroLabelY = 235;
@@ -796,7 +640,7 @@
                     s += `<text id="v5RankText" x="${rankPillX + rankPillW / 2}" y="${rankPillY + rankPillH / 2 + 4}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.5"></text>`;
                     s += `</g>`;
 
-                    s += `<text x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">${dateDisplay}</text>`;
+                    s += `<text class="card-date-text" x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle" opacity="0">${dateDisplay}</text>`;
 
                     const heroTokens = formatNumber(cardData.dayTokens || 0);
                     s += `<text x="${cardW / 2}" y="${heroY}" fill="#1a1a1a" font-size="96" font-family="inherit" font-weight="800" text-anchor="middle">${heroTokens}</text>`;
@@ -838,7 +682,7 @@
                         for (let row = 0; row < maxRows; row++) {
                             const x = gridMarginLeft + col * (cellW + gap);
                             const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
-                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#d8d2ca" opacity="0.8"/>`;
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#e0ddd9" opacity="0.8"/>`;
                         }
                         for (const session of data.sessions) {
                             if (session.index > maxRows) continue;
@@ -934,7 +778,7 @@
 
                     // Layout Y positions
                     const topY = 30;
-                    const usernameY = 48;
+                    const usernameY = 58;
                     const dateY = 100;
                     const heroY = 200;
                     const heroLabelY = 235;
@@ -968,7 +812,7 @@
                     s += `<text id="v6RankText" x="${rankPillX + rankPillW / 2}" y="${rankPillY + rankPillH / 2 + 4}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.5"></text>`;
                     s += `</g>`;
 
-                    s += `<text x="${cardW / 2}" y="${dateY}" fill="#888888" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">${dateDisplay}</text>`;
+                    s += `<text class="card-date-text" x="${cardW / 2}" y="${dateY}" fill="#888888" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle" opacity="0">${dateDisplay}</text>`;
 
                     const heroTokens = formatNumber(cardData.dayTokens || 0);
                     s += `<text x="${cardW / 2}" y="${heroY}" fill="#e0e0e0" font-size="96" font-family="inherit" font-weight="800" text-anchor="middle">${heroTokens}</text>`;
@@ -1060,20 +904,6 @@
                     svg.innerHTML = s;
                 }
 
-                function renderBurnClock(concurrencyHistogram, username, localDateStr) {
-                    const svg = document.getElementById('burnClock');
-                    if (!svg) return;
-
-                    const hourlyData = processHourlyData(concurrencyHistogram, localDateStr);
-                    burnClockWeekData = hourlyData;
-
-                    const maxSessions = renderHeatmapGrid(svg, hourlyData, true, []);
-
-                    // Update weekly stats panel
-                    const peakEl = document.getElementById('weeklyPeakDisplay');
-                    if (peakEl) peakEl.textContent = maxSessions > 0 ? maxSessions : '\u2014';
-                }
-
                 function renderBurnClockV2(concurrencyHistogram, username, localDateStr, yesterdayConcurrency, yesterdayStr) {
                     const hourlyData = processHourlyData(concurrencyHistogram, localDateStr);
                     burnClockDayData = hourlyData;
@@ -1161,7 +991,21 @@
                         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
                         isDark ? renderShareableCardV6(svgMain, cardHourlyData, sessions, cardData)
                                : renderShareableCardV5(svgMain, cardHourlyData, sessions, cardData);
+                        positionDateNav(svgMain);
                     }
+                }
+
+                // Position date nav overlay to match SVG date position (dateY=100)
+                function positionDateNav(svg) {
+                    const nav = document.getElementById('cardDateNav');
+                    if (!nav || !svg) return;
+                    const vb = svg.getAttribute('viewBox');
+                    if (!vb) return;
+                    const parts = vb.split(/\s+/).map(Number);
+                    const vbH = parts[3];
+                    // dateY=100 in SVG coords, text baseline; center the nav vertically
+                    const pct = ((100 - 6) / vbH) * 100;
+                    nav.style.top = pct + '%';
                 }
 
                 // Re-render burn clock on theme toggle
@@ -1173,6 +1017,7 @@
                             const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
                             isDark ? renderShareableCardV6(svgMain, cardHourlyData, sessions, cardData)
                                    : renderShareableCardV5(svgMain, cardHourlyData, sessions, cardData);
+                            positionDateNav(svgMain);
                         }
                     }
                 });
