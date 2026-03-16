@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaudeRank Widget</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --text-primary: #1a1a1a;
+    --text-secondary: #8a8480;
+    --empty-cell: #d8d2ca;
+    --pill-bg: #f5f0eb;
+    --divider: #c8c0b8;
+    --accent: #E8692D;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+    background: transparent;
+    color: var(--text-primary);
+    overflow-x: hidden;
+    user-select: none;
+  }
+
+  /* ── Panel ── */
+  html, body { height: auto; }
+  .panel {
+    background: var(--bg);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    border-radius: 16px;
+    border: 1px solid rgba(0,0,0,0.08);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+  }
+
+  /* ── 1. CLAUDERANK header ── */
+  .header-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  /* ── 2. User row ── */
+  .user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .username-extras { margin-bottom: 8px; }
+  .user-row .username {
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--text-primary);
+    cursor: pointer;
+    border-bottom: 1px dashed transparent;
+    padding: 1px 0;
+  }
+  .user-row .username:hover { border-bottom-color: rgba(0,0,0,0.2); }
+  .user-row .username .pencil {
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-left: 3px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .user-row .username:hover .pencil { opacity: 1; }
+  .username-edit-row { display: flex; align-items: center; gap: 4px; }
+  .username-input {
+    font-weight: 600; font-size: 13px; color: var(--text-primary);
+    background: var(--pill-bg); border: 1px solid var(--accent);
+    border-radius: 4px; padding: 1px 4px; outline: none;
+    font-family: inherit; width: 110px;
+  }
+  .username-input.invalid { border-color: #ef4444; }
+  .btn-save-username {
+    background: var(--accent); border: none; color: #fff; font-size: 10px;
+    padding: 2px 8px; border-radius: 4px; cursor: pointer; font-weight: 600;
+  }
+  .btn-save-username:hover { opacity: 0.9; }
+  .username-error { font-size: 10px; color: #ef4444; margin-top: 2px; display: none; }
+  .username-feedback {
+    font-size: 10px; color: #4ade80; margin-top: 2px;
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .username-feedback.show { opacity: 1; }
+  .username-prompt {
+    font-size: 10px; color: var(--accent); margin-bottom: 4px; display: none;
+  }
+  .username-prompt.show { display: block; }
+
+  .rank-pill {
+    display: inline-flex; align-items: center;
+    padding: 3px 10px;
+    border-radius: 14px;
+    font-size: 10px; font-weight: 600; white-space: nowrap;
+    color: var(--accent);
+    border: 1.5px solid var(--accent);
+    letter-spacing: 0.5px;
+    height: 22px;
+  }
+
+  /* ── 3. Date nav ── */
+  .date-nav-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .date-nav-btn {
+    background: none; border: none; color: var(--text-secondary);
+    font-size: 11px; cursor: pointer; padding: 2px 4px;
+  }
+  .date-nav-btn:hover { color: var(--text-primary); }
+  .date-nav-btn:disabled { opacity: 0.3; cursor: default; }
+  .date-label {
+    font-size: 11px; color: var(--text-secondary); font-weight: 600;
+    letter-spacing: 1.5px; min-width: 100px; text-align: center;
+  }
+
+  /* ── 4-5. Hero tokens ── */
+  .hero-section {
+    text-align: center;
+    margin-top: 12px;
+    margin-bottom: 4px;
+  }
+  .hero-tokens {
+    font-size: 48px;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  .hero-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 2px;
+    margin-top: 14px;
+  }
+
+  /* ── 6. Cost pill ── */
+  .cost-pill {
+    display: flex;
+    justify-content: center;
+    margin-top: 12px;
+    margin-bottom: 14px;
+  }
+  .cost-pill-inner {
+    background: var(--pill-bg);
+    padding: 6px 22px;
+    border-radius: 15px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.3px;
+  }
+  .cost-pill-inner .cost-value { color: var(--accent); }
+
+  /* ── 7. Divider ── */
+  .divider {
+    height: 1px;
+    background: var(--divider);
+    margin: 0;
+  }
+
+  /* ── 8. Grid header ── */
+  .grid-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 14px;
+    margin-bottom: 10px;
+  }
+  .grid-title {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 1.5px;
+  }
+  .grid-legend {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 8px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+  .legend-bar {
+    width: 40px;
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(to right, rgb(245,170,100), rgb(210,70,15));
+  }
+
+  /* ── 9. Heatmap ── */
+  .heatmap-container {
+    position: relative;
+  }
+  .heatmap-container svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .heatmap-tooltip {
+    position: absolute;
+    background: rgba(0,0,0,0.85);
+    color: #fff;
+    padding: 3px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 10;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+  }
+  .heatmap-tooltip.show { opacity: 1; }
+
+  /* ── 12. Stats row ── */
+  .stats-section {
+    margin-top: 10px;
+    margin-bottom: 10px;
+  }
+  .stats-row {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    padding: 6px 0;
+  }
+  .stat-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .stat-col + .stat-col {
+    border-left: 1px solid var(--divider);
+  }
+  .stat-label {
+    font-size: 8px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 0.8px;
+  }
+  .stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: inherit;
+    color: var(--text-primary);
+  }
+  .stat-value.accent { color: var(--accent); }
+
+  /* ── 14. Footer ── */
+  .footer-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 12px;
+    position: relative;
+  }
+  .footer-link {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 1.5px;
+    text-decoration: none;
+  }
+  .footer-link:hover { color: var(--text-primary); text-decoration: underline; }
+  .copy-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    position: absolute;
+    right: 0;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+  }
+  .copy-btn:hover { color: var(--text-primary); }
+  .copy-btn svg { width: 14px; height: 14px; }
+  .copy-feedback {
+    font-size: 10px; color: #4ade80; text-align: center;
+    opacity: 0; transition: opacity 0.2s; margin-top: 4px;
+  }
+  .copy-feedback.show { opacity: 1; }
+
+  .loading { color: var(--text-secondary); font-size: 12px; text-align: center; padding: 20px 0; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <!-- 1. CLAUDERANK -->
+  <div class="header-label">CLAUDERANK</div>
+
+  <!-- 2. User row -->
+  <div class="user-row">
+    <div class="username" id="username" title="Click to edit">Loading...<span class="pencil">&#9998;</span></div>
+    <div class="rank-pill" id="rankPill">RANK #&mdash;</div>
+  </div>
+  <div class="username-extras">
+    <div class="username-prompt" id="usernamePrompt">What alias would you like to go by?</div>
+    <div class="username-edit-row" id="usernameEditRow" style="display:none">
+      <input class="username-input" id="usernameInput" maxlength="20" placeholder="3-20 chars, a-z 0-9 _">
+      <button class="btn-save-username" id="btnSaveUsername">Save</button>
+    </div>
+    <div class="username-error" id="usernameError"></div>
+    <div class="username-feedback" id="usernameFeedback">Saved!</div>
+  </div>
+
+  <!-- 3. Date nav -->
+  <div class="date-nav-row">
+    <button class="date-nav-btn" id="dayPrev" title="Previous day">&#9664;</button>
+    <span class="date-label" id="dayLabel">TODAY</span>
+    <button class="date-nav-btn" id="dayNext" title="Next day" disabled>&#9654;</button>
+  </div>
+
+  <!-- 4-6. Hero section -->
+  <div class="hero-section">
+    <div class="hero-tokens" id="heroTokens">&mdash;</div>
+    <div class="hero-label">TOKENS BURNED</div>
+  </div>
+
+  <div class="cost-pill">
+    <div class="cost-pill-inner">
+      <span class="cost-value" id="costValue">$0</span> EST. TOKEN VALUE
+    </div>
+  </div>
+
+  <!-- 7. Divider -->
+  <div class="divider"></div>
+
+  <!-- 8. Grid header -->
+  <div class="grid-header">
+    <span class="grid-title">AGENT ACTIVITY TIMELINE</span>
+    <div class="grid-legend">
+      <span>LOW</span>
+      <div class="legend-bar"></div>
+      <span>HIGH</span>
+    </div>
+  </div>
+
+  <!-- 9-10. Heatmap -->
+  <div class="heatmap-container">
+    <svg id="heatmapSvg"></svg>
+    <div class="heatmap-tooltip" id="heatmapTooltip"></div>
+  </div>
+
+  <!-- 11. Divider -->
+  <div class="divider" style="margin-top: 6px;"></div>
+
+  <!-- 12. Stats -->
+  <div class="stats-section">
+    <div class="stats-row">
+      <div class="stat-col">
+        <div class="stat-label">CONCURRENT AGENTS</div>
+        <div class="stat-value accent" id="statPeakAgents">0&times;</div>
+      </div>
+      <div class="stat-col">
+        <div class="stat-label">TOTAL AGENT HOURS</div>
+        <div class="stat-value" id="statAgentHours">0h</div>
+      </div>
+      <div class="stat-col">
+        <div class="stat-label">CONCURRENCY TIME</div>
+        <div class="stat-value" id="statConcTime">0m</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 13. Divider -->
+  <div class="divider"></div>
+
+  <!-- 14. Footer -->
+  <div class="footer-row">
+    <a class="footer-link" id="linkFull" href="https://clauderank.com" target="_blank">CLAUDERANK.COM</a>
+    <button class="copy-btn" id="copyBtn" title="Copy card to clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+  </div>
+  <div class="copy-feedback" id="copyFeedback">Copied!</div>
+</div>
+
+<script type="module">
+import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, formatNumber, formatCost, animateValue } from './js/api.js?v=2';
+
+const params = new URLSearchParams(window.location.search);
+const userHash = params.get('h');
+
+if (!userHash) {
+  document.querySelector('.panel').innerHTML = '<div class="loading">Missing ?h=USER_HASH</div>';
+  throw new Error('No user hash');
+}
+
+// ── State ──
+let activeDates = [];
+let currentDateIndex = -1;
+let heatmapByDate = {};
+let totalTokens = 0;
+let totalCost = 0;
+let lastMergedHistograms = {};
+let lastLocalDateStr = '';
+let lastHourlyData = [];
+let previousDayTokens = 0;
+let previousDayCostRaw = 0;
+let previousPeakAgents = 0;
+let previousAgentMins = 0;
+let previousConcMins = 0;
+
+// ── Helpers ──
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '?';
+  return d.innerHTML;
+}
+
+function localDateISO(d) {
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
+function utcDatesForLocalDay(localDateStr) {
+  const localMidnight = new Date(localDateStr + 'T00:00:00');
+  const dates = new Set();
+  for (let h = 0; h < 24; h++) {
+    const t = new Date(localMidnight.getTime() + h * 3600000);
+    dates.add(t.toISOString().split('T')[0]);
+  }
+  return [...dates];
+}
+
+// ── Process hourly data ──
+function processHourlyData(allHistograms, localDateStr) {
+  const hourlyData = [];
+  const localMidnight = new Date(localDateStr + 'T00:00:00');
+  const now = new Date();
+  const isToday = localDateStr === localDateISO(now);
+
+  for (let h = 0; h < 24; h++) {
+    const t = new Date(localMidnight.getTime() + h * 3600000);
+    const utcDate = t.toISOString().split('T')[0];
+    const utcHour = t.getUTCHours();
+    const key = utcDate + ':' + utcHour;
+
+    const raw = allHistograms[key] || {};
+    const histogram = (typeof raw === 'object' && raw !== null && raw.histogram) ? raw.histogram : raw;
+    const sessions = [];
+
+    for (let n = 1; n <= 5; n++) {
+      let totalMins = 0;
+      for (const [conc, mins] of Object.entries(histogram)) {
+        if (parseInt(conc, 10) >= n) totalMins += mins;
+      }
+      if (totalMins > 0) {
+        const seed = (h * 7 + n * 13) % 17;
+        const variation = 0.85 + (seed / 17) * 0.15;
+        const intensity = Math.min((totalMins / 60) * variation, 1);
+        sessions.push({ index: n, intensity, minutes: totalMins });
+      }
+    }
+
+    const isCurrent = isToday && h === now.getHours();
+    hourlyData.push({ hour: h, sessions, isCurrent, histogram });
+  }
+  return hourlyData;
+}
+
+// V5 color gradient
+function getV5Color(intensity) {
+  const r1 = 245, g1 = 170, b1 = 100;
+  const r2 = 210, g2 = 70, b2 = 15;
+  return `rgb(${Math.round(r1 + (r2 - r1) * intensity)},${Math.round(g1 + (g2 - g1) * intensity)},${Math.round(b1 + (b2 - b1) * intensity)})`;
+}
+
+// ── Render heatmap (widget scale) ──
+// V5 original: cellW=22, cellH=22, gap=3, marginLeft=60, marginRight=30 → 687px
+// Widget:      cellW=11, cellH=11, gap=2, marginLeft=22, marginRight=6  → 338px
+function renderHeatmap(svgEl, hourlyData, isToday) {
+  const container = svgEl.parentElement;
+  const totalW = container.clientWidth || 338;
+  const marginLeft = 18, marginRight = 0;
+  const gap = 2;
+  const availableW = totalW - marginLeft - marginRight;
+  const cellW = (availableW - 23 * gap) / 24;
+  const cellH = cellW;
+
+  let maxSessions = 0;
+  for (const d of hourlyData) {
+    if (d.sessions.length > maxSessions) maxSessions = d.sessions.length;
+  }
+  const maxRows = Math.max(1, maxSessions);
+  const gridHeight = maxRows * (cellH + gap) - gap;
+  const axisH = 12;
+  const svgH = gridHeight + axisH + 4;
+
+  svgEl.setAttribute('viewBox', `0 0 ${totalW} ${svgH}`);
+
+  let s = '';
+
+  // Row labels (matching V5: A1, A2, etc.)
+  for (let row = 0; row < maxRows; row++) {
+    const y = (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 3;
+    s += `<text x="2" y="${y}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace" font-weight="600">A${row + 1}</text>`;
+  }
+
+  // Grid cells
+  for (let col = 0; col < 24; col++) {
+    const data = hourlyData[col];
+    // Empty cells (V5: fill="#d8d2ca" opacity="0.8", rx="3" → scaled rx="2")
+    for (let row = 0; row < maxRows; row++) {
+      const x = marginLeft + col * (cellW + gap);
+      const y = (maxRows - 1 - row) * (cellH + gap);
+      s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="#d8d2ca" opacity="0.8"/>`;
+    }
+    // Active cells
+    for (const session of data.sessions) {
+      if (session.index > maxRows) continue;
+      const row = session.index - 1;
+      const x = marginLeft + col * (cellW + gap);
+      const y = (maxRows - 1 - row) * (cellH + gap);
+      const color = getV5Color(session.intensity || 0.5);
+      s += `<rect class="hm-cell" x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}" style="cursor:default"/>`;
+    }
+    // Current hour marker
+    if (data.isCurrent) {
+      const x = marginLeft + col * (cellW + gap);
+      s += `<rect x="${x}" y="${gridHeight + 2}" width="${cellW}" height="2" rx="1" fill="${getV5Color(0.8)}"/>`;
+    }
+  }
+
+  // Time axis labels
+  const axisY = gridHeight + axisH + 2;
+  const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
+  let startHour, midHour, endHour;
+  if (isToday) {
+    const nowHour = new Date().getHours();
+    startHour = (nowHour + 1) % 24;
+    midHour = (nowHour + 13) % 24;
+    endHour = nowHour;
+  } else {
+    startHour = 0;
+    midHour = 12;
+    endHour = 23;
+  }
+  s += `<text x="${marginLeft}" y="${axisY}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace">${fmtHr(startHour)}</text>`;
+  s += `<text x="${marginLeft + 12 * (cellW + gap)}" y="${axisY}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace">${fmtHr(midHour)}</text>`;
+  s += `<text x="${marginLeft + 23 * (cellW + gap) + cellW}" y="${axisY}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace" text-anchor="end">${fmtHr(endHour)}</text>`;
+
+  svgEl.innerHTML = s;
+
+  // Tooltip
+  const tooltip = document.getElementById('heatmapTooltip');
+  svgEl.querySelectorAll('.hm-cell').forEach(cell => {
+    cell.addEventListener('mouseenter', (e) => {
+      const hr = parseInt(e.target.getAttribute('data-hour'));
+      const count = e.target.getAttribute('data-sessions');
+      const hour12 = hr === 0 ? '12 AM' : hr < 12 ? hr + ' AM' : hr === 12 ? '12 PM' : (hr - 12) + ' PM';
+      tooltip.textContent = `${hour12}: ${count} session${count !== '1' ? 's' : ''}`;
+      tooltip.classList.add('show');
+    });
+    cell.addEventListener('mousemove', (e) => {
+      const rect = container.getBoundingClientRect();
+      tooltip.style.left = (e.clientX - rect.left + 8) + 'px';
+      tooltip.style.top = (e.clientY - rect.top - 16) + 'px';
+    });
+    cell.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
+  });
+}
+
+// ── Notify parent of content height ──
+function notifyHeight() {
+  if (window.parent !== window) {
+    const h = document.querySelector('.panel').offsetHeight;
+    window.parent.postMessage({ type: 'resize', height: h }, '*');
+  }
+}
+new ResizeObserver(() => notifyHeight()).observe(document.querySelector('.panel'));
+
+// ── Update stats ──
+function updateStats(hourlyData) {
+  let maxSessions = 0;
+  let totalDevMins = 0;
+  let concurrentMins = 0;
+
+  for (const d of hourlyData) {
+    if (d.sessions.length > maxSessions) maxSessions = d.sessions.length;
+    for (const sess of d.sessions) {
+      totalDevMins += sess.minutes;
+    }
+    const s2 = d.sessions.find(s => s.index === 2);
+    if (s2) concurrentMins += s2.minutes;
+  }
+
+  animateValue(document.getElementById('statPeakAgents'), previousPeakAgents, maxSessions, v => v + '\u00d7');
+  previousPeakAgents = maxSessions;
+
+  animateValue(document.getElementById('statAgentHours'), previousAgentMins, totalDevMins, v => (v / 60).toFixed(1) + 'h');
+  previousAgentMins = totalDevMins;
+
+  animateValue(document.getElementById('statConcTime'), previousConcMins, concurrentMins, v => {
+    const m = Math.round(v);
+    return m >= 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + 'm';
+  });
+  previousConcMins = concurrentMins;
+}
+
+// ── Center display ──
+function updateCenterDisplay() {
+  if (currentDateIndex < 0 || !activeDates[currentDateIndex]) return;
+  const dayData = heatmapByDate[activeDates[currentDateIndex]];
+  const dayTokens = dayData ? dayData.tokens : 0;
+  animateValue(document.getElementById('heroTokens'), previousDayTokens, dayTokens, formatNumber);
+  previousDayTokens = dayTokens;
+
+  let costRaw = 0;
+  if (totalTokens > 0 && dayTokens > 0 && totalCost > 0) {
+    costRaw = totalCost * (dayTokens / totalTokens);
+  }
+  animateValue(document.getElementById('costValue'), previousDayCostRaw, Math.round(costRaw * 100), v => formatCost(v / 100));
+  previousDayCostRaw = Math.round(costRaw * 100);
+}
+
+// ── Date formatting (V5: "MAR 15, 2026") ──
+const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+function formatDateLabel(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
+// ── Day navigation ──
+async function loadActiveDates() {
+  try {
+    const heatmap = await getUserHeatmap(userHash, 30);
+    const localDates = new Set();
+    const localTokens = {};
+    const localMessages = {};
+    for (const d of heatmap.filter(d => d.activity > 0)) {
+      const utcStart = new Date(d.date + 'T00:00:00Z');
+      const utcEnd = new Date(d.date + 'T23:59:59Z');
+      const localStart = localDateISO(utcStart);
+      const localEnd = localDateISO(utcEnd);
+      localDates.add(localStart);
+      localDates.add(localEnd);
+      localTokens[localStart] = (localTokens[localStart] || 0) + (d.tokens || 0);
+      localMessages[localStart] = (localMessages[localStart] || 0) + (d.messages || 0);
+      if (localEnd !== localStart) {
+        localTokens[localEnd] = (localTokens[localEnd] || 0);
+        localMessages[localEnd] = (localMessages[localEnd] || 0);
+      }
+    }
+    const todayStr = localDateISO(new Date());
+    localDates.add(todayStr);
+    activeDates = [...localDates].filter(d => d <= todayStr).sort();
+    heatmapByDate = {};
+    for (const ld of activeDates) {
+      heatmapByDate[ld] = {
+        tokens: localTokens[ld] || 0,
+        messages: localMessages[ld] || 0,
+      };
+    }
+  } catch (e) {
+    console.error('Failed to load heatmap:', e);
+    activeDates = [localDateISO(new Date())];
+  }
+}
+
+async function loadDayByIndex(index) {
+  if (index < 0 || index >= activeDates.length) return;
+  currentDateIndex = index;
+  const localDateStr = activeDates[index];
+
+  document.getElementById('dayLabel').textContent = formatDateLabel(localDateStr);
+  document.getElementById('dayNext').disabled = (index >= activeDates.length - 1);
+  document.getElementById('dayPrev').disabled = (index <= 0);
+
+  updateCenterDisplay();
+
+  try {
+    const utcDates = utcDatesForLocalDay(localDateStr);
+    const results = await Promise.all(utcDates.map(d => getUserConcurrencyByDate(userHash, d)));
+    lastMergedHistograms = Object.assign({}, ...results);
+    lastLocalDateStr = localDateStr;
+    const hourlyData = processHourlyData(lastMergedHistograms, localDateStr);
+    lastHourlyData = hourlyData;
+    renderHeatmap(document.getElementById('heatmapSvg'), hourlyData, localDateStr === localDateISO(new Date()));
+    updateStats(hourlyData);
+    notifyHeight();
+  } catch (e) {
+    console.error('Failed to load concurrency data:', e);
+  }
+}
+
+document.getElementById('dayPrev').addEventListener('click', () => {
+  if (currentDateIndex > 0) loadDayByIndex(currentDateIndex - 1);
+});
+document.getElementById('dayNext').addEventListener('click', () => {
+  if (currentDateIndex < activeDates.length - 1) loadDayByIndex(currentDateIndex + 1);
+});
+
+// ── Load profile ──
+async function loadProfile() {
+  try {
+    const data = await getUserProfile(userHash);
+    const usernameEl = document.getElementById('username');
+    if (data.username) {
+      usernameEl.innerHTML = '@' + escHtml(data.username) + '<span class="pencil">&#9998;</span>';
+    } else {
+      usernameEl.innerHTML = '@anonymous<span class="pencil">&#9998;</span>';
+      document.getElementById('usernamePrompt').classList.add('show');
+    }
+
+    const ranks = data.ranks || {};
+    const weightedRank = ranks.weighted;
+    const rankPill = document.getElementById('rankPill');
+    if (weightedRank) {
+      const rank = weightedRank.rank || weightedRank;
+      const percentile = weightedRank.percentile;
+      rankPill.textContent = '#' + rank + ' GLOBALLY' + (percentile != null ? ' \u00b7 TOP ' + percentile + '%' : '');
+    }
+
+    const m = data.metrics || {};
+    totalTokens = m.total_tokens || 0;
+    totalCost = m.estimated_spend || 0;
+    updateCenterDisplay();
+
+    document.getElementById('linkFull').href = 'https://clauderank.com';
+  } catch (e) {
+    console.error('Failed to load profile:', e);
+  }
+}
+
+// ── Username editing ──
+const usernameDisplay = document.getElementById('username');
+const usernameInput = document.getElementById('usernameInput');
+const usernameEditRow = document.getElementById('usernameEditRow');
+const usernameError = document.getElementById('usernameError');
+const usernameFeedback = document.getElementById('usernameFeedback');
+const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+
+function showUsernameEdit() {
+  const current = usernameDisplay.textContent.replace('\u270E', '').replace('@', '').trim();
+  usernameInput.value = current === 'anonymous' ? '' : current;
+  usernameDisplay.style.display = 'none';
+  usernameEditRow.style.display = 'flex';
+  usernameError.style.display = 'none';
+  usernameInput.classList.remove('invalid');
+  usernameInput.focus();
+  usernameInput.select();
+}
+
+function hideUsernameEdit() {
+  usernameEditRow.style.display = 'none';
+  usernameDisplay.style.display = 'block';
+  usernameError.style.display = 'none';
+  usernameInput.classList.remove('invalid');
+  document.getElementById('usernamePrompt').classList.remove('show');
+}
+
+usernameDisplay.addEventListener('click', showUsernameEdit);
+
+usernameInput.addEventListener('input', () => {
+  const val = usernameInput.value.trim();
+  if (!val || val.length < 3 || val.length > 20 || !usernameRegex.test(val)) {
+    usernameInput.classList.add('invalid');
+  } else {
+    usernameInput.classList.remove('invalid');
+    usernameError.style.display = 'none';
+  }
+});
+
+let savingUsername = false;
+async function saveUsername() {
+  if (savingUsername) return;
+  const val = usernameInput.value.trim();
+  if (!val || val.length < 3 || val.length > 20 || !usernameRegex.test(val)) {
+    usernameInput.classList.add('invalid');
+    usernameError.textContent = 'Must be 3-20 chars, a-z 0-9 _';
+    usernameError.style.display = 'block';
+    return;
+  }
+  savingUsername = true;
+  try {
+    const resp = await fetch(`/api/users/${userHash}/username`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: val }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.detail || 'Failed to save');
+    }
+    usernameDisplay.innerHTML = '@' + escHtml(val) + '<span class="pencil">&#9998;</span>';
+    hideUsernameEdit();
+    usernameFeedback.classList.add('show');
+    setTimeout(() => usernameFeedback.classList.remove('show'), 1500);
+  } catch (e) {
+    usernameError.textContent = e.message;
+    usernameError.style.display = 'block';
+  } finally {
+    savingUsername = false;
+  }
+}
+
+document.getElementById('btnSaveUsername').addEventListener('click', (e) => { e.preventDefault(); saveUsername(); });
+usernameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); saveUsername(); }
+  if (e.key === 'Escape') { hideUsernameEdit(); }
+});
+document.addEventListener('click', (e) => {
+  if (usernameEditRow.style.display === 'flex' &&
+      !usernameEditRow.contains(e.target) && !usernameDisplay.contains(e.target)) {
+    hideUsernameEdit();
+  }
+});
+
+// ── Copy as full V5 card image ──
+// Renders an exact copy of renderShareableCardV5() from profile.html
+// at full 687px resolution, then copies to clipboard.
+async function copyCardAsImage() {
+  const hourlyData = lastHourlyData;
+  if (!hourlyData.length) return;
+
+  const cellW = 22, cellH = 22, gp = 2;
+  const gridMarginLeft = 60, gridMarginRight = 30;
+  const cardW = gridMarginLeft + 24 * (cellW + gp) - gp + gridMarginRight;
+
+  let maxSessions = 0;
+  for (const d of hourlyData) {
+    if (d.sessions.length > maxSessions) maxSessions = d.sessions.length;
+  }
+  const maxRows = Math.max(1, maxSessions);
+  const gridHeight = maxRows * (cellH + gp) - gp;
+
+  // Compute stats
+  let totalDevMins = 0;
+  let concurrentMins = 0;
+  for (const d of hourlyData) {
+    for (const sess of d.sessions) totalDevMins += sess.minutes;
+    const s2 = d.sessions.find(s => s.index === 2);
+    if (s2) concurrentMins += s2.minutes;
+  }
+  const devHours = (totalDevMins / 60).toFixed(1);
+  const concDisplay = concurrentMins >= 60
+    ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
+    : Math.round(concurrentMins) + 'm';
+
+  // Get display data from DOM
+  const usernameRaw = document.getElementById('username').childNodes[0].textContent.replace('@', '').trim();
+  const username = usernameRaw || 'anonymous';
+  const rankText = document.getElementById('rankPill').textContent.trim();
+  const dayTokens = document.getElementById('heroTokens').textContent;
+  const costText = document.getElementById('costValue').textContent;
+  const dateText = document.getElementById('dayLabel').textContent;
+
+  // Layout Y positions (exact V5 card)
+  const topY = 30, usernameY = 48, dateY = 80;
+  const heroY = 140, heroLabelY = 162, pillY = 180;
+  const divider1Y = 218, gridLabelY = 238, gridTopY = 255;
+  const gridBottomY = gridTopY + gridHeight + 24;
+  const divider2Y = gridBottomY + 10;
+  const statsY = divider2Y + 20;
+  const statsHeight = 70;
+  const divider3Y = statsY + statsHeight + 10;
+  const footerY = divider3Y + 25;
+  const cardH = footerY + 20;
+
+  const fontStack = "'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace";
+  let s = '';
+  s += `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${cardW} ${cardH}" width="${cardW}" height="${cardH}" font-family="${fontStack}">`;
+  s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
+
+  // Header + username
+  s += `<text x="30" y="${topY}" fill="#8a8480" font-size="10" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
+  s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="18" font-weight="700">@${escHtml(username)}</text>`;
+
+  // Rank pill
+  if (rankText && !rankText.includes('\u2014')) {
+    const rpH = 22, rpW = 230;
+    const rpX = cardW - 30 - rpW, rpY = usernameY - 20;
+    s += `<rect x="${rpX}" y="${rpY}" width="${rpW}" height="${rpH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
+    s += `<text x="${rpX + rpW / 2}" y="${rpY + rpH / 2 + 4}" fill="#E8692D" font-size="10" font-weight="600" text-anchor="middle" letter-spacing="0.5">${escHtml(rankText)}</text>`;
+  }
+
+  // Date
+  s += `<text x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="11" font-weight="600" letter-spacing="1.5" text-anchor="middle">${escHtml(dateText)}</text>`;
+
+  // Hero tokens
+  s += `<text x="${cardW / 2}" y="${heroY}" fill="#1a1a1a" font-size="48" font-weight="800" text-anchor="middle">${escHtml(dayTokens)}</text>`;
+  s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#8a8480" font-size="11" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
+
+  // Cost pill
+  const spW = 240, spH = 30, spX = (cardW - spW) / 2;
+  s += `<rect x="${spX}" y="${pillY}" width="${spW}" height="${spH}" rx="15" ry="15" fill="#f5f0eb"/>`;
+  s += `<text x="${cardW / 2}" y="${pillY + spH / 2 + 5}" fill="#8a8480" font-size="10" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
+  s += `<tspan fill="#E8692D">${escHtml(costText)}</tspan> EST. TOKEN VALUE</text>`;
+
+  // Divider 1
+  s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+
+  // Grid label + legend
+  s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="9" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
+  const legendW = 80, legendH = 10;
+  const gridRightEdge = gridMarginLeft + 23 * (cellW + gp) + cellW;
+  const legendY = gridLabelY - 10;
+  s += `<defs><linearGradient id="v5LG" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgb(245,170,100)"/><stop offset="100%" stop-color="rgb(210,70,15)"/></linearGradient></defs>`;
+  s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="8" font-weight="600" text-anchor="end">HIGH</text>`;
+  const highTW = 28, legendX = gridRightEdge - highTW - legendW;
+  s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="3" ry="3" fill="url(#v5LG)"/>`;
+  s += `<text x="${legendX - 6}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="8" font-weight="600" text-anchor="end">LOW</text>`;
+
+  // Row labels
+  for (let row = 0; row < maxRows; row++) {
+    const y = gridTopY + (maxRows - 1 - row) * (cellH + gp) + cellH / 2 + 4;
+    s += `<text x="30" y="${y}" fill="#8a8480" font-size="8" font-weight="600">A${row + 1}</text>`;
+  }
+
+  // Grid cells
+  for (let col = 0; col < 24; col++) {
+    const data = hourlyData[col];
+    for (let row = 0; row < maxRows; row++) {
+      const x = gridMarginLeft + col * (cellW + gp);
+      const y = gridTopY + (maxRows - 1 - row) * (cellH + gp);
+      s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="#d8d2ca" opacity="0.8"/>`;
+    }
+    for (const session of data.sessions) {
+      if (session.index > maxRows) continue;
+      const row = session.index - 1;
+      const x = gridMarginLeft + col * (cellW + gp);
+      const y = gridTopY + (maxRows - 1 - row) * (cellH + gp);
+      s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="${getV5Color(session.intensity || 0.5)}"/>`;
+    }
+  }
+
+  // Current hour marker
+  const currentHourCol = hourlyData.findIndex(d => d.isCurrent);
+  if (currentHourCol >= 0) {
+    const markerX = gridMarginLeft + currentHourCol * (cellW + gp);
+    s += `<rect x="${markerX}" y="${gridTopY + gridHeight + 2}" width="${cellW}" height="2" rx="1" fill="${getV5Color(0.8)}"/>`;
+  }
+
+  // Time axis
+  const xAxisY = gridTopY + gridHeight + 18;
+  const expFmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
+  const expIsToday = lastLocalDateStr === localDateISO(new Date());
+  let expStartHour, expMidHour, expEndHour;
+  if (expIsToday) {
+    const expNowHour = new Date().getHours();
+    expStartHour = (expNowHour + 1) % 24;
+    expMidHour = (expNowHour + 13) % 24;
+    expEndHour = expNowHour;
+  } else {
+    expStartHour = 0;
+    expMidHour = 12;
+    expEndHour = 23;
+  }
+  s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="8">${expFmtHr(expStartHour)}</text>`;
+  s += `<text x="${gridMarginLeft + 12 * (cellW + gp)}" y="${xAxisY}" fill="#8a8480" font-size="8">${expFmtHr(expMidHour)}</text>`;
+  s += `<text x="${gridMarginLeft + 23 * (cellW + gp)}" y="${xAxisY}" fill="#8a8480" font-size="8" text-anchor="end">${expFmtHr(expEndHour)}</text>`;
+
+  // Divider 2
+  s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+
+  // Stats row
+  const colW = (cardW - 60) / 3;
+  const sLabels = ['CONCURRENT AGENTS', 'TOTAL AGENT HOURS', 'CONCURRENCY TIME'];
+  const sValues = [maxSessions + '\u00d7', devHours + 'h', concDisplay];
+  const sColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
+  for (let i = 0; i < 3; i++) {
+    const cx = 30 + colW * i + colW / 2;
+    s += `<text x="${cx}" y="${statsY + 18}" fill="#8a8480" font-size="8" font-weight="700" letter-spacing="0.8" text-anchor="middle">${sLabels[i]}</text>`;
+    s += `<text x="${cx}" y="${statsY + 50}" fill="${sColors[i]}" font-size="18" font-family="monospace" font-weight="700" text-anchor="middle">${sValues[i]}</text>`;
+    if (i < 2) {
+      const divX = 30 + colW * (i + 1);
+      s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#c8c0b8" stroke-width="1"/>`;
+    }
+  }
+
+  // Divider 3 + footer
+  s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
+  s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="9" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
+  s += `</svg>`;
+
+  // SVG → canvas → clipboard
+  const svgBlob = new Blob([s], { type: 'image/svg+xml;charset=utf-8' });
+  const svgUrl = URL.createObjectURL(svgBlob);
+  const img = new Image();
+  await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = svgUrl; });
+  const canvas = document.createElement('canvas');
+  canvas.width = cardW;
+  canvas.height = cardH;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, cardW, cardH);
+  URL.revokeObjectURL(svgUrl);
+
+  const inIframe = window.parent !== window;
+  if (inIframe) {
+    const base64 = canvas.toDataURL('image/png').split(',')[1];
+    window.parent.postMessage({ type: 'copy-image', base64 }, '*');
+  } else {
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+  }
+}
+
+document.getElementById('copyBtn').addEventListener('click', async () => {
+  try {
+    await copyCardAsImage();
+    const fb = document.getElementById('copyFeedback');
+    fb.classList.add('show');
+    setTimeout(() => fb.classList.remove('show'), 1500);
+  } catch (err) {
+    console.error('Copy failed:', err);
+  }
+});
+
+// ── Open link externally (iframe can't navigate) ──
+document.getElementById('linkFull').addEventListener('click', (e) => {
+  e.preventDefault();
+  const url = e.currentTarget.href;
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: 'open-url', url }, '*');
+  } else {
+    window.open(url, '_blank');
+  }
+});
+
+// ── Init ──
+loadProfile();
+loadActiveDates().then(() => {
+  loadDayByIndex(activeDates.length - 1);
+});
+setInterval(() => loadProfile(), 120000);
+</script>
+</body>
+</html>

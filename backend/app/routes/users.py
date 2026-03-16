@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, and_
@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from better_profanity import profanity
 
 from app.db import get_db
-from app.models import User, UserMetrics, UserBadge, Badge, MetricsHistory, MetricsHourly, ConcurrencyHistogram
-from app.services.ranking import get_user_ranks_with_percentiles, compute_tier
+from app.models import User, UserMetrics, UserBadge, Badge, MetricsHistory, MetricsHourly, ConcurrencyHistogram, DailySessions
+from app.services.ranking import get_user_ranks_with_percentiles, compute_tier, get_daily_ranks_for_user, get_weekly_ranks_for_user
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -157,6 +157,7 @@ async def get_user_profile(user_hash: str, db: AsyncSession = Depends(get_db)):
             "last_synced": metrics.last_synced.isoformat() if metrics else None,
             "max_concurrent": max_concurrent,
             "concurrent_mins": concurrent_mins,
+            "estimated_spend": metrics.estimated_spend if metrics else 0,
         },
         "ranks": ranks,
         "tier": tier,
@@ -178,6 +179,7 @@ async def get_user_history(user_hash: str, days: int = 30, db: AsyncSession = De
         {
             "date": r.snapshot_date.isoformat(),
             "tokens": r.total_tokens,
+            "daily_tokens": r.daily_tokens or 0,
             "messages": r.total_messages,
             "sessions": r.total_sessions,
             "tool_calls": r.total_tool_calls,
@@ -277,7 +279,9 @@ async def get_user_heatmap(
     user_hash: str, days: int = Query(365, ge=1, le=730), db: AsyncSession = Depends(get_db)
 ):
     today = date.today()
-    start_date = today - timedelta(days=days)
+    today_utc = datetime.now(timezone.utc).date()
+    end_date = max(today, today_utc)
+    start_date = end_date - timedelta(days=days)
 
     stmt = (
         select(MetricsHistory)
@@ -299,13 +303,16 @@ async def get_user_heatmap(
     heatmap = []
     prev = None
     current = start_date
-    while current <= today:
+    while current <= end_date:
         snap = snap_map.get(current)
         if snap and getattr(snap, "daily_messages", 0) > 0:
             # Direct per-day counts from daily_activity sync
             messages = snap.daily_messages
             tool_calls = getattr(snap, "daily_tool_calls", 0) or 0
-            tokens = 0
+            tokens = getattr(snap, "daily_tokens", 0) or 0
+            # Fall back to cumulative delta if daily_tokens not yet populated
+            if tokens == 0 and prev:
+                tokens = max(0, snap.total_tokens - prev.total_tokens)
             activity = messages
         elif snap and prev:
             tokens = max(0, snap.total_tokens - prev.total_tokens)
@@ -354,3 +361,156 @@ async def get_user_heatmap(
             d["intensity"] = 0
 
     return heatmap
+
+
+@router.get("/{user_hash}/daily-ranks")
+async def get_user_daily_ranks(
+    user_hash: str,
+    query_date: str = Query(None, alias="date"),
+    period: str = Query("day"),
+    db: AsyncSession = Depends(get_db),
+):
+    if query_date:
+        try:
+            target = date.fromisoformat(query_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+    else:
+        target = date.today()
+
+    if period == "week":
+        ranks = await get_weekly_ranks_for_user(db, user_hash, target)
+    else:
+        ranks = await get_daily_ranks_for_user(db, user_hash, target)
+
+    return {"date": target.isoformat(), "period": period, "ranks": ranks}
+
+
+@router.get("/{user_hash}/concurrency")
+async def get_user_concurrency(
+    user_hash: str,
+    hours: int = Query(None, ge=1, le=24),
+    query_date: str = Query(None, alias="date"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return per-hour concurrency data.
+
+    If `date` param is provided (YYYY-MM-DD), returns full histograms for that
+    UTC date: { "YYYY-MM-DD:HH": {"1": 20, "2": 30}, ... }
+
+    Otherwise falls back to legacy behaviour: last N `hours` of peak
+    concurrency: { "YYYY-MM-DD:HH": peak, ... }
+    """
+    import json
+
+    if query_date is not None:
+        # ── date-based: full 24h histogram for the given UTC date ──
+        try:
+            target_date = date.fromisoformat(query_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+
+        # Clamp future dates (use UTC since data is stored in UTC)
+        today = datetime.utcnow().date()
+        if target_date > today:
+            target_date = today
+
+        day_start = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0)
+        day_end = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59)
+
+        # Fetch concurrency histograms
+        stmt = (
+            select(ConcurrencyHistogram)
+            .where(
+                and_(
+                    ConcurrencyHistogram.user_hash == user_hash,
+                    ConcurrencyHistogram.snapshot_hour >= day_start,
+                    ConcurrencyHistogram.snapshot_hour <= day_end,
+                )
+            )
+        )
+        result = await db.execute(stmt)
+        rows = result.scalars().all()
+
+        per_hour = {}
+        for row in rows:
+            try:
+                histogram = json.loads(row.histogram) if row.histogram else {}
+                hour_key = f"{row.snapshot_hour.strftime('%Y-%m-%d')}:{row.snapshot_hour.hour}"
+                per_hour[hour_key] = {"histogram": histogram, "tokens": 0}
+            except (json.JSONDecodeError, ValueError):
+                continue
+
+        # Fetch hourly token data
+        token_stmt = (
+            select(MetricsHourly)
+            .where(
+                and_(
+                    MetricsHourly.user_hash == user_hash,
+                    MetricsHourly.snapshot_hour >= day_start,
+                    MetricsHourly.snapshot_hour <= day_end,
+                )
+            )
+        )
+        token_result = await db.execute(token_stmt)
+        token_rows = token_result.scalars().all()
+
+        for row in token_rows:
+            hour_key = f"{row.snapshot_hour.strftime('%Y-%m-%d')}:{row.snapshot_hour.hour}"
+            if hour_key in per_hour:
+                per_hour[hour_key]["tokens"] = row.total_tokens or 0
+            elif row.total_tokens and row.total_tokens > 0:
+                per_hour[hour_key] = {"histogram": {}, "tokens": row.total_tokens}
+
+        # Fetch day sessions
+        ds_stmt = select(DailySessions).where(
+            and_(
+                DailySessions.user_hash == user_hash,
+                DailySessions.snapshot_date == target_date,
+            )
+        )
+        ds_result = await db.execute(ds_stmt)
+        ds_row = ds_result.scalar_one_or_none()
+        if ds_row and ds_row.sessions:
+            try:
+                per_hour["sessions"] = json.loads(ds_row.sessions)
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        return per_hour
+
+    # ── legacy: last N hours of peak concurrency ──
+    if hours is None:
+        hours = 12
+
+    now = datetime.utcnow()
+    start_time = now - timedelta(hours=hours)
+
+    stmt = (
+        select(ConcurrencyHistogram)
+        .where(
+            and_(
+                ConcurrencyHistogram.user_hash == user_hash,
+                ConcurrencyHistogram.snapshot_hour >= start_time,
+            )
+        )
+    )
+    result = await db.execute(stmt)
+    rows = result.scalars().all()
+
+    per_hour = {}
+    for row in rows:
+        try:
+            histogram = json.loads(row.histogram) if row.histogram else {}
+            peak = 0
+            for sessions_str, minutes in histogram.items():
+                s = int(sessions_str)
+                if s > peak:
+                    peak = s
+            hour_key = f"{row.snapshot_hour.strftime('%Y-%m-%d')}:{row.snapshot_hour.hour}"
+            per_hour[hour_key] = peak
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+    return per_hour

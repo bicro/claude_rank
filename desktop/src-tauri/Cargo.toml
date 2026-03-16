@@ -23,6 +23,10 @@ log = "0.4"
 notify = { version = "7", features = ["macos_fsevent"] }
 uuid = { version = "1", features = ["v4"] }
 open = "5"
+arboard = { version = "3", features = ["image-data"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+ab_glyph = "0.2"
+base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

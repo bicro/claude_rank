@@ -56,6 +56,10 @@ class UserMetrics(Base):
     level: Mapped[int] = mapped_column(BigInteger, default=0)
     estimated_spend: Mapped[float] = mapped_column(Float, default=0.0)
     last_synced: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Session duration tracking
+    total_session_time_secs: Mapped[int] = mapped_column(BigInteger, default=0)
+    total_active_time_secs: Mapped[int] = mapped_column(BigInteger, default=0)
+    total_idle_time_secs: Mapped[int] = mapped_column(BigInteger, default=0)
 
     user: Mapped["User"] = relationship(back_populates="metrics")
 
@@ -74,6 +78,7 @@ class MetricsHistory(Base):
     weighted_score: Mapped[float] = mapped_column(Float, default=0.0)
     daily_messages: Mapped[int] = mapped_column(BigInteger, default=0)
     daily_tool_calls: Mapped[int] = mapped_column(BigInteger, default=0)
+    daily_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
 
     __table_args__ = (UniqueConstraint("user_hash", "snapshot_date"),)
 
@@ -128,3 +133,14 @@ class ConcurrencyHistogram(Base):
     histogram: Mapped[str] = mapped_column(Text)  # JSON: {"1": 20, "2": 30}
 
     __table_args__ = (UniqueConstraint("user_hash", "snapshot_hour"),)
+
+
+class DailySessions(Base):
+    __tablename__ = "daily_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_hash: Mapped[str] = mapped_column(String(36), ForeignKey("users.user_hash"))
+    snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
+    sessions: Mapped[str] = mapped_column(Text)  # JSON array of session entries
+
+    __table_args__ = (UniqueConstraint("user_hash", "snapshot_date"),)

@@ -2,6 +2,19 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+// ── Day session entry (for burn clock) ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DaySessionEntry {
+    pub ring: u32,
+    pub start: u32,  // minutes since midnight UTC
+    pub end: u32,
+    pub tokens: u64,
+    #[serde(default)]
+    pub messages: u64,
+}
+
 // ── stats-cache.json ──
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -32,6 +45,21 @@ pub struct StatsCache {
     /// Concurrency histogram: Key is "YYYY-MM-DD:HH", Value is {session_count: minutes_with_that_count}
     #[serde(default)]
     pub concurrency_histogram: HashMap<String, HashMap<u32, u32>>,
+    /// Total session time across all sessions (seconds)
+    #[serde(default)]
+    pub total_session_time_secs: u64,
+    /// Total active time (excluding idle gaps) across all sessions (seconds)
+    #[serde(default)]
+    pub total_active_time_secs: u64,
+    /// Total idle time across all sessions (seconds)
+    #[serde(default)]
+    pub total_idle_time_secs: u64,
+    /// Hourly token totals: key is "YYYY-MM-DD:H", value is total tokens for that hour
+    #[serde(default)]
+    pub hour_tokens: HashMap<String, u64>,
+    /// Day sessions: key is "YYYY-MM-DD", value is session entries for that day
+    #[serde(default)]
+    pub day_sessions: HashMap<String, Vec<DaySessionEntry>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -107,6 +135,15 @@ pub struct SessionEntry {
     pub git_branch: Option<String>,
     #[serde(default)]
     pub project_path: Option<String>,
+    /// Total duration of this session in seconds
+    #[serde(default)]
+    pub duration_secs: u64,
+    /// Active time (excluding idle gaps) in seconds
+    #[serde(default)]
+    pub active_secs: u64,
+    /// Idle time in seconds
+    #[serde(default)]
+    pub idle_secs: u64,
 }
 
 // ── Helpers ──

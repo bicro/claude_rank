@@ -98,3 +98,40 @@ export async function getUserHeatmap(userHash, days = 365) {
 export async function getUserHourlyHeatmap(userHash, hours = 24) {
     return apiFetch(`/api/users/${userHash}/heatmap/hourly?hours=${hours}`);
 }
+
+export async function getUserConcurrency(userHash) {
+    return apiFetch(`/api/users/${userHash}/concurrency`);
+}
+
+export async function getUserConcurrencyByDate(userHash, dateStr) {
+    return apiFetch(`/api/users/${userHash}/concurrency?date=${dateStr}`);
+}
+
+export async function getUserDailyRanks(userHash, dateStr, period = 'day') {
+    let url = `/api/users/${userHash}/daily-ranks?period=${period}`;
+    if (dateStr) url += `&date=${dateStr}`;
+    return apiFetch(url);
+}
+
+const _animFrames = new WeakMap();
+
+export function animateValue(element, fromVal, toVal, formatter, duration = 800) {
+    if (_animFrames.has(element)) cancelAnimationFrame(_animFrames.get(element));
+    if (fromVal === toVal) {
+        element.textContent = formatter(toVal);
+        return;
+    }
+    const start = performance.now();
+    function tick(now) {
+        let t = Math.min((now - start) / duration, 1);
+        t = 1 - Math.pow(1 - t, 3); // easeOutCubic
+        const current = Math.round(fromVal + (toVal - fromVal) * t);
+        element.textContent = formatter(current);
+        if (t < 1) {
+            _animFrames.set(element, requestAnimationFrame(tick));
+        } else {
+            _animFrames.delete(element);
+        }
+    }
+    _animFrames.set(element, requestAnimationFrame(tick));
+}

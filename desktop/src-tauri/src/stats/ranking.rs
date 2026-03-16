@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::Emitter;
 
-use super::parser::StatsCache;
+use super::parser::{DaySessionEntry, StatsCache};
 use super::points::PointsState;
 
 fn ranking_api_base() -> String {
@@ -90,7 +90,11 @@ pub(crate) struct SyncPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     hour_counts: Option<HashMap<String, u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    hour_tokens: Option<HashMap<String, u64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     concurrency_histogram: Option<HashMap<String, HashMap<u32, u32>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    day_sessions: Option<HashMap<String, Vec<DaySessionEntry>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     prompt_hashes: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -108,6 +112,9 @@ struct SyncTotals {
     current_streak: u64,
     total_points: u64,
     level: u64,
+    total_session_time_secs: u64,
+    total_active_time_secs: u64,
+    total_idle_time_secs: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -190,6 +197,9 @@ impl RankingEngine {
             current_streak: points_state.current_streak,
             total_points: points_state.total_points,
             level: points_state.level,
+            total_session_time_secs: stats.total_session_time_secs,
+            total_active_time_secs: stats.total_active_time_secs,
+            total_idle_time_secs: stats.total_idle_time_secs,
         };
 
         // Token breakdown per model
@@ -215,9 +225,33 @@ impl RankingEngine {
             None
         };
 
-        // Daily activity
+        // Daily activity — enrich with tokenCount from daily_model_tokens
         let daily_activity = if settings.daily_breakdown {
-            serde_json::to_value(&stats.daily_activity).ok()
+            // Build a date→total_tokens lookup from daily_model_tokens
+            let daily_token_totals: HashMap<&str, u64> = stats
+                .daily_model_tokens
+                .iter()
+                .map(|dmt| {
+                    let total: u64 = dmt.tokens_by_model.values().sum();
+                    (dmt.date.as_str(), total)
+                })
+                .collect();
+
+            let enriched: Vec<serde_json::Value> = stats
+                .daily_activity
+                .iter()
+                .map(|da| {
+                    let token_count = daily_token_totals.get(da.date.as_str()).copied().unwrap_or(0);
+                    serde_json::json!({
+                        "date": da.date,
+                        "messageCount": da.message_count,
+                        "sessionCount": da.session_count,
+                        "toolCallCount": da.tool_call_count,
+                        "tokenCount": token_count,
+                    })
+                })
+                .collect();
+            serde_json::to_value(&enriched).ok()
         } else {
             None
         };
@@ -229,9 +263,23 @@ impl RankingEngine {
             None
         };
 
+        // Hourly token totals
+        let hour_tokens = if settings.hour_activity {
+            Some(stats.hour_tokens.clone())
+        } else {
+            None
+        };
+
         // Concurrency histogram
         let concurrency_histogram = if settings.concurrency_activity {
             Some(stats.concurrency_histogram.clone())
+        } else {
+            None
+        };
+
+        // Day sessions (session-based burn clock)
+        let day_sessions = if settings.concurrency_activity {
+            Some(stats.day_sessions.clone())
         } else {
             None
         };
@@ -243,7 +291,9 @@ impl RankingEngine {
             token_breakdown,
             daily_activity,
             hour_counts,
+            hour_tokens,
             concurrency_histogram,
+            day_sessions,
             prompt_hashes: None, // Populated from sessions if enabled
             prompts: None,       // Populated from sessions if enabled
             tool_names: None,    // Could be populated from stats
