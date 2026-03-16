@@ -80,6 +80,90 @@ a:hover { text-decoration: underline; }
     font-family: inherit;
 }
 
+/* ── Auth UI ── */
+.auth-container {
+    position: relative;
+}
+.auth-signin-wrapper {
+    position: relative;
+}
+.auth-signin-btn {
+    background: #111;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+}
+.auth-signin-btn:hover { opacity: 0.85; }
+.auth-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    background: var(--bg-primary);
+    border: 1px solid #d0d0d0;
+    border-radius: 10px;
+    padding: 8px;
+    min-width: 200px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    z-index: 200;
+    flex-direction: column;
+    gap: 4px;
+}
+.auth-dropdown.open { display: flex; }
+.auth-provider-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: none;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    width: 100%;
+    text-align: left;
+    transition: background 0.15s;
+}
+.auth-provider-btn:hover { background: var(--bg-hover); }
+.auth-provider-btn svg { flex-shrink: 0; }
+.auth-user-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.auth-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+}
+.auth-user-name {
+    font-size: 13px;
+    font-weight: 600;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.auth-signout-btn {
+    background: none;
+    border: 1px solid #d0d0d0;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+}
+.auth-signout-btn:hover { color: var(--text-primary); border-color: var(--text-primary); }
+
 .hamburger-btn {
     display: none;
     flex-direction: column;
@@ -546,6 +630,10 @@ a:hover { text-decoration: underline; }
 
     .header-search { position: static; transform: none; width: 100%; }
     #themeToggle { width: 100%; padding: 8px 12px; text-align: center; }
+    .auth-signin-btn { width: 100%; text-align: center; }
+    .auth-dropdown { position: static; width: 100%; box-shadow: none; border: none; padding: 0; }
+    .auth-dropdown.open { display: flex; }
+    .auth-user-info { width: 100%; justify-content: center; }
 
     /* Hamburger X animation */
     .hamburger-btn.open span:nth-child(1) { transform: rotate(45deg) translate(4px, 4px); }
@@ -910,6 +998,17 @@ a:hover { text-decoration: underline; }
 [data-theme="dark"] #themeToggle {
     background: #e0e0e0;
     color: #0d0d0d;
+}
+[data-theme="dark"] .auth-signin-btn {
+    background: #e0e0e0;
+    color: #0a0a0a;
+}
+[data-theme="dark"] .auth-dropdown {
+    border-color: #333;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+[data-theme="dark"] .auth-signout-btn {
+    border-color: #444;
 }
 
 /* ── Burn Clock Visualization ── */
