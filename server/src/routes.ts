@@ -353,9 +353,14 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
   const db = getDb();
   const provider = body.provider || null;
 
-  // Disconnect (logout) — clear social fields; no session required
-  // (the user_hash itself is the secret — only the owner knows it)
+  // Disconnect (logout) — clear social fields
   if (!provider) {
+    const session = await getAuthSession(request);
+    if (!session?.user?.id) return error("Unauthorized", 401);
+    const user = await db.query("SELECT auth_id FROM users WHERE user_hash = ?").get(userHash) as any;
+    if (user?.auth_id && user.auth_id !== session.user.id) {
+      return error("Forbidden", 403);
+    }
     const now = new Date().toISOString();
     await db.query(
       `UPDATE users SET display_name = NULL, avatar_url = NULL, auth_provider = NULL, auth_id = NULL, social_url = NULL, updated_at = ? WHERE user_hash = ?`
@@ -988,22 +993,24 @@ async function handleGetTeamHistory(teamHash: string, url: URL): Promise<Respons
 
 // ─── Sync Handler ───────────────────────────────────────────────────────────
 
-// TODO: This endpoint accepts any user_hash without authentication. Since sync
-// is called from the CLI (no browser session), it needs a different auth
-// mechanism (e.g. signed requests or per-device API keys) to prevent
-// fabricated metrics from being submitted for arbitrary user_hashes.
 async function handleSync(request: Request): Promise<Response> {
   const req = await parseBody(request);
   if (!req?.user_hash) return error("user_hash is required", 400);
+  if (!req.sync_secret) return error("sync_secret is required", 400);
 
   const db = getDb();
   const totals = req.totals ?? {};
 
-  // Ensure user exists
-  const existingUser = await db.query("SELECT user_hash FROM users WHERE user_hash = ?").get(req.user_hash) as any;
+  // Ensure user exists and verify sync_secret (trust-on-first-use)
+  const existingUser = await db.query("SELECT user_hash, sync_secret FROM users WHERE user_hash = ?").get(req.user_hash) as any;
   if (!existingUser) {
     const now = new Date().toISOString();
-    await db.query("INSERT INTO users (user_hash, created_at, updated_at) VALUES (?, ?, ?)").run(req.user_hash, now, now);
+    await db.query("INSERT INTO users (user_hash, sync_secret, created_at, updated_at) VALUES (?, ?, ?, ?)").run(req.user_hash, req.sync_secret, now, now);
+  } else if (!existingUser.sync_secret) {
+    // Existing user without secret — store it (one-time migration)
+    await db.query("UPDATE users SET sync_secret = ? WHERE user_hash = ?").run(req.sync_secret, req.user_hash);
+  } else if (existingUser.sync_secret !== req.sync_secret) {
+    return error("Forbidden", 403);
   }
 
   // Compute prompt uniqueness

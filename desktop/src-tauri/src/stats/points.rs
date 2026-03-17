@@ -5,7 +5,7 @@ use std::path::PathBuf;
 fn state_path() -> PathBuf {
     let dir = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".vaibfu");
+        .join(".ClaudeRank");
     let _ = std::fs::create_dir_all(&dir);
     dir.join("state.json")
 }

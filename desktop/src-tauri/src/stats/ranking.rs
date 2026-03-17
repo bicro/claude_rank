@@ -23,6 +23,8 @@ const SYNC_THROTTLE_SECS: u64 = 300; // 5 minutes
 pub struct RankingConfig {
     pub user_hash: String,
     #[serde(default)]
+    pub sync_secret: Option<String>,
+    #[serde(default)]
     pub username: Option<String>,
     #[serde(default)]
     pub team_hash: Option<String>,
@@ -82,6 +84,7 @@ fn default_sync_settings() -> SyncSettings {
 #[derive(Debug, Serialize)]
 pub(crate) struct SyncPayload {
     user_hash: String,
+    sync_secret: String,
     sync_settings: SyncSettings,
     totals: SyncTotals,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -179,6 +182,15 @@ impl RankingEngine {
         self.last_sync_time = Some(Instant::now());
         self.config.last_synced = Some(Utc::now().to_rfc3339());
         save_config(&self.config);
+    }
+
+    /// Ensure config has a sync_secret (backfill for pre-existing installs).
+    pub fn ensure_sync_secret(&mut self) {
+        if self.config.sync_secret.is_none() {
+            self.config.sync_secret = Some(uuid::Uuid::new_v4().to_string());
+            save_config(&self.config);
+            info!("[ranking] Generated sync_secret for existing identity");
+        }
     }
 
     pub fn build_sync_payload(&self, stats: &StatsCache, points_state: &PointsState) -> SyncPayload {
@@ -291,6 +303,7 @@ impl RankingEngine {
 
         SyncPayload {
             user_hash: self.config.user_hash.clone(),
+            sync_secret: self.config.sync_secret.clone().unwrap_or_default(),
             sync_settings: settings.clone(),
             totals,
             token_breakdown,
@@ -311,7 +324,7 @@ impl RankingEngine {
 fn ranking_config_path() -> PathBuf {
     let dir = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".vaibfu");
+        .join(".ClaudeRank");
     std::fs::create_dir_all(&dir).ok();
     dir.join("ranking.json")
 }
@@ -327,6 +340,7 @@ fn load_or_create_config() -> RankingConfig {
     // Generate new identity
     let config = RankingConfig {
         user_hash: uuid::Uuid::new_v4().to_string(),
+        sync_secret: Some(uuid::Uuid::new_v4().to_string()),
         username: None,
         team_hash: None,
         team_name: None,
@@ -581,6 +595,7 @@ pub fn try_sync(
         if !engine.should_sync() {
             return;
         }
+        engine.ensure_sync_secret();
         let payload = engine.build_sync_payload(stats, &points_state);
         let json = match serde_json::to_string(&payload) {
             Ok(j) => j,

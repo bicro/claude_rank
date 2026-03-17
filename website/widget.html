@@ -538,6 +538,22 @@
 import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, formatNumber, formatCost, formatPercentile, animateValue } from './js/api.js?v=2';
 import { getCachedAvatar, clearCachedAvatar } from './js/avatar.js';
 
+const ALLOWED_PARENT_ORIGINS = [
+  'http://localhost:3001',
+  'https://clauderank.com',
+  'https://claude-rank-1.onrender.com',
+  'http://127.0.0.1:1430',
+  'tauri://localhost',
+  'https://tauri.localhost',
+];
+
+function postToParent(data) {
+  if (window.parent === window) return;
+  for (const origin of ALLOWED_PARENT_ORIGINS) {
+    window.parent.postMessage(data, origin);
+  }
+}
+
 const params = new URLSearchParams(window.location.search);
 const userHash = params.get('h');
 
@@ -569,7 +585,7 @@ function startLogin(provider) {
 
   const connectUrl = window.location.origin + '/auth-connect.html?user_hash=' + encodeURIComponent(userHash) + '&provider=' + provider;
   if (window.parent !== window) {
-    window.parent.postMessage({ type: 'open-url', url: connectUrl }, '*');
+    postToParent({ type: 'open-url', url: connectUrl });
   } else {
     window.open(connectUrl, '_blank');
   }
@@ -588,7 +604,7 @@ function startLogin(provider) {
         clearInterval(pollInterval);
         // Signal desktop to force re-sync so server has data
         if (window.parent !== window) {
-          window.parent.postMessage({ type: 'force-sync' }, '*');
+          postToParent({ type: 'force-sync' });
         }
         // Poll until metrics appear (sync may take a moment)
         let retries = 0;
@@ -769,7 +785,7 @@ function renderHeatmap(svgEl, hourlyData, isToday) {
 function notifyHeight() {
   if (window.parent !== window) {
     const h = document.querySelector('.panel').offsetHeight;
-    window.parent.postMessage({ type: 'resize', height: h }, '*');
+    postToParent({ type: 'resize', height: h });
   }
 }
 new ResizeObserver(() => notifyHeight()).observe(document.querySelector('.panel'));
@@ -1006,15 +1022,18 @@ document.addEventListener('click', (e) => {
 window.doLogout = doLogout;
 async function doLogout() {
   userMenu.classList.remove('open');
+  // Disconnect social auth (requires active session — may fail if session expired)
   try {
-    // Disconnect social auth and sign out (keep metrics data intact)
     await fetch(`/api/users/${userHash}/connect`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+  } catch {}
+  // Sign out from Better Auth (proceed regardless of disconnect result)
+  try {
     await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' });
   } catch {}
   clearCachedAvatar();
   // Signal desktop app to force re-sync local data back to server
   if (window.parent !== window) {
-    window.parent.postMessage({ type: 'force-sync' }, '*');
+    postToParent({ type: 'force-sync' });
   }
   setTimeout(() => window.location.reload(), 500);
 }
@@ -1201,7 +1220,7 @@ async function copyCardAsImage() {
   const inIframe = window.parent !== window;
   if (inIframe) {
     const base64 = canvas.toDataURL('image/png').split(',')[1];
-    window.parent.postMessage({ type: 'copy-image', base64 }, '*');
+    postToParent({ type: 'copy-image', base64 });
   } else {
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
@@ -1222,9 +1241,10 @@ document.getElementById('copyBtn').addEventListener('click', async () => {
 // ── View Rankings → open profile page externally ──
 document.getElementById('viewRankingsBtn').addEventListener('click', (e) => {
   e.preventDefault();
+  userMenu.classList.remove('open');
   const url = window.location.origin + '/profile.html?hash=' + encodeURIComponent(userHash);
   if (window.parent !== window) {
-    window.parent.postMessage({ type: 'open-url', url }, '*');
+    postToParent({ type: 'open-url', url });
   } else {
     window.open(url, '_blank');
   }
@@ -1235,7 +1255,7 @@ document.getElementById('linkFull').addEventListener('click', (e) => {
   e.preventDefault();
   const url = e.currentTarget.href;
   if (window.parent !== window) {
-    window.parent.postMessage({ type: 'open-url', url }, '*');
+    postToParent({ type: 'open-url', url });
   } else {
     window.open(url, '_blank');
   }

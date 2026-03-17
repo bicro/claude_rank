@@ -279,7 +279,7 @@ fn find_monitor_at(monitors: &[tauri::Monitor], px: f64, py: f64) -> Option<&tau
 fn window_prefs_path() -> PathBuf {
     let dir = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".vaibfu");
+        .join(".ClaudeRank");
     std::fs::create_dir_all(&dir).ok();
     dir.join("window_prefs.json")
 }

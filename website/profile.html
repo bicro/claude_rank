@@ -36,6 +36,8 @@
         import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserConcurrency, getUserConcurrencyByDate, getUserDailyRanks, formatNumber, formatCost, formatPercentile, getCategoryLabel, getTier, animateValue } from './js/api.js?v=2';
         import { getCachedAvatar } from './js/avatar.js';
 
+        function escHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
         const params = new URLSearchParams(window.location.search);
         const userHash = params.get('hash');
         const username = params.get('username');
@@ -47,7 +49,7 @@
                 loadProfile(data.user_hash);
             }).catch(err => {
                 document.getElementById('profileContent').innerHTML =
-                    `<div class="loading" style="color:var(--red)">User "${username}" not found</div>`;
+                    `<div class="loading" style="color:var(--red)">User "${escHtml(username)}" not found</div>`;
             });
         } else {
             document.getElementById('profileContent').innerHTML =
@@ -122,14 +124,14 @@
                     linkedin: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>',
                 };
                 const socialIconHtml = profile.social_url && profile.auth_provider && socialIcons[profile.auth_provider]
-                    ? ` <a href="${profile.social_url}" target="_blank" rel="noopener" class="social-link" title="${profile.auth_provider === 'twitter' ? 'X' : profile.auth_provider.charAt(0).toUpperCase() + profile.auth_provider.slice(1)}">${socialIcons[profile.auth_provider]}</a>`
+                    ? ` <a href="${escHtml(profile.social_url)}" target="_blank" rel="noopener noreferrer" class="social-link" title="${profile.auth_provider === 'twitter' ? 'X' : profile.auth_provider.charAt(0).toUpperCase() + profile.auth_provider.slice(1)}">${socialIcons[profile.auth_provider]}</a>`
                     : '';
 
                 container.innerHTML = `
                     <div class="profile-header">
                         ${avatarHtml}
                         <div class="profile-info">
-                            <h2>${displayName}${socialIconHtml}
+                            <h2>${escHtml(displayName)}${socialIconHtml}
                                 <span class="tier-badge tier-${tier.tier.toLowerCase()}">${tierObj.icon} ${tier.tier}</span>
                             </h2>
                             <div class="meta">
@@ -652,7 +654,7 @@
                     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
 
                     s += `<text x="30" y="${topY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-                    s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="20" font-family="inherit" font-weight="700">@${cardData.username || 'anonymous'}</text>`;
+                    s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
 
                     const rankPillH = 28;
                     const rankPillW = 230;
@@ -822,7 +824,7 @@
                     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#0d0d0d"/>`;
 
                     s += `<text x="30" y="${topY}" fill="#888888" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-                    s += `<text x="30" y="${usernameY}" fill="#e0e0e0" font-size="20" font-family="inherit" font-weight="700">@${cardData.username || 'anonymous'}</text>`;
+                    s += `<text x="30" y="${usernameY}" fill="#e0e0e0" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
 
                     const rankPillH = 28;
                     const rankPillW = 230;
@@ -1299,7 +1301,7 @@
 
                 document.title = `${displayName} - ClaudeRank`;
             } catch (err) {
-                container.innerHTML = `<div class="loading" style="color:var(--red)">Error: ${err.message}</div>`;
+                container.innerHTML = `<div class="loading" style="color:var(--red)">Error: ${escHtml(err.message)}</div>`;
             }
         }
     </script>

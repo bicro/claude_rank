@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://localhost:3001 https://clauderank.com https://claude-rank.onrender.com; frame-src https://clauderank.com https://claude-rank.onrender.com http://localhost:3001"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://localhost:3001 https://clauderank.com https://www.clauderank.com https://claude-rank.onrender.com; frame-src https://clauderank.com https://www.clauderank.com https://claude-rank.onrender.com http://localhost:3001"
     }
   },
   "plugins": {

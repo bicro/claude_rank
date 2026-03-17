@@ -113,8 +113,8 @@ pub struct JsonlTracker {
     cached_stats: StatsCache,
 }
 
-fn vaibfu_cache_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".vaibfu").join("stats-cache.json"))
+fn claude_rank_cache_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(".ClaudeRank").join("stats-cache.json"))
 }
 
 impl JsonlTracker {
@@ -129,7 +129,7 @@ impl JsonlTracker {
     /// Load cached stats from disk. Returns the cached StatsCache if available.
     /// Also pre-populates file_states with cached metadata to skip unchanged files.
     pub fn load_cache(&mut self) -> Option<StatsCache> {
-        let path = vaibfu_cache_path()?;
+        let path = claude_rank_cache_path()?;
         let data = std::fs::read_to_string(&path).ok()?;
         let persisted: PersistedCache = serde_json::from_str(&data).ok()?;
 
@@ -160,7 +160,7 @@ impl JsonlTracker {
 
     /// Save current stats and file metadata to disk cache.
     fn save_cache(&self) {
-        let Some(path) = vaibfu_cache_path() else {
+        let Some(path) = claude_rank_cache_path() else {
             return;
         };
 

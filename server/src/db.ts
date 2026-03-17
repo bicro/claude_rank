@@ -89,6 +89,7 @@ export async function initDb(): Promise<void> {
       auth_provider TEXT,
       auth_id TEXT,
       social_url TEXT,
+      sync_secret TEXT,
       created_at TEXT,
       updated_at TEXT
     );
@@ -176,4 +177,11 @@ export async function initDb(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_concurrency_histogram_user_hash ON concurrency_histogram(user_hash);
     CREATE INDEX IF NOT EXISTS idx_daily_sessions_user_hash ON daily_sessions(user_hash);
   `);
+
+  // Migration: add sync_secret column to existing users table
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS sync_secret TEXT`);
+  } catch {
+    // Column already exists — ignore
+  }
 }
