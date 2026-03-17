@@ -117,12 +117,17 @@ async function getUserRank(db: DbClient, userHash: string, category: string): Pr
   const val = userRow.value;
   if (val == null) return null;
 
-  const countRow = await db.query(`SELECT COUNT(*) as cnt FROM user_metrics WHERE ${col} > ?`).get(val) as any;
+  // Only count primary (non-linked) users for rankings
+  const countRow = await db.query(
+    `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL AND ${col} > ?`
+  ).get(val) as any;
   return (countRow?.cnt ?? 0) + 1;
 }
 
 export async function getUserRanksWithPercentiles(db: DbClient, userHash: string): Promise<Record<string, any>> {
-  const totalRow = await db.query("SELECT COUNT(*) as cnt FROM user_metrics").get() as any;
+  const totalRow = await db.query(
+    "SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL"
+  ).get() as any;
   const total = totalRow?.cnt ?? 0;
 
   const result: Record<string, any> = {};
@@ -392,7 +397,7 @@ export async function evaluateRankingBadges(db: DbClient, userHash: string): Pro
     for (const cat of cats) {
       const col = categoryCols[cat];
       const rows = await db.query(
-        `SELECT user_hash FROM user_metrics ORDER BY ${col} DESC LIMIT ?`
+        `SELECT um.user_hash FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL ORDER BY ${col} DESC LIMIT ?`
       ).all(topN) as any[];
       const topHashes = rows.map(r => r.user_hash);
       if (topHashes.includes(userHash)) {
@@ -421,7 +426,7 @@ export async function getHotUsers(db: DbClient, limit: number = 20, lookbackDays
   const rows = await db.query(
     `SELECT um.*, u.username FROM user_metrics um
      JOIN users u ON u.user_hash = um.user_hash
-     WHERE um.current_streak > 0`
+     WHERE um.current_streak > 0 AND u.linked_to IS NULL`
   ).all() as any[];
 
   if (rows.length === 0) return [];

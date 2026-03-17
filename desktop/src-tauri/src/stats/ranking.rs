@@ -34,6 +34,10 @@ pub struct RankingConfig {
     pub sync_settings: SyncSettings,
     #[serde(default)]
     pub last_synced: Option<String>,
+    /// When this device is linked to a multi-device account, this is the primary user_hash
+    /// used for profile/leaderboard links. The device keeps its own user_hash for syncing.
+    #[serde(default)]
+    pub primary_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,6 +144,10 @@ struct SyncResponse {
     prompt_uniqueness_score: f64,
     #[serde(default)]
     new_badges: Vec<String>,
+    /// Set when this device is linked to a primary account (multi-device).
+    /// The device keeps syncing with its own user_hash but uses primary_hash for profile links.
+    #[serde(default)]
+    primary_hash: Option<String>,
 }
 
 // ── Ranking Engine ──
@@ -346,6 +354,7 @@ fn load_or_create_config() -> RankingConfig {
         team_name: None,
         sync_settings: default_sync_settings(),
         last_synced: None,
+        primary_hash: None,
     };
     save_config(&config);
     info!("[ranking] Created new identity: {}", config.user_hash);
@@ -641,6 +650,15 @@ pub fn try_sync(
                         // Emit badge events
                         for badge_id in &data.new_badges {
                             let _ = app_handle.emit("badge-unlocked", badge_id);
+                        }
+                        // Save primary_hash if this device is linked to a multi-device account
+                        if let Some(ref ph) = data.primary_hash {
+                            info!("[ranking] Device linked to primary: {}", ph);
+                            if let Ok(mut engine) = _ranking_clone.lock() {
+                                let mut config = engine.config().clone();
+                                config.primary_hash = Some(ph.clone());
+                                engine.update_config(config);
+                            }
                         }
                     }
                 } else {

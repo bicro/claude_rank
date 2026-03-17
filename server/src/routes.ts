@@ -12,6 +12,7 @@ import {
   estimateCost,
   getHotUsers,
 } from "./services";
+import { recomputeUserMetrics, getLinkedHashes } from "./aggregate";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -338,6 +339,7 @@ async function handleClearCache(userHash: string, request: Request): Promise<Res
 
   const db = getDb();
   await db.query("DELETE FROM user_metrics WHERE user_hash = ?").run(userHash);
+  await db.query("DELETE FROM device_metrics WHERE device_hash = ?").run(userHash);
   await db.query("DELETE FROM metrics_history WHERE user_hash = ?").run(userHash);
   await db.query("DELETE FROM metrics_hourly WHERE user_hash = ?").run(userHash);
   await db.query("DELETE FROM user_badges WHERE user_hash = ?").run(userHash);
@@ -353,17 +355,21 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
   const db = getDb();
   const provider = body.provider || null;
 
-  // Disconnect (logout) — clear social fields
+  // Disconnect (logout) — clear social fields.
+  // Session cookie may be unavailable in third-party iframe contexts (Safari/WebKit ITP),
+  // so allow disconnect without auth. If session exists, verify ownership; otherwise
+  // proceed since the caller already knows the user_hash.
   if (!provider) {
     const session = await getAuthSession(request);
-    if (!session?.user?.id) return error("Unauthorized", 401);
-    const user = await db.query("SELECT auth_id FROM users WHERE user_hash = ?").get(userHash) as any;
-    if (user?.auth_id && user.auth_id !== session.user.id) {
-      return error("Forbidden", 403);
+    if (session?.user?.id) {
+      const user = await db.query("SELECT auth_id FROM users WHERE user_hash = ?").get(userHash) as any;
+      if (user?.auth_id && user.auth_id !== session.user.id) {
+        return error("Forbidden", 403);
+      }
     }
     const now = new Date().toISOString();
     await db.query(
-      `UPDATE users SET display_name = NULL, avatar_url = NULL, auth_provider = NULL, auth_id = NULL, social_url = NULL, updated_at = ? WHERE user_hash = ?`
+      `UPDATE users SET display_name = NULL, avatar_url = NULL, auth_provider = NULL, social_url = NULL, updated_at = ? WHERE user_hash = ?`
     ).run(now, userHash);
     return json({ status: "disconnected" });
   }
@@ -389,6 +395,33 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
   // Prevent re-linking a user_hash already connected to a different auth user
   if (user.auth_id && user.auth_id !== authId) {
     return error("This account is already linked to a different user", 403);
+  }
+
+  // Check if this auth_id is already connected to a different user_hash (multi-device linking)
+  const existingPrimary = await db.query(
+    "SELECT user_hash, display_name, avatar_url FROM users WHERE auth_id = ? AND user_hash != ? AND linked_to IS NULL"
+  ).get(authId, userHash) as any;
+
+  if (existingPrimary) {
+    // Same person, different computer — link this device as secondary
+    await db.query(
+      "UPDATE users SET linked_to = ?, auth_id = ?, auth_provider = ?, updated_at = ? WHERE user_hash = ?"
+    ).run(existingPrimary.user_hash, authId, provider, now, userHash);
+
+    // Recompute aggregate with new device included
+    await recomputeUserMetrics(existingPrimary.user_hash);
+
+    // Log the link
+    await db.query(
+      "INSERT INTO merge_log (primary_hash, secondary_hash, auth_id, linked_at) VALUES (?, ?, ?, ?)"
+    ).run(existingPrimary.user_hash, userHash, authId, now);
+
+    return json({
+      status: "linked",
+      primary_hash: existingPrimary.user_hash,
+      display_name: existingPrimary.display_name,
+      avatar_url: existingPrimary.avatar_url,
+    });
   }
 
   // Fetch fresh profile data from the provider via Better Auth's stored access token.
@@ -449,32 +482,43 @@ async function handleGetUserProfile(userHash: string): Promise<Response> {
   const user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
   if (!user) return error("User not found", 404);
 
-  const metrics = await db.query("SELECT * FROM user_metrics WHERE user_hash = ?").get(userHash) as any;
-  const ranks = await getUserRanksWithPercentiles(db, userHash);
+  // Resolve to primary for profile display
+  const primaryHash = user.linked_to || userHash;
+  const profileUser = user.linked_to
+    ? await db.query("SELECT * FROM users WHERE user_hash = ?").get(primaryHash) as any
+    : user;
+  if (!profileUser) return error("User not found", 404);
+
+  const metrics = await db.query("SELECT * FROM user_metrics WHERE user_hash = ?").get(primaryHash) as any;
+  const ranks = await getUserRanksWithPercentiles(db, primaryHash);
 
   const weighted = metrics?.weighted_score ?? 0;
   const tier = computeTier(weighted);
 
-  // Get badges
+  // Get badges for primary
   const badges = await db.query(
     `SELECT b.id, b.name, b.icon, b.category, ub.unlocked_at
      FROM user_badges ub JOIN badges b ON ub.badge_id = b.id
      WHERE ub.user_hash = ?`
-  ).all(userHash) as any[];
+  ).all(primaryHash) as any[];
 
-  // Get concurrency stats for today
+  // Get concurrency stats for today across all linked devices
   const today = new Date().toISOString().split("T")[0]!;
   const todayStart = `${today}T00:00:00`;
   const todayEnd = `${today}T23:59:59`;
 
-  const concurrencyRows = await db.query(
+  const hashes = await getLinkedHashes(db, primaryHash);
+  const pool = getPool();
+  const ph = hashes.map((_, i) => `$${i + 1}`).join(", ");
+  const { rows: concurrencyRows } = await pool.query(
     `SELECT histogram FROM concurrency_histogram
-     WHERE user_hash = ? AND snapshot_hour >= ? AND snapshot_hour <= ?`
-  ).all(userHash, todayStart, todayEnd) as any[];
+     WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1} AND snapshot_hour <= $${hashes.length + 2}`,
+    [...hashes, todayStart, todayEnd],
+  );
 
   let maxConcurrent = 0;
   let concurrentMins = 0;
-  for (const row of concurrencyRows) {
+  for (const row of concurrencyRows as any[]) {
     try {
       const histogram = row.histogram ? JSON.parse(row.histogram) : {};
       for (const [sessionsStr, minutes] of Object.entries(histogram)) {
@@ -489,14 +533,14 @@ async function handleGetUserProfile(userHash: string): Promise<Response> {
   }
 
   return json({
-    user_hash: user.user_hash,
-    username: user.username,
-    display_name: user.display_name ?? null,
-    avatar_url: user.avatar_url ?? null,
-    auth_provider: user.auth_provider ?? null,
-    social_url: user.social_url ?? null,
-    team_hash: user.team_hash,
-    created_at: user.created_at,
+    user_hash: profileUser.user_hash,
+    username: profileUser.username,
+    display_name: profileUser.display_name ?? null,
+    avatar_url: profileUser.avatar_url ?? null,
+    auth_provider: profileUser.auth_provider ?? null,
+    social_url: profileUser.social_url ?? null,
+    team_hash: profileUser.team_hash,
+    created_at: profileUser.created_at,
     metrics: {
       total_tokens: metrics?.total_tokens ?? 0,
       total_messages: metrics?.total_messages ?? 0,
@@ -528,14 +572,28 @@ async function handleGetUserHistory(userHash: string, url: URL): Promise<Respons
   const days = parseInt(url.searchParams.get("days") ?? "30", 10);
   const db = getDb();
 
-  const rows = await db.query(
-    `SELECT * FROM metrics_history
-     WHERE user_hash = ?
+  // Aggregate across all linked devices
+  const hashes = await getLinkedHashes(db, userHash);
+  const pool = getPool();
+  const placeholders = hashes.map((_, i) => `$${i + 1}`).join(", ");
+  const { rows } = await pool.query(
+    `SELECT snapshot_date,
+       SUM(total_tokens) as total_tokens,
+       SUM(daily_tokens) as daily_tokens,
+       SUM(total_messages) as total_messages,
+       SUM(total_sessions) as total_sessions,
+       SUM(total_tool_calls) as total_tool_calls,
+       SUM(prompt_uniqueness_score) as prompt_uniqueness_score,
+       SUM(weighted_score) as weighted_score
+     FROM metrics_history
+     WHERE user_hash IN (${placeholders})
+     GROUP BY snapshot_date
      ORDER BY snapshot_date DESC
-     LIMIT ?`
-  ).all(userHash, days) as any[];
+     LIMIT $${hashes.length + 1}`,
+    [...hashes, days],
+  );
 
-  return json(rows.map(r => ({
+  return json(rows.map((r: any) => ({
     date: r.snapshot_date,
     tokens: r.total_tokens,
     daily_tokens: r.daily_tokens ?? 0,
@@ -576,11 +634,18 @@ async function handleGetHourlyHeatmap(userHash: string, url: URL): Promise<Respo
 
   const startHourStr = startHour.toISOString().replace(/\.\d{3}Z$/, "");
 
-  const snapshots = await db.query(
-    `SELECT * FROM metrics_hourly
-     WHERE user_hash = ? AND snapshot_hour >= ?
-     ORDER BY snapshot_hour ASC`
-  ).all(userHash, startHourStr) as any[];
+  // Aggregate across all linked devices
+  const hashes = await getLinkedHashes(db, userHash);
+  const pool = getPool();
+  const placeholders = hashes.map((_, i) => `$${i + 1}`).join(", ");
+  const { rows: snapshots } = await pool.query(
+    `SELECT snapshot_hour, SUM(total_messages) as total_messages, SUM(total_tokens) as total_tokens
+     FROM metrics_hourly
+     WHERE user_hash IN (${placeholders}) AND snapshot_hour >= $${hashes.length + 1}
+     GROUP BY snapshot_hour
+     ORDER BY snapshot_hour ASC`,
+    [...hashes, startHourStr],
+  );
 
   const snapMap: Record<string, any> = {};
   for (const s of snapshots) {
@@ -737,6 +802,9 @@ async function handleGetConcurrency(userHash: string, url: URL): Promise<Respons
   const db = getDb();
   const queryDate = url.searchParams.get("date");
 
+  // Aggregate across all linked devices
+  const hashes = await getLinkedHashes(db, userHash);
+
   if (queryDate !== null) {
     // Date-based: full 24h histogram for the given UTC date
     if (!/^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
@@ -750,32 +818,44 @@ async function handleGetConcurrency(userHash: string, url: URL): Promise<Respons
     const dayStart = `${targetDate}T00:00:00`;
     const dayEnd = `${targetDate}T23:59:59`;
 
-    // Fetch concurrency histograms
-    const rows = await db.query(
+    // Fetch concurrency histograms for all linked devices
+    const pool = getPool();
+    const ph = hashes.map((_, i) => `$${i + 1}`).join(", ");
+    const { rows } = await pool.query(
       `SELECT snapshot_hour, histogram FROM concurrency_histogram
-       WHERE user_hash = ? AND snapshot_hour >= ? AND snapshot_hour <= ?`
-    ).all(userHash, dayStart, dayEnd) as any[];
+       WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1} AND snapshot_hour <= $${hashes.length + 2}`,
+      [...hashes, dayStart, dayEnd],
+    );
 
+    // Merge histograms: sum minute counts per session-count key per hour
     const perHour: Record<string, any> = {};
-    for (const row of rows) {
+    for (const row of rows as any[]) {
       try {
         const histogram = row.histogram ? JSON.parse(row.histogram) : {};
         const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
         const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
         const hourKey = `${snapshotDate}:${hour}`;
-        perHour[hourKey] = { histogram, tokens: 0 };
+        if (!perHour[hourKey]) {
+          perHour[hourKey] = { histogram: {}, tokens: 0 };
+        }
+        // Sum histogram entries across devices
+        for (const [sessionsStr, minutes] of Object.entries(histogram)) {
+          perHour[hourKey].histogram[sessionsStr] = (perHour[hourKey].histogram[sessionsStr] ?? 0) + (minutes as number);
+        }
       } catch {
         continue;
       }
     }
 
-    // Fetch hourly token data
-    const tokenRows = await db.query(
-      `SELECT snapshot_hour, total_tokens FROM metrics_hourly
-       WHERE user_hash = ? AND snapshot_hour >= ? AND snapshot_hour <= ?`
-    ).all(userHash, dayStart, dayEnd) as any[];
+    // Fetch hourly token data across all linked devices
+    const { rows: tokenRows } = await pool.query(
+      `SELECT snapshot_hour, SUM(total_tokens) as total_tokens FROM metrics_hourly
+       WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1} AND snapshot_hour <= $${hashes.length + 2}
+       GROUP BY snapshot_hour`,
+      [...hashes, dayStart, dayEnd],
+    );
 
-    for (const row of tokenRows) {
+    for (const row of tokenRows as any[]) {
       const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
       const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
       const hourKey = `${snapshotDate}:${hour}`;
@@ -786,16 +866,22 @@ async function handleGetConcurrency(userHash: string, url: URL): Promise<Respons
       }
     }
 
-    // Fetch day sessions
-    const dsRow = await db.query(
-      "SELECT sessions FROM daily_sessions WHERE user_hash = ? AND snapshot_date = ?"
-    ).get(userHash, targetDate) as any;
-    if (dsRow?.sessions) {
-      try {
-        perHour["sessions"] = JSON.parse(dsRow.sessions);
-      } catch {
-        // ignore
+    // Fetch day sessions across all linked devices (concatenate arrays)
+    const { rows: dsRows } = await pool.query(
+      `SELECT sessions FROM daily_sessions WHERE user_hash IN (${ph}) AND snapshot_date = $${hashes.length + 1}`,
+      [...hashes, targetDate],
+    );
+    const allSessions: any[] = [];
+    for (const dsRow of dsRows as any[]) {
+      if (dsRow?.sessions) {
+        try {
+          const parsed = JSON.parse(dsRow.sessions);
+          if (Array.isArray(parsed)) allSessions.push(...parsed);
+        } catch { /* ignore */ }
       }
+    }
+    if (allSessions.length > 0) {
+      perHour["sessions"] = allSessions;
     }
 
     return json(perHour);
@@ -808,27 +894,39 @@ async function handleGetConcurrency(userHash: string, url: URL): Promise<Respons
   startTime.setUTCHours(startTime.getUTCHours() - hours);
   const startTimeStr = startTime.toISOString().replace(/\.\d{3}Z$/, "");
 
-  const rows = await db.query(
+  const pool = getPool();
+  const ph = hashes.map((_, i) => `$${i + 1}`).join(", ");
+  const { rows } = await pool.query(
     `SELECT snapshot_hour, histogram FROM concurrency_histogram
-     WHERE user_hash = ? AND snapshot_hour >= ?`
-  ).all(userHash, startTimeStr) as any[];
+     WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1}`,
+    [...hashes, startTimeStr],
+  );
 
-  const perHour: Record<string, number> = {};
-  for (const row of rows) {
+  // Merge histograms across devices, then extract peak per hour
+  const hourHistograms: Record<string, Record<string, number>> = {};
+  for (const row of rows as any[]) {
     try {
       const histogram = row.histogram ? JSON.parse(row.histogram) : {};
-      let peak = 0;
-      for (const [sessionsStr, minutes] of Object.entries(histogram)) {
-        const s = parseInt(sessionsStr, 10);
-        if (s > peak) peak = s;
-      }
       const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
       const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
       const hourKey = `${snapshotDate}:${hour}`;
-      perHour[hourKey] = peak;
+      if (!hourHistograms[hourKey]) hourHistograms[hourKey] = {};
+      for (const [sessionsStr, minutes] of Object.entries(histogram)) {
+        hourHistograms[hourKey][sessionsStr] = (hourHistograms[hourKey][sessionsStr] ?? 0) + (minutes as number);
+      }
     } catch {
       continue;
     }
+  }
+
+  const perHour: Record<string, number> = {};
+  for (const [hourKey, histogram] of Object.entries(hourHistograms)) {
+    let peak = 0;
+    for (const sessionsStr of Object.keys(histogram)) {
+      const s = parseInt(sessionsStr, 10);
+      if (s > peak) peak = s;
+    }
+    perHour[hourKey] = peak;
   }
 
   return json(perHour);
@@ -1034,16 +1132,16 @@ async function handleSync(request: Request): Promise<Response> {
   const now = new Date().toISOString();
   const today = new Date().toISOString().split("T")[0]!;
 
-  // Upsert user_metrics
-  const existingMetrics = await db.query("SELECT user_hash FROM user_metrics WHERE user_hash = ?").get(req.user_hash) as any;
-  if (existingMetrics) {
+  // Upsert device_metrics (per-device raw data)
+  const existingDevice = await db.query("SELECT device_hash FROM device_metrics WHERE device_hash = ?").get(req.user_hash) as any;
+  if (existingDevice) {
     await db.query(
-      `UPDATE user_metrics SET
+      `UPDATE device_metrics SET
         total_tokens = ?, total_messages = ?, total_sessions = ?, total_tool_calls = ?,
         prompt_uniqueness_score = ?, weighted_score = ?, estimated_spend = ?,
         current_streak = ?, total_points = ?, level = ?, last_synced = ?,
         total_session_time_secs = ?, total_active_time_secs = ?, total_idle_time_secs = ?
-       WHERE user_hash = ?`
+       WHERE device_hash = ?`
     ).run(
       totals.total_tokens ?? 0, totals.total_messages ?? 0,
       totals.total_sessions ?? 0, totals.total_tool_calls ?? 0,
@@ -1055,8 +1153,8 @@ async function handleSync(request: Request): Promise<Response> {
     );
   } else {
     await db.query(
-      `INSERT INTO user_metrics (
-        user_hash, total_tokens, total_messages, total_sessions, total_tool_calls,
+      `INSERT INTO device_metrics (
+        device_hash, total_tokens, total_messages, total_sessions, total_tool_calls,
         prompt_uniqueness_score, weighted_score, estimated_spend,
         current_streak, total_points, level, last_synced,
         total_session_time_secs, total_active_time_secs, total_idle_time_secs
@@ -1071,6 +1169,11 @@ async function handleSync(request: Request): Promise<Response> {
       totals.total_idle_time_secs ?? 0,
     );
   }
+
+  // Recompute aggregated user_metrics (sums across all linked devices)
+  const syncUser = await db.query("SELECT linked_to FROM users WHERE user_hash = ?").get(req.user_hash) as any;
+  const primaryHash = syncUser?.linked_to || req.user_hash;
+  await recomputeUserMetrics(primaryHash);
 
   // Upsert daily snapshot
   const existingHist = await db.query(
@@ -1260,18 +1363,20 @@ async function handleSync(request: Request): Promise<Response> {
     }
   }
 
-  // Evaluate badges
-  const metrics = await db.query("SELECT * FROM user_metrics WHERE user_hash = ?").get(req.user_hash) as any;
+  // Evaluate badges using aggregated metrics for the primary user
+  const badgeHash = primaryHash;
+  const metrics = await db.query("SELECT * FROM user_metrics WHERE user_hash = ?").get(badgeHash) as any;
   const newBadges: string[] = [];
-  newBadges.push(...await evaluateMilestoneBadges(db, req.user_hash, metrics));
-  newBadges.push(...await evaluateRankingBadges(db, req.user_hash));
-  newBadges.push(...await evaluateTeamBadges(db, req.user_hash));
+  newBadges.push(...await evaluateMilestoneBadges(db, badgeHash, metrics));
+  newBadges.push(...await evaluateRankingBadges(db, badgeHash));
+  newBadges.push(...await evaluateTeamBadges(db, badgeHash));
 
   return json({
     status: "ok",
-    weighted_score: weighted,
-    prompt_uniqueness_score: promptUniqueness,
+    weighted_score: metrics?.weighted_score ?? weighted,
+    prompt_uniqueness_score: metrics?.prompt_uniqueness_score ?? promptUniqueness,
     new_badges: newBadges,
+    primary_hash: primaryHash !== req.user_hash ? primaryHash : undefined,
   });
 }
 
@@ -1315,6 +1420,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
     const rows = await db.query(
       `SELECT u.user_hash, u.username, ${col} as value, um.weighted_score
        FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
+       WHERE u.linked_to IS NULL
        ORDER BY ${col} DESC
        LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
@@ -1328,7 +1434,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
       tier: computeTier(row.weighted_score).tier,
     }));
 
-    const countRow = await db.query("SELECT COUNT(*) as cnt FROM user_metrics").get() as any;
+    const countRow = await db.query("SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL").get() as any;
     const total = countRow?.cnt ?? 0;
 
     return json({ category, scope: "individual", entries, total_count: total });
@@ -1344,7 +1450,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
        FROM users u
        JOIN user_metrics um ON u.user_hash = um.user_hash
        JOIN teams t ON u.team_hash = t.team_hash
-       WHERE u.team_hash IS NOT NULL
+       WHERE u.team_hash IS NOT NULL AND u.linked_to IS NULL
        GROUP BY u.team_hash, t.team_name
        ORDER BY value DESC
        LIMIT ? OFFSET ?`

@@ -78,21 +78,33 @@ document.querySelector('.drag-strip').addEventListener('mousedown', (e) => {
 });
 
 // ── Load identity and set iframe src ──
-(async () => {
+let widgetUrl = '';
+let widgetLoaded = false;
+const frame = document.getElementById('widgetFrame');
+
+frame.addEventListener('load', () => { widgetLoaded = true; });
+frame.addEventListener('error', () => { widgetLoaded = false; });
+
+async function loadWidget() {
   try {
     const widgetBase = await invoke('get_widget_base');
     const id = await invoke('get_ranking_identity');
-    const frame = document.getElementById('widgetFrame');
-    frame.src = widgetBase + '/widget.html?h=' + encodeURIComponent(id.user_hash) + '&_t=' + Date.now();
+    widgetUrl = widgetBase + '/widget.html?h=' + encodeURIComponent(id.user_hash);
+    frame.src = widgetUrl + '&_t=' + Date.now();
   } catch (e) {
     console.error('Failed to load identity:', e);
   }
-})();
+}
+loadWidget();
 
 // ── Animate in/out ──
 const panel = document.querySelector('.panel');
 listen('overlay-visibility-changed', (event) => {
   if (event.payload.visible) {
+    // Retry loading if the widget failed (e.g. server wasn't ready on startup)
+    if (!widgetLoaded && widgetUrl) {
+      frame.src = widgetUrl + '&_t=' + Date.now();
+    }
     requestAnimationFrame(() => panel.classList.add('visible'));
   } else {
     panel.classList.remove('visible');

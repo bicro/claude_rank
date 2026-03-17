@@ -15,6 +15,10 @@ types.setTypeParser(1184, (val: string) => val);
 // so parse them as numbers to avoid string concatenation bugs (e.g. "123" + 5 = "1235").
 types.setTypeParser(20, (val: string) => Number(val));
 
+// SUM() of BIGINT columns returns NUMERIC (OID 1700), which pg also returns as
+// strings. Parse as Number to avoid the same string concatenation bugs in aggregate queries.
+types.setTypeParser(1700, (val: string) => Number(val));
+
 let _pool: pg.Pool | null = null;
 
 export interface DbClient {
@@ -90,6 +94,7 @@ export async function initDb(): Promise<void> {
       auth_id TEXT,
       social_url TEXT,
       sync_secret TEXT,
+      linked_to TEXT REFERENCES users(user_hash),
       created_at TEXT,
       updated_at TEXT
     );
@@ -172,16 +177,58 @@ export async function initDb(): Promise<void> {
       UNIQUE(user_hash, snapshot_date)
     );
 
+    CREATE TABLE IF NOT EXISTS device_metrics (
+      device_hash TEXT PRIMARY KEY,
+      total_tokens BIGINT DEFAULT 0,
+      total_messages BIGINT DEFAULT 0,
+      total_sessions BIGINT DEFAULT 0,
+      total_tool_calls BIGINT DEFAULT 0,
+      prompt_uniqueness_score DOUBLE PRECISION DEFAULT 0,
+      weighted_score DOUBLE PRECISION DEFAULT 0,
+      current_streak INTEGER DEFAULT 0,
+      total_points BIGINT DEFAULT 0,
+      level INTEGER DEFAULT 0,
+      estimated_spend DOUBLE PRECISION DEFAULT 0,
+      last_synced TEXT,
+      total_session_time_secs BIGINT DEFAULT 0,
+      total_active_time_secs BIGINT DEFAULT 0,
+      total_idle_time_secs BIGINT DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS merge_log (
+      id SERIAL PRIMARY KEY,
+      primary_hash TEXT NOT NULL,
+      secondary_hash TEXT NOT NULL,
+      auth_id TEXT NOT NULL,
+      linked_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_metrics_history_user_hash ON metrics_history(user_hash);
     CREATE INDEX IF NOT EXISTS idx_metrics_hourly_user_hash ON metrics_hourly(user_hash);
     CREATE INDEX IF NOT EXISTS idx_concurrency_histogram_user_hash ON concurrency_histogram(user_hash);
     CREATE INDEX IF NOT EXISTS idx_daily_sessions_user_hash ON daily_sessions(user_hash);
   `);
 
-  // Migration: add sync_secret column to existing users table
+  // Migrations
   try {
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS sync_secret TEXT`);
-  } catch {
-    // Column already exists — ignore
-  }
+  } catch { /* already exists */ }
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linked_to TEXT REFERENCES users(user_hash)`);
+  } catch { /* already exists */ }
+  try {
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_linked_to ON users(linked_to)`);
+  } catch { /* already exists */ }
+
+  // Backfill device_metrics from user_metrics for existing solo users
+  await pool.query(`
+    INSERT INTO device_metrics (device_hash, total_tokens, total_messages, total_sessions, total_tool_calls,
+      prompt_uniqueness_score, weighted_score, current_streak, total_points, level, estimated_spend,
+      last_synced, total_session_time_secs, total_active_time_secs, total_idle_time_secs)
+    SELECT user_hash, total_tokens, total_messages, total_sessions, total_tool_calls,
+      prompt_uniqueness_score, weighted_score, current_streak, total_points, level, estimated_spend,
+      last_synced, total_session_time_secs, total_active_time_secs, total_idle_time_secs
+    FROM user_metrics
+    WHERE user_hash NOT IN (SELECT device_hash FROM device_metrics)
+  `);
 }
