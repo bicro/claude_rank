@@ -1,6 +1,8 @@
 import { Database } from "bun:sqlite";
+import { initDb, getDb } from "./db";
+import { seedBadges } from "./services";
 
-const SCHEMA = `
+const AUTH_SCHEMA = `
 CREATE TABLE IF NOT EXISTS "user" (
   "id" TEXT NOT NULL PRIMARY KEY,
   "name" TEXT NOT NULL,
@@ -53,8 +55,14 @@ CREATE INDEX IF NOT EXISTS "verification_identifier_idx" ON "verification" ("ide
 `;
 
 export function migrate() {
-  const db = new Database("./auth.db");
-  db.exec(SCHEMA);
-  db.close();
+  // Auth database
+  const authDb = new Database("./auth.db");
+  authDb.exec(AUTH_SCHEMA);
+  authDb.close();
+
+  // ClaudeRank database — initializes tables via db.ts
+  const db = getDb();
+  seedBadges(db);
+
   console.log("Database migrations applied");
 }

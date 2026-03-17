@@ -1,10 +1,10 @@
 import { auth } from "./src/auth";
 import { migrate } from "./src/migrate";
+import { handleApiRequest } from "./src/routes";
 import { join } from "path";
 
 migrate();
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8001";
 const WEBSITE_DIR = join(import.meta.dir, "../website");
 
 const server = Bun.serve({
@@ -17,19 +17,13 @@ const server = Bun.serve({
       return auth.handler(request);
     }
 
-    // API routes — proxy to FastAPI backend
+    // API routes — handled directly by TypeScript routes
     if (url.pathname.startsWith("/api")) {
-      const backendUrl = `${BACKEND_URL}${url.pathname}${url.search}`;
-      const res = await fetch(backendUrl, {
-        method: request.method,
-        headers: request.headers,
-        body: request.method !== "GET" && request.method !== "HEAD"
-          ? await request.blob()
-          : undefined,
-      });
-      return new Response(res.body, {
-        status: res.status,
-        headers: res.headers,
+      const response = await handleApiRequest(url, request);
+      if (response) return response;
+      return new Response(JSON.stringify({ detail: "Not Found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
       });
     }
 
@@ -59,4 +53,4 @@ const server = Bun.serve({
 console.log(`ClaudeRank running on ${server.url}`);
 console.log(`  Website: ${server.url}`);
 console.log(`  Auth:    ${server.url}api/auth`);
-console.log(`  API:     proxying to ${BACKEND_URL}`);
+console.log(`  API:     ${server.url}api (native)`);
