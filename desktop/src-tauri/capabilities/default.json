@@ -18,6 +18,7 @@
     "core:app:default",
     "core:path:default",
     "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister"
+    "global-shortcut:allow-unregister",
+    "deep-link:default"
   ]
 }

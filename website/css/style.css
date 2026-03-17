@@ -464,6 +464,18 @@ a:hover { text-decoration: underline; }
 }
 .profile-info h2 { font-size: 24px; margin-bottom: 4px; }
 .profile-info .meta { color: var(--text-secondary); font-size: 13px; }
+.social-link {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    width: 18px;
+    height: 18px;
+    margin-left: 6px;
+    color: var(--text-secondary);
+    transition: color 0.15s;
+}
+.social-link:hover { color: var(--text-primary); }
+.social-link svg { width: 100%; height: 100%; }
 
 .profile-content-layout {
     display: grid;

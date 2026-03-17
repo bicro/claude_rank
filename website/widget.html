@@ -51,47 +51,133 @@
     justify-content: space-between;
     gap: 8px;
   }
-  .username-extras { margin-bottom: 8px; }
+  .user-identity {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .user-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  /* ── Login overlay ── */
+  .login-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: calc(100% - 48px);
+    max-width: 220px;
+    background: rgba(255,255,255,0.35);
+    backdrop-filter: blur(24px) saturate(1.4);
+    -webkit-backdrop-filter: blur(24px) saturate(1.4);
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.4);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.06), inset 0 0 0 0.5px rgba(255,255,255,0.3);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+    transition: opacity 0.4s ease;
+  }
+  .login-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .panel.blurred > *:not(.login-overlay) {
+    filter: blur(6px);
+    pointer-events: none;
+  }
+  .login-content {
+    text-align: center;
+    width: 100%;
+    padding: 20px;
+  }
+  .login-logo {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+  .login-subtitle {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+  }
+  .login-providers {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .login-provider-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid rgba(0,0,0,0.06);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.85);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, border-color 0.15s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .login-provider-btn:hover {
+    background: #fff;
+    border-color: rgba(0,0,0,0.12);
+  }
+  .login-provider-btn svg { flex-shrink: 0; }
   .user-row .username {
     font-weight: 700;
     font-size: 18px;
     color: var(--text-primary);
     cursor: pointer;
-    border-bottom: 1px dashed transparent;
     padding: 1px 0;
   }
-  .user-row .username:hover { border-bottom-color: rgba(0,0,0,0.2); }
-  .user-row .username .pencil {
-    font-size: 10px;
-    color: var(--text-secondary);
-    margin-left: 3px;
-    opacity: 0;
-    transition: opacity 0.15s;
+  .user-row .username:hover { opacity: 0.7; }
+  /* ── User menu dropdown ── */
+  .user-menu-wrapper { position: relative; }
+  .user-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    z-index: 30;
+    min-width: 140px;
+    padding: 4px;
   }
-  .user-row .username:hover .pencil { opacity: 1; }
-  .username-edit-row { display: flex; align-items: center; gap: 4px; }
-  .username-input {
-    font-weight: 600; font-size: 13px; color: var(--text-primary);
-    background: var(--pill-bg); border: 1px solid var(--accent);
-    border-radius: 4px; padding: 1px 4px; outline: none;
-    font-family: inherit; width: 110px;
+  .user-menu.open { display: block; }
+  .user-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    width: 100%;
+    text-align: left;
   }
-  .username-input.invalid { border-color: #ef4444; }
-  .btn-save-username {
-    background: var(--accent); border: none; color: #fff; font-size: 10px;
-    padding: 2px 8px; border-radius: 4px; cursor: pointer; font-weight: 600;
-  }
-  .btn-save-username:hover { opacity: 0.9; }
-  .username-error { font-size: 10px; color: #ef4444; margin-top: 2px; display: none; }
-  .username-feedback {
-    font-size: 10px; color: #4ade80; margin-top: 2px;
-    opacity: 0; transition: opacity 0.2s;
-  }
-  .username-feedback.show { opacity: 1; }
-  .username-prompt {
-    font-size: 10px; color: var(--accent); margin-bottom: 4px; display: none;
-  }
-  .username-prompt.show { display: block; }
+  .user-menu-item:hover { background: var(--pill-bg); }
+  .user-menu-item.danger { color: #ef4444; }
+  .user-menu-item.danger:hover { background: rgba(239,68,68,0.08); }
 
   .rank-pill {
     display: inline-flex; align-items: center;
@@ -290,26 +376,92 @@
   .copy-feedback.show { opacity: 1; }
 
   .loading { color: var(--text-secondary); font-size: 12px; text-align: center; padding: 20px 0; }
+
+  /* ── Loading spinner ── */
+  .spinner-overlay {
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
+    border-radius: 16px;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    transition: opacity 0.3s ease;
+  }
+  .spinner-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid rgba(232,105,45,0.15);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+  }
 </style>
 </head>
 <body>
-<div class="panel">
+<div class="panel" style="position:relative">
+  <!-- Loading spinner -->
+  <div class="spinner-overlay" id="spinnerOverlay">
+    <div class="spinner"></div>
+    <div class="spinner-label">CLAUDERANK</div>
+  </div>
+
+  <!-- Login overlay (shown when not connected) -->
+  <div class="login-overlay hidden" id="loginOverlay">
+    <div class="login-content">
+      <div class="login-logo">CLAUDERANK</div>
+      <div class="login-subtitle">Connect your account</div>
+      <div class="login-providers">
+        <button class="login-provider-btn" onclick="startLogin('google')">
+          <svg width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+          Google
+        </button>
+        <button class="login-provider-btn" onclick="startLogin('twitter')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#1a1a1a"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          X (Twitter)
+        </button>
+        <button class="login-provider-btn" onclick="startLogin('discord')">
+          <svg width="18" height="14" viewBox="0 0 71 55" fill="none"><path d="M60.1 4.9A58.5 58.5 0 0045.4.2a.2.2 0 00-.2.1 40.8 40.8 0 00-1.8 3.7 54 54 0 00-16.2 0A37.4 37.4 0 0025.4.3a.2.2 0 00-.2-.1A58.4 58.4 0 0010.5 4.9a.2.2 0 00-.1.1C1.5 18.7-.9 32.2.3 45.5v.1a58.8 58.8 0 0017.7 9a.2.2 0 00.3-.1 42 42 0 003.6-5.9.2.2 0 00-.1-.3 38.8 38.8 0 01-5.5-2.6.2.2 0 01 0-.4l1.1-.9a.2.2 0 01.2 0 42 42 0 0035.6 0 .2.2 0 01.2 0l1.1.9a.2.2 0 010 .4 36.4 36.4 0 01-5.5 2.6.2.2 0 00-.1.3 47.2 47.2 0 003.6 5.9.2.2 0 00.3.1 58.6 58.6 0 0017.7-9v-.1c1.4-15.2-2.4-28.4-10-40.1a.2.2 0 00-.1-.1zM23.7 37.3c-3.5 0-6.3-3.2-6.3-7s2.8-7 6.3-7 6.4 3.2 6.3 7-2.8 7-6.3 7zm23.3 0c-3.5 0-6.3-3.2-6.3-7s2.8-7 6.3-7 6.4 3.2 6.3 7-2.8 7-6.3 7z" fill="#5865F2"/></svg>
+          Discord
+        </button>
+        <button class="login-provider-btn" onclick="startLogin('linkedin')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#0A66C2"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          LinkedIn
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- 1. CLAUDERANK -->
   <div class="header-label">CLAUDERANK</div>
 
   <!-- 2. User row -->
   <div class="user-row">
-    <div class="username" id="username" title="Click to edit">Loading...<span class="pencil">&#9998;</span></div>
-    <div class="rank-pill" id="rankPill">RANK #&mdash;</div>
-  </div>
-  <div class="username-extras">
-    <div class="username-prompt" id="usernamePrompt">What alias would you like to go by?</div>
-    <div class="username-edit-row" id="usernameEditRow" style="display:none">
-      <input class="username-input" id="usernameInput" maxlength="20" placeholder="3-20 chars, a-z 0-9 _">
-      <button class="btn-save-username" id="btnSaveUsername">Save</button>
+    <div class="user-menu-wrapper">
+      <div class="user-identity" id="userIdentity">
+        <img class="user-avatar" id="userAvatar" style="display:none" alt="">
+        <div class="username" id="username">Loading...</div>
+      </div>
+      <div class="user-menu" id="userMenu">
+        <button class="user-menu-item" id="viewRankingsBtn">View Rankings</button>
+        <button class="user-menu-item danger" onclick="doLogout()">Sign Out</button>
+      </div>
     </div>
-    <div class="username-error" id="usernameError"></div>
-    <div class="username-feedback" id="usernameFeedback">Saved!</div>
+    <div class="rank-pill" id="rankPill">RANK #&mdash;</div>
   </div>
 
   <!-- 3. Date nav -->
@@ -376,14 +528,15 @@
 
   <!-- 14. Footer -->
   <div class="footer-row">
-    <a class="footer-link" id="linkFull" href="https://clauderank.com" target="_blank">CLAUDERANK.COM</a>
+    <a class="footer-link" id="linkFull" href="/" target="_blank">CLAUDERANK.COM</a>
     <button class="copy-btn" id="copyBtn" title="Copy card to clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
   </div>
   <div class="copy-feedback" id="copyFeedback">Copied!</div>
 </div>
 
 <script type="module">
-import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, formatNumber, formatCost, animateValue } from './js/api.js?v=2';
+import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, formatNumber, formatCost, formatPercentile, animateValue } from './js/api.js?v=2';
+import { getCachedAvatar, clearCachedAvatar } from './js/avatar.js';
 
 const params = new URLSearchParams(window.location.search);
 const userHash = params.get('h');
@@ -407,6 +560,45 @@ let previousDayCostRaw = 0;
 let previousPeakAgents = 0;
 let previousAgentMins = 0;
 let previousConcMins = 0;
+
+// ── Auth connect ──
+window.startLogin = startLogin;
+function startLogin(provider) {
+  const connectUrl = window.location.origin + '/auth-connect.html?user_hash=' + encodeURIComponent(userHash) + '&provider=' + provider;
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: 'open-url', url: connectUrl }, '*');
+  } else {
+    window.open(connectUrl, '_blank');
+  }
+  // Poll for profile update after auth
+  let pollCount = 0;
+  const pollInterval = setInterval(async () => {
+    pollCount++;
+    if (pollCount > 60) { clearInterval(pollInterval); return; }
+    try {
+      const data = await getUserProfile(userHash);
+      if (data.auth_provider) {
+        clearInterval(pollInterval);
+        // Signal desktop to force re-sync so server has data
+        if (window.parent !== window) {
+          window.parent.postMessage({ type: 'force-sync' }, '*');
+        }
+        // Poll until metrics appear (sync may take a moment)
+        let retries = 0;
+        const retryInterval = setInterval(async () => {
+          retries++;
+          if (retries > 20) { clearInterval(retryInterval); return; }
+          await loadProfile();
+          if (totalTokens > 0) {
+            clearInterval(retryInterval);
+            await loadActiveDates();
+            await loadDayByIndex(activeDates.length - 1);
+          }
+        }, 3000);
+      }
+    } catch {}
+  }, 3000);
+}
 
 // ── Helpers ──
 function escHtml(s) {
@@ -533,17 +725,9 @@ function renderHeatmap(svgEl, hourlyData, isToday) {
   // Time axis labels
   const axisY = gridHeight + axisH + 2;
   const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
-  let startHour, midHour, endHour;
-  if (isToday) {
-    const nowHour = new Date().getHours();
-    startHour = (nowHour + 1) % 24;
-    midHour = (nowHour + 13) % 24;
-    endHour = nowHour;
-  } else {
-    startHour = 0;
-    midHour = 12;
-    endHour = 23;
-  }
+  const startHour = 0;
+  const midHour = 12;
+  const endHour = 23;
   s += `<text x="${marginLeft}" y="${axisY}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace">${fmtHr(startHour)}</text>`;
   s += `<text x="${marginLeft + 12 * (cellW + gap)}" y="${axisY}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace">${fmtHr(midHour)}</text>`;
   s += `<text x="${marginLeft + 23 * (cellW + gap) + cellW}" y="${axisY}" fill="#8a8480" font-size="8" font-family="'SF Mono', Menlo, Consolas, monospace" text-anchor="end">${fmtHr(endHour)}</text>`;
@@ -643,11 +827,23 @@ async function loadActiveDates() {
       const localEnd = localDateISO(utcEnd);
       localDates.add(localStart);
       localDates.add(localEnd);
-      localTokens[localStart] = (localTokens[localStart] || 0) + (d.tokens || 0);
-      localMessages[localStart] = (localMessages[localStart] || 0) + (d.messages || 0);
-      if (localEnd !== localStart) {
-        localTokens[localEnd] = (localTokens[localEnd] || 0);
-        localMessages[localEnd] = (localMessages[localEnd] || 0);
+
+      if (localStart === localEnd) {
+        // UTC day falls entirely within one local day
+        localTokens[localStart] = (localTokens[localStart] || 0) + (d.tokens || 0);
+        localMessages[localStart] = (localMessages[localStart] || 0) + (d.messages || 0);
+      } else {
+        // UTC day spans two local dates — split proportionally by hours
+        const localMidnight = new Date(localEnd + 'T00:00:00'); // midnight of the later local date
+        const utcDayStart = utcStart;
+        const hoursInStart = Math.max(0, (localMidnight - utcDayStart) / 3600000);
+        const hoursInEnd = 24 - hoursInStart;
+        const fracStart = hoursInStart / 24;
+        const fracEnd = hoursInEnd / 24;
+        localTokens[localStart] = (localTokens[localStart] || 0) + Math.round((d.tokens || 0) * fracStart);
+        localTokens[localEnd] = (localTokens[localEnd] || 0) + Math.round((d.tokens || 0) * fracEnd);
+        localMessages[localStart] = (localMessages[localStart] || 0) + Math.round((d.messages || 0) * fracStart);
+        localMessages[localEnd] = (localMessages[localEnd] || 0) + Math.round((d.messages || 0) * fracEnd);
       }
     }
     const todayStr = localDateISO(new Date());
@@ -686,6 +882,24 @@ async function loadDayByIndex(index) {
     lastHourlyData = hourlyData;
     renderHeatmap(document.getElementById('heatmapSvg'), hourlyData, localDateStr === localDateISO(new Date()));
     updateStats(hourlyData);
+
+    // Compute accurate token total from per-hour concurrency data (timezone-correct)
+    const localMidnight = new Date(localDateStr + 'T00:00:00');
+    let hourlyTokens = 0;
+    for (let h = 0; h < 24; h++) {
+      const t = new Date(localMidnight.getTime() + h * 3600000);
+      const utcDate = t.toISOString().split('T')[0];
+      const utcHour = t.getUTCHours();
+      const key = utcDate + ':' + utcHour;
+      const entry = lastMergedHistograms[key];
+      if (entry && entry.tokens) hourlyTokens += entry.tokens;
+    }
+    if (hourlyTokens > 0) {
+      heatmapByDate[localDateStr] = heatmapByDate[localDateStr] || {};
+      heatmapByDate[localDateStr].tokens = hourlyTokens;
+      updateCenterDisplay();
+    }
+
     notifyHeight();
   } catch (e) {
     console.error('Failed to load concurrency data:', e);
@@ -704,11 +918,37 @@ async function loadProfile() {
   try {
     const data = await getUserProfile(userHash);
     const usernameEl = document.getElementById('username');
-    if (data.username) {
-      usernameEl.innerHTML = '@' + escHtml(data.username) + '<span class="pencil">&#9998;</span>';
+    const avatarEl = document.getElementById('userAvatar');
+    const overlay = document.getElementById('loginOverlay');
+
+    // Show/hide login overlay
+    isConnected = !!data.auth_provider;
+    const panel = document.querySelector('.panel');
+    if (isConnected) {
+      overlay.classList.add('hidden');
+      panel.classList.remove('blurred');
     } else {
-      usernameEl.innerHTML = '@anonymous<span class="pencil">&#9998;</span>';
-      document.getElementById('usernamePrompt').classList.add('show');
+      overlay.classList.remove('hidden');
+      panel.classList.add('blurred');
+    }
+
+    // Show avatar if connected (use locally cached version)
+    if (data.avatar_url) {
+      getCachedAvatar(data.avatar_url).then(src => {
+        if (src) { avatarEl.src = src; avatarEl.style.display = 'block'; }
+      });
+    } else {
+      clearCachedAvatar();
+      avatarEl.style.display = 'none';
+    }
+
+    // Show display name or username
+    if (data.display_name && data.auth_provider) {
+      usernameEl.textContent = data.display_name;
+    } else if (data.username) {
+      usernameEl.textContent = '@' + data.username;
+    } else {
+      usernameEl.textContent = '@anonymous';
     }
 
     const ranks = data.ranks || {};
@@ -716,8 +956,8 @@ async function loadProfile() {
     const rankPill = document.getElementById('rankPill');
     if (weightedRank) {
       const rank = weightedRank.rank || weightedRank;
-      const percentile = weightedRank.percentile;
-      rankPill.textContent = '#' + rank + ' GLOBALLY' + (percentile != null ? ' \u00b7 TOP ' + percentile + '%' : '');
+      const pct = formatPercentile(weightedRank.percentile);
+      rankPill.textContent = '#' + rank + ' GLOBALLY' + (pct != null ? ' \u00b7 TOP ' + pct + '%' : '');
     }
 
     const m = data.metrics || {};
@@ -725,95 +965,42 @@ async function loadProfile() {
     totalCost = m.estimated_spend || 0;
     updateCenterDisplay();
 
-    document.getElementById('linkFull').href = 'https://clauderank.com';
+    document.getElementById('linkFull').href = window.location.origin;
   } catch (e) {
     console.error('Failed to load profile:', e);
   }
 }
 
-// ── Username editing ──
-const usernameDisplay = document.getElementById('username');
-const usernameInput = document.getElementById('usernameInput');
-const usernameEditRow = document.getElementById('usernameEditRow');
-const usernameError = document.getElementById('usernameError');
-const usernameFeedback = document.getElementById('usernameFeedback');
-const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+// ── User menu (click name/avatar to toggle) ──
+const userIdentity = document.getElementById('userIdentity');
+const userMenu = document.getElementById('userMenu');
+let isConnected = false;
 
-function showUsernameEdit() {
-  const current = usernameDisplay.textContent.replace('\u270E', '').replace('@', '').trim();
-  usernameInput.value = current === 'anonymous' ? '' : current;
-  usernameDisplay.style.display = 'none';
-  usernameEditRow.style.display = 'flex';
-  usernameError.style.display = 'none';
-  usernameInput.classList.remove('invalid');
-  usernameInput.focus();
-  usernameInput.select();
-}
-
-function hideUsernameEdit() {
-  usernameEditRow.style.display = 'none';
-  usernameDisplay.style.display = 'block';
-  usernameError.style.display = 'none';
-  usernameInput.classList.remove('invalid');
-  document.getElementById('usernamePrompt').classList.remove('show');
-}
-
-usernameDisplay.addEventListener('click', showUsernameEdit);
-
-usernameInput.addEventListener('input', () => {
-  const val = usernameInput.value.trim();
-  if (!val || val.length < 3 || val.length > 20 || !usernameRegex.test(val)) {
-    usernameInput.classList.add('invalid');
-  } else {
-    usernameInput.classList.remove('invalid');
-    usernameError.style.display = 'none';
-  }
-});
-
-let savingUsername = false;
-async function saveUsername() {
-  if (savingUsername) return;
-  const val = usernameInput.value.trim();
-  if (!val || val.length < 3 || val.length > 20 || !usernameRegex.test(val)) {
-    usernameInput.classList.add('invalid');
-    usernameError.textContent = 'Must be 3-20 chars, a-z 0-9 _';
-    usernameError.style.display = 'block';
-    return;
-  }
-  savingUsername = true;
-  try {
-    const resp = await fetch(`/api/users/${userHash}/username`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: val }),
-    });
-    if (!resp.ok) {
-      const data = await resp.json().catch(() => ({}));
-      throw new Error(data.detail || 'Failed to save');
-    }
-    usernameDisplay.innerHTML = '@' + escHtml(val) + '<span class="pencil">&#9998;</span>';
-    hideUsernameEdit();
-    usernameFeedback.classList.add('show');
-    setTimeout(() => usernameFeedback.classList.remove('show'), 1500);
-  } catch (e) {
-    usernameError.textContent = e.message;
-    usernameError.style.display = 'block';
-  } finally {
-    savingUsername = false;
-  }
-}
-
-document.getElementById('btnSaveUsername').addEventListener('click', (e) => { e.preventDefault(); saveUsername(); });
-usernameInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); saveUsername(); }
-  if (e.key === 'Escape') { hideUsernameEdit(); }
+userIdentity.addEventListener('click', () => {
+  if (isConnected) userMenu.classList.toggle('open');
 });
 document.addEventListener('click', (e) => {
-  if (usernameEditRow.style.display === 'flex' &&
-      !usernameEditRow.contains(e.target) && !usernameDisplay.contains(e.target)) {
-    hideUsernameEdit();
+  if (!userIdentity.contains(e.target) && !userMenu.contains(e.target)) {
+    userMenu.classList.remove('open');
   }
 });
+
+window.doLogout = doLogout;
+async function doLogout() {
+  userMenu.classList.remove('open');
+  try {
+    // Clear cache + social link
+    await fetch(`/api/users/${userHash}/clear-cache`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    await fetch(`/api/users/${userHash}/connect`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+    await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' });
+  } catch {}
+  clearCachedAvatar();
+  // Signal desktop app to force re-sync local data back to server
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: 'force-sync' }, '*');
+  }
+  setTimeout(() => window.location.reload(), 500);
+}
 
 // ── Copy as full V5 card image ──
 // Renders an exact copy of renderShareableCardV5() from profile.html
@@ -1015,6 +1202,17 @@ document.getElementById('copyBtn').addEventListener('click', async () => {
   }
 });
 
+// ── View Rankings → open profile page externally ──
+document.getElementById('viewRankingsBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  const url = window.location.origin + '/profile.html?hash=' + encodeURIComponent(userHash);
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: 'open-url', url }, '*');
+  } else {
+    window.open(url, '_blank');
+  }
+});
+
 // ── Open link externally (iframe can't navigate) ──
 document.getElementById('linkFull').addEventListener('click', (e) => {
   e.preventDefault();
@@ -1027,10 +1225,28 @@ document.getElementById('linkFull').addEventListener('click', (e) => {
 });
 
 // ── Init ──
-loadProfile();
-loadActiveDates().then(() => {
-  loadDayByIndex(activeDates.length - 1);
-});
+(async () => {
+  await Promise.all([
+    loadProfile(),
+    loadActiveDates().then(() => loadDayByIndex(activeDates.length - 1)),
+  ]);
+  document.getElementById('spinnerOverlay').classList.add('hidden');
+
+  // Recovery poll: if data is zero (e.g. after logout+reload), retry until sync populates it
+  if (totalTokens === 0 && window.parent !== window) {
+    let retries = 0;
+    const recoveryPoll = setInterval(async () => {
+      retries++;
+      if (retries > 20) { clearInterval(recoveryPoll); return; }
+      await loadProfile();
+      if (totalTokens > 0) {
+        clearInterval(recoveryPoll);
+        await loadActiveDates();
+        await loadDayByIndex(activeDates.length - 1);
+      }
+    }, 3000);
+  }
+})();
 setInterval(() => loadProfile(), 120000);
 </script>
 </body>

@@ -6,5 +6,16 @@
     <true/>
     <key>NSAccessibilityUsageDescription</key>
     <string>Claude Rank needs Accessibility access to detect hotkeys.</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.clauderank.desktop</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>clauderank</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

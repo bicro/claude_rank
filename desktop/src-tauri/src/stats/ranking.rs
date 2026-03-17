@@ -7,8 +7,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::Emitter;
 
+use super::metrics::MetricsEngine;
 use super::parser::{DaySessionEntry, StatsCache};
-use super::points::PointsState;
+use super::points::{PointsEngine, PointsState};
 
 fn ranking_api_base() -> String {
     std::env::var("RANKING_API_BASE")
@@ -168,6 +169,10 @@ impl RankingEngine {
             None => true,
             Some(t) => t.elapsed().as_secs() >= SYNC_THROTTLE_SECS,
         }
+    }
+
+    pub fn reset_sync_timer(&mut self) {
+        self.last_sync_time = None;
     }
 
     pub fn mark_synced(&mut self) {
@@ -533,6 +538,26 @@ pub fn open_ranking_website() -> Result<(), String> {
     let url = std::env::var("RANKING_WEBSITE_URL")
         .unwrap_or_else(|_| ranking_api_base());
     open::that(url).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn force_sync(
+    ranking: tauri::State<'_, Arc<Mutex<RankingEngine>>>,
+    metrics: tauri::State<'_, Arc<Mutex<MetricsEngine>>>,
+    points: tauri::State<'_, Arc<Mutex<PointsEngine>>>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    info!("[ranking] Force sync triggered");
+    {
+        let mut engine = ranking.lock().map_err(|e| e.to_string())?;
+        engine.reset_sync_timer();
+    }
+    let stats = {
+        let m = metrics.lock().map_err(|e| e.to_string())?;
+        m.data.stats.clone()
+    };
+    try_sync(&ranking.inner().clone(), &stats, &points.inner().clone(), &app);
+    Ok(())
 }
 
 // ── Sync Function (called from watcher) ──

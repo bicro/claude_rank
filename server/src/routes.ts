@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { getDb } from "./db";
 import {
   computeWeightedScore,
@@ -42,6 +43,53 @@ function toDateStr(d: Date | string): string {
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
 
+/** Fetch fresh profile data from an OAuth provider using the stored access token. */
+async function fetchProviderProfile(
+  provider: string,
+  accessToken: string
+): Promise<{ name?: string; avatar?: string; socialUsername?: string } | null> {
+  try {
+    if (provider === "twitter") {
+      const res = await fetch("https://api.twitter.com/2/users/me?user.fields=profile_image_url,username", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) return null;
+      const { data } = await res.json() as any;
+      return {
+        name: data?.name,
+        avatar: data?.profile_image_url?.replace("_normal", ""),
+        socialUsername: data?.username,
+      };
+    }
+    if (provider === "github") {
+      const res = await fetch("https://api.github.com/user", {
+        headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": "ClaudeRank" },
+      });
+      if (!res.ok) return null;
+      const data = await res.json() as any;
+      return {
+        name: data?.name || data?.login,
+        avatar: data?.avatar_url,
+        socialUsername: data?.login,
+      };
+    }
+    if (provider === "linkedin") {
+      const res = await fetch("https://api.linkedin.com/v2/userinfo", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) return null;
+      const data = await res.json() as any;
+      return {
+        name: data?.name,
+        avatar: data?.picture,
+      };
+    }
+  } catch (e) {
+    console.error(`Provider profile fetch failed (${provider}):`, e);
+  }
+  return null;
+}
+
 // Simple banned words list for profanity filtering
 const BANNED_WORDS = [
   "fuck", "shit", "ass", "bitch", "damn", "cunt", "dick", "cock",
@@ -77,10 +125,22 @@ export async function handleApiRequest(url: URL, request: Request): Promise<Resp
     return handleSetUsername(usernameMatch[1]!, request);
   }
 
+  // POST /api/users/:user_hash/connect — link social auth to user
+  const connectMatch = path.match(/^\/api\/users\/([^/]+)\/connect$/);
+  if (connectMatch && method === "POST") {
+    return handleConnectAuth(connectMatch[1]!, request);
+  }
+
   // GET /api/users/by-username/:username
   const byUsernameMatch = path.match(/^\/api\/users\/by-username\/([^/]+)$/);
   if (byUsernameMatch && method === "GET") {
     return handleGetUserByUsername(byUsernameMatch[1]!);
+  }
+
+  // POST /api/users/:user_hash/clear-cache
+  const clearCacheMatch = path.match(/^\/api\/users\/([^/]+)\/clear-cache$/);
+  if (clearCacheMatch && method === "POST") {
+    return handleClearCache(clearCacheMatch[1]!);
   }
 
   // GET /api/users/:user_hash/history
@@ -237,6 +297,97 @@ function handleGetUserByUsername(username: string): Response {
   return json({ user_hash: user.user_hash, username: user.username });
 }
 
+function handleClearCache(userHash: string): Response {
+  const db = getDb();
+  db.query("DELETE FROM user_metrics WHERE user_hash = ?").run(userHash);
+  db.query("DELETE FROM metrics_history WHERE user_hash = ?").run(userHash);
+  db.query("DELETE FROM metrics_hourly WHERE user_hash = ?").run(userHash);
+  db.query("DELETE FROM user_badges WHERE user_hash = ?").run(userHash);
+  db.query("DELETE FROM concurrency_histogram WHERE user_hash = ?").run(userHash);
+  db.query("DELETE FROM daily_sessions WHERE user_hash = ?").run(userHash);
+  return json({ status: "cleared" });
+}
+
+async function handleConnectAuth(userHash: string, request: Request): Promise<Response> {
+  const body = await parseBody(request);
+  if (!body) return error("Invalid request body", 400);
+
+  const db = getDb();
+
+  // Ensure user exists
+  let user = db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
+  if (!user) {
+    const now = new Date().toISOString();
+    db.query("INSERT INTO users (user_hash, created_at, updated_at) VALUES (?, ?, ?)").run(userHash, now, now);
+    user = db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
+  }
+
+  const now = new Date().toISOString();
+  const provider = body.provider || null;
+  let displayName = body.name || null;
+  let avatarUrl = body.image || null;
+  const authId = body.auth_id || null;
+
+  // Disconnect (logout) — clear social fields
+  if (!provider) {
+    db.query(
+      `UPDATE users SET display_name = NULL, avatar_url = NULL, auth_provider = NULL, auth_id = NULL, social_url = NULL, updated_at = ? WHERE user_hash = ?`
+    ).run(now, userHash);
+    return json({ status: "disconnected" });
+  }
+
+  // Fetch fresh profile data from the provider via Better Auth's stored access token.
+  // This ensures correct avatar + social username even when accounts are linked.
+  let socialUrl: string | null = null;
+  try {
+    const authDb = new Database("./auth.db", { readonly: true });
+    const account = authDb.query(
+      "SELECT accessToken FROM account WHERE userId = ? AND providerId = ? ORDER BY updatedAt DESC LIMIT 1"
+    ).get(authId, provider) as any;
+    authDb.close();
+
+    if (account?.accessToken) {
+      const fresh = await fetchProviderProfile(provider, account.accessToken);
+      if (fresh) {
+        if (fresh.avatar) avatarUrl = fresh.avatar;
+        if (fresh.name) displayName = fresh.name;
+        if (fresh.socialUsername) {
+          if (provider === "twitter") socialUrl = `https://x.com/${fresh.socialUsername}`;
+          else if (provider === "github") socialUrl = `https://github.com/${fresh.socialUsername}`;
+          else if (provider === "linkedin") socialUrl = `https://linkedin.com/in/${fresh.socialUsername}`;
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Failed to fetch provider profile:", e);
+  }
+
+  // Set username from social name if user doesn't have one
+  let username = user.username;
+  if (!username && displayName) {
+    let candidate = displayName.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "").slice(0, 20);
+    if (candidate.length < 3) candidate = candidate + "_user";
+    const taken = db.query("SELECT 1 FROM users WHERE LOWER(username) = LOWER(?) AND user_hash != ?").get(candidate, userHash);
+    if (!taken && USERNAME_PATTERN.test(candidate)) {
+      username = candidate;
+    }
+  }
+
+  db.query(
+    `UPDATE users SET display_name = ?, avatar_url = ?, auth_provider = ?, auth_id = ?,
+     social_url = ?, username = COALESCE(?, username), updated_at = ? WHERE user_hash = ?`
+  ).run(displayName, avatarUrl, provider, authId, socialUrl, username, now, userHash);
+
+  return json({
+    status: "connected",
+    display_name: displayName,
+    avatar_url: avatarUrl,
+    auth_provider: provider,
+    social_url: socialUrl,
+    username,
+  });
+}
+
 function handleGetUserProfile(userHash: string): Response {
   const db = getDb();
   const user = db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
@@ -284,6 +435,10 @@ function handleGetUserProfile(userHash: string): Response {
   return json({
     user_hash: user.user_hash,
     username: user.username,
+    display_name: user.display_name ?? null,
+    avatar_url: user.avatar_url ?? null,
+    auth_provider: user.auth_provider ?? null,
+    social_url: user.social_url ?? null,
     team_hash: user.team_hash,
     created_at: user.created_at,
     metrics: {
@@ -550,7 +705,7 @@ function handleGetConcurrency(userHash: string, url: URL): Response {
       try {
         const histogram = row.histogram ? JSON.parse(row.histogram) : {};
         const snapshotDate = row.snapshot_hour.split("T")[0]!;
-        const hour = new Date(row.snapshot_hour).getUTCHours();
+        const hour = parseInt(row.snapshot_hour.split("T")[1]!.split(":")[0]!, 10);
         const hourKey = `${snapshotDate}:${hour}`;
         perHour[hourKey] = { histogram, tokens: 0 };
       } catch {
@@ -566,7 +721,7 @@ function handleGetConcurrency(userHash: string, url: URL): Response {
 
     for (const row of tokenRows) {
       const snapshotDate = row.snapshot_hour.split("T")[0]!;
-      const hour = new Date(row.snapshot_hour).getUTCHours();
+      const hour = parseInt(row.snapshot_hour.split("T")[1]!.split(":")[0]!, 10);
       const hourKey = `${snapshotDate}:${hour}`;
       if (perHour[hourKey]) {
         perHour[hourKey].tokens = row.total_tokens ?? 0;
@@ -612,7 +767,7 @@ function handleGetConcurrency(userHash: string, url: URL): Response {
         if (s > peak) peak = s;
       }
       const snapshotDate = row.snapshot_hour.split("T")[0]!;
-      const hour = new Date(row.snapshot_hour).getUTCHours();
+      const hour = parseInt(row.snapshot_hour.split("T")[1]!.split(":")[0]!, 10);
       const hourKey = `${snapshotDate}:${hour}`;
       perHour[hourKey] = peak;
     } catch {

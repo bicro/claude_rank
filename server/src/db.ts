@@ -27,6 +27,10 @@ export function initDb(db?: Database): void {
       user_hash TEXT PRIMARY KEY,
       username TEXT UNIQUE,
       team_hash TEXT REFERENCES teams(team_hash),
+      avatar_url TEXT,
+      display_name TEXT,
+      auth_provider TEXT,
+      auth_id TEXT,
       created_at TEXT,
       updated_at TEXT
     );
@@ -110,6 +114,20 @@ export function initDb(db?: Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_metrics_history_user_hash ON metrics_history(user_hash);
+
+    -- Migrations for existing databases
+  `);
+
+  // Add columns that may not exist on older databases
+  const cols = d.query("PRAGMA table_info(users)").all() as any[];
+  const colNames = new Set(cols.map((c: any) => c.name));
+  if (!colNames.has("avatar_url")) d.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
+  if (!colNames.has("display_name")) d.exec("ALTER TABLE users ADD COLUMN display_name TEXT");
+  if (!colNames.has("auth_provider")) d.exec("ALTER TABLE users ADD COLUMN auth_provider TEXT");
+  if (!colNames.has("auth_id")) d.exec("ALTER TABLE users ADD COLUMN auth_id TEXT");
+  if (!colNames.has("social_url")) d.exec("ALTER TABLE users ADD COLUMN social_url TEXT");
+
+  d.exec(`
     CREATE INDEX IF NOT EXISTS idx_metrics_hourly_user_hash ON metrics_hourly(user_hash);
     CREATE INDEX IF NOT EXISTS idx_concurrency_histogram_user_hash ON concurrency_histogram(user_hash);
     CREATE INDEX IF NOT EXISTS idx_daily_sessions_user_hash ON daily_sessions(user_hash);

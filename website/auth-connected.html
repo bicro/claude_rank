@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connected - ClaudeRank</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+    background: #fafafa;
+    color: #1a1a1a;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+    padding: 40px;
+    max-width: 380px;
+    width: 100%;
+    text-align: center;
+  }
+  .logo { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #8a8480; margin-bottom: 24px; }
+  h2 { font-size: 18px; margin-bottom: 8px; }
+  .success h2 { color: #16a34a; }
+  .error h2 { color: #ef4444; }
+  p { font-size: 13px; color: #8a8480; margin-top: 12px; }
+  .avatar { width: 64px; height: 64px; border-radius: 50%; margin: 16px auto; }
+  .name { font-size: 16px; font-weight: 700; margin-top: 8px; }
+  .return-btn {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 10px 24px;
+    background: #1a1a1a;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    text-decoration: none;
+  }
+  .return-btn:hover { background: #333; }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="logo">CLAUDERANK</div>
+  <h2 id="title">Connecting...</h2>
+  <p id="message">Please wait</p>
+</div>
+
+<script type="module">
+import { getCachedAvatar, clearCachedAvatar } from './js/avatar.js';
+
+(async () => {
+  const params = new URLSearchParams(window.location.search);
+  const userHash = params.get('user_hash');
+  const provider = params.get('provider');
+  const card = document.getElementById('card');
+  const title = document.getElementById('title');
+  const message = document.getElementById('message');
+
+  if (!userHash) {
+    title.textContent = 'Error';
+    message.textContent = 'Missing user_hash';
+    card.classList.add('error');
+    return;
+  }
+
+  try {
+    // Get the Better Auth session (cookie was just set by OAuth callback)
+    // Retry briefly — Better Auth may not have the image field ready immediately after redirect
+    let session;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const sessionRes = await fetch('/api/auth/get-session', { credentials: 'include' });
+      session = await sessionRes.json();
+      if (session?.user?.image || attempt === 2) break;
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    if (!session?.user) {
+      title.textContent = 'Error';
+      message.textContent = 'Login failed. Please try again.';
+      card.classList.add('error');
+      return;
+    }
+
+    // Link the social account to the ClaudeRank user_hash
+    const connectRes = await fetch(`/api/users/${encodeURIComponent(userHash)}/connect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: provider || session.user.provider || 'unknown',
+        name: session.user.name || session.user.email || 'User',
+        image: session.user.image || null,
+        auth_id: session.user.id,
+      }),
+    });
+
+    const result = await connectRes.json();
+
+    if (result.status === 'connected') {
+      card.classList.add('success');
+      title.textContent = 'Connected!';
+      let html = '';
+      if (result.avatar_url) {
+        html += `<img id="connectedAvatar" class="avatar" alt="">`;
+      }
+      html += `<div class="name">${result.display_name}</div>`;
+      html += `<p>You're all set! You can close this tab.</p>`;
+      html += `<a class="return-btn" href="clauderank://auth-complete">Open ClaudeRank</a>`;
+      message.outerHTML = html;
+      if (result.avatar_url) {
+        clearCachedAvatar();
+        getCachedAvatar(result.avatar_url).then(src => {
+          const img = document.getElementById('connectedAvatar');
+          if (img && src) img.src = src;
+        });
+      }
+    } else {
+      title.textContent = 'Error';
+      message.textContent = result.detail || 'Something went wrong';
+      card.classList.add('error');
+    }
+  } catch (e) {
+    title.textContent = 'Error';
+    message.textContent = e.message;
+    card.classList.add('error');
+  }
+})();
+</script>
+</body>
+</html>
