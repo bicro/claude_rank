@@ -3,7 +3,7 @@ import { migrate } from "./src/migrate";
 import { handleApiRequest } from "./src/routes";
 import { join } from "path";
 
-migrate();
+await migrate();
 
 const WEBSITE_DIR = join(import.meta.dir, "../website");
 

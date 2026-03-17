@@ -54,4 +54,6 @@ venv/
 # Backend
 backend/.env
 *.db
+*.db-shm
+*.db-wal
 desktop/src-tauri/gen/schemas/macOS-schema.json

@@ -1,8 +1,8 @@
 import { betterAuth } from "better-auth";
-import { Database } from "bun:sqlite";
+import { getPool } from "./db";
 
 export const auth = betterAuth({
-  database: new Database("./auth.db"),
+  database: getPool(),
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3001",
   user: {

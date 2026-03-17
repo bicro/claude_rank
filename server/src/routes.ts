@@ -1,12 +1,10 @@
-import { Database } from "bun:sqlite";
-import { getDb } from "./db";
+import { getDb, getPool } from "./db";
 import {
   computeWeightedScore,
   computeTier,
   getUserRanksWithPercentiles,
   getDailyRanksForUser,
   getWeeklyRanksForUser,
-  seedBadges,
   evaluateMilestoneBadges,
   evaluateRankingBadges,
   evaluateTeamBadges,
@@ -42,6 +40,13 @@ function toDateStr(d: Date | string): string {
 }
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
+
+/** Split a timestamp string like "2026-03-16T04:00:00" or "2026-03-16 04:00:00" into [date, time] */
+function splitTimestamp(ts: string): [string, string] {
+  const sep = ts.includes("T") ? "T" : " ";
+  const parts = ts.split(sep);
+  return [parts[0]!, parts[1] ?? "00:00:00"];
+}
 
 /** Fetch fresh profile data from an OAuth provider using the stored access token. */
 async function fetchProviderProfile(
@@ -250,13 +255,13 @@ async function handleRegisterUser(request: Request): Promise<Response> {
   if (!body?.user_hash) return error("user_hash is required", 400);
 
   const db = getDb();
-  const existing = db.query("SELECT user_hash, username FROM users WHERE user_hash = ?").get(body.user_hash) as any;
+  const existing = await db.query("SELECT user_hash, username FROM users WHERE user_hash = ?").get(body.user_hash) as any;
   if (existing) {
     return json({ status: "exists", user_hash: existing.user_hash, username: existing.username });
   }
 
   const now = new Date().toISOString();
-  db.query("INSERT INTO users (user_hash, created_at, updated_at) VALUES (?, ?, ?)").run(body.user_hash, now, now);
+  await db.query("INSERT INTO users (user_hash, created_at, updated_at) VALUES (?, ?, ?)").run(body.user_hash, now, now);
   return json({ status: "created", user_hash: body.user_hash });
 }
 
@@ -265,7 +270,7 @@ async function handleSetUsername(userHash: string, request: Request): Promise<Re
   if (!body?.username) return error("username is required", 400);
 
   const db = getDb();
-  const user = db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
+  const user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
   if (!user) return error("User not found", 404);
 
   const username = body.username.trim();
@@ -278,7 +283,7 @@ async function handleSetUsername(userHash: string, request: Request): Promise<Re
   }
 
   // Check uniqueness case-insensitive
-  const existing = db.query(
+  const existing = await db.query(
     "SELECT user_hash FROM users WHERE LOWER(username) = LOWER(?) AND user_hash != ?"
   ).get(username, userHash) as any;
   if (existing) {
@@ -286,25 +291,25 @@ async function handleSetUsername(userHash: string, request: Request): Promise<Re
   }
 
   const now = new Date().toISOString();
-  db.query("UPDATE users SET username = ?, updated_at = ? WHERE user_hash = ?").run(username, now, userHash);
+  await db.query("UPDATE users SET username = ?, updated_at = ? WHERE user_hash = ?").run(username, now, userHash);
   return json({ status: "ok", username });
 }
 
-function handleGetUserByUsername(username: string): Response {
+async function handleGetUserByUsername(username: string): Promise<Response> {
   const db = getDb();
-  const user = db.query("SELECT user_hash, username FROM users WHERE LOWER(username) = LOWER(?)").get(username) as any;
+  const user = await db.query("SELECT user_hash, username FROM users WHERE LOWER(username) = LOWER(?)").get(username) as any;
   if (!user) return error("User not found", 404);
   return json({ user_hash: user.user_hash, username: user.username });
 }
 
-function handleClearCache(userHash: string): Response {
+async function handleClearCache(userHash: string): Promise<Response> {
   const db = getDb();
-  db.query("DELETE FROM user_metrics WHERE user_hash = ?").run(userHash);
-  db.query("DELETE FROM metrics_history WHERE user_hash = ?").run(userHash);
-  db.query("DELETE FROM metrics_hourly WHERE user_hash = ?").run(userHash);
-  db.query("DELETE FROM user_badges WHERE user_hash = ?").run(userHash);
-  db.query("DELETE FROM concurrency_histogram WHERE user_hash = ?").run(userHash);
-  db.query("DELETE FROM daily_sessions WHERE user_hash = ?").run(userHash);
+  await db.query("DELETE FROM user_metrics WHERE user_hash = ?").run(userHash);
+  await db.query("DELETE FROM metrics_history WHERE user_hash = ?").run(userHash);
+  await db.query("DELETE FROM metrics_hourly WHERE user_hash = ?").run(userHash);
+  await db.query("DELETE FROM user_badges WHERE user_hash = ?").run(userHash);
+  await db.query("DELETE FROM concurrency_histogram WHERE user_hash = ?").run(userHash);
+  await db.query("DELETE FROM daily_sessions WHERE user_hash = ?").run(userHash);
   return json({ status: "cleared" });
 }
 
@@ -315,11 +320,11 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
   const db = getDb();
 
   // Ensure user exists
-  let user = db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
+  let user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
   if (!user) {
     const now = new Date().toISOString();
-    db.query("INSERT INTO users (user_hash, created_at, updated_at) VALUES (?, ?, ?)").run(userHash, now, now);
-    user = db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
+    await db.query("INSERT INTO users (user_hash, created_at, updated_at) VALUES (?, ?, ?)").run(userHash, now, now);
+    user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
   }
 
   const now = new Date().toISOString();
@@ -330,7 +335,7 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
 
   // Disconnect (logout) — clear social fields
   if (!provider) {
-    db.query(
+    await db.query(
       `UPDATE users SET display_name = NULL, avatar_url = NULL, auth_provider = NULL, auth_id = NULL, social_url = NULL, updated_at = ? WHERE user_hash = ?`
     ).run(now, userHash);
     return json({ status: "disconnected" });
@@ -340,11 +345,12 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
   // This ensures correct avatar + social username even when accounts are linked.
   let socialUrl: string | null = null;
   try {
-    const authDb = new Database("./auth.db", { readonly: true });
-    const account = authDb.query(
-      "SELECT accessToken FROM account WHERE userId = ? AND providerId = ? ORDER BY updatedAt DESC LIMIT 1"
-    ).get(authId, provider) as any;
-    authDb.close();
+    const pool = getPool();
+    const { rows } = await pool.query(
+      `SELECT "accessToken" FROM account WHERE "userId" = $1 AND "providerId" = $2 ORDER BY "updatedAt" DESC LIMIT 1`,
+      [authId, provider]
+    );
+    const account = rows[0] as any;
 
     if (account?.accessToken) {
       const fresh = await fetchProviderProfile(provider, account.accessToken);
@@ -367,13 +373,13 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
   if (!username && displayName) {
     let candidate = displayName.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "").slice(0, 20);
     if (candidate.length < 3) candidate = candidate + "_user";
-    const taken = db.query("SELECT 1 FROM users WHERE LOWER(username) = LOWER(?) AND user_hash != ?").get(candidate, userHash);
+    const taken = await db.query("SELECT 1 FROM users WHERE LOWER(username) = LOWER(?) AND user_hash != ?").get(candidate, userHash);
     if (!taken && USERNAME_PATTERN.test(candidate)) {
       username = candidate;
     }
   }
 
-  db.query(
+  await db.query(
     `UPDATE users SET display_name = ?, avatar_url = ?, auth_provider = ?, auth_id = ?,
      social_url = ?, username = COALESCE(?, username), updated_at = ? WHERE user_hash = ?`
   ).run(displayName, avatarUrl, provider, authId, socialUrl, username, now, userHash);
@@ -388,19 +394,19 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
   });
 }
 
-function handleGetUserProfile(userHash: string): Response {
+async function handleGetUserProfile(userHash: string): Promise<Response> {
   const db = getDb();
-  const user = db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
+  const user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
   if (!user) return error("User not found", 404);
 
-  const metrics = db.query("SELECT * FROM user_metrics WHERE user_hash = ?").get(userHash) as any;
-  const ranks = getUserRanksWithPercentiles(db, userHash);
+  const metrics = await db.query("SELECT * FROM user_metrics WHERE user_hash = ?").get(userHash) as any;
+  const ranks = await getUserRanksWithPercentiles(db, userHash);
 
   const weighted = metrics?.weighted_score ?? 0;
   const tier = computeTier(weighted);
 
   // Get badges
-  const badges = db.query(
+  const badges = await db.query(
     `SELECT b.id, b.name, b.icon, b.category, ub.unlocked_at
      FROM user_badges ub JOIN badges b ON ub.badge_id = b.id
      WHERE ub.user_hash = ?`
@@ -411,7 +417,7 @@ function handleGetUserProfile(userHash: string): Response {
   const todayStart = `${today}T00:00:00`;
   const todayEnd = `${today}T23:59:59`;
 
-  const concurrencyRows = db.query(
+  const concurrencyRows = await db.query(
     `SELECT histogram FROM concurrency_histogram
      WHERE user_hash = ? AND snapshot_hour >= ? AND snapshot_hour <= ?`
   ).all(userHash, todayStart, todayEnd) as any[];
@@ -468,11 +474,11 @@ function handleGetUserProfile(userHash: string): Response {
   });
 }
 
-function handleGetUserHistory(userHash: string, url: URL): Response {
+async function handleGetUserHistory(userHash: string, url: URL): Promise<Response> {
   const days = parseInt(url.searchParams.get("days") ?? "30", 10);
   const db = getDb();
 
-  const rows = db.query(
+  const rows = await db.query(
     `SELECT * FROM metrics_history
      WHERE user_hash = ?
      ORDER BY snapshot_date DESC
@@ -491,9 +497,9 @@ function handleGetUserHistory(userHash: string, url: URL): Response {
   })));
 }
 
-function handleGetUserBadges(userHash: string): Response {
+async function handleGetUserBadges(userHash: string): Promise<Response> {
   const db = getDb();
-  const rows = db.query(
+  const rows = await db.query(
     `SELECT b.id, b.name, b.description, b.icon, b.category, ub.unlocked_at
      FROM user_badges ub JOIN badges b ON ub.badge_id = b.id
      WHERE ub.user_hash = ?`
@@ -509,7 +515,7 @@ function handleGetUserBadges(userHash: string): Response {
   })));
 }
 
-function handleGetHourlyHeatmap(userHash: string, url: URL): Response {
+async function handleGetHourlyHeatmap(userHash: string, url: URL): Promise<Response> {
   const hours = Math.min(720, Math.max(1, parseInt(url.searchParams.get("hours") ?? "24", 10)));
   const db = getDb();
 
@@ -520,7 +526,7 @@ function handleGetHourlyHeatmap(userHash: string, url: URL): Response {
 
   const startHourStr = startHour.toISOString().replace(/\.\d{3}Z$/, "");
 
-  const snapshots = db.query(
+  const snapshots = await db.query(
     `SELECT * FROM metrics_hourly
      WHERE user_hash = ? AND snapshot_hour >= ?
      ORDER BY snapshot_hour ASC`
@@ -577,7 +583,7 @@ function handleGetHourlyHeatmap(userHash: string, url: URL): Response {
   return json(heatmap);
 }
 
-function handleGetHeatmap(userHash: string, url: URL): Response {
+async function handleGetHeatmap(userHash: string, url: URL): Promise<Response> {
   const days = Math.min(730, Math.max(1, parseInt(url.searchParams.get("days") ?? "365", 10)));
   const db = getDb();
 
@@ -587,7 +593,7 @@ function handleGetHeatmap(userHash: string, url: URL): Response {
   startDateObj.setUTCDate(startDateObj.getUTCDate() - days);
   const startDate = startDateObj.toISOString().split("T")[0]!;
 
-  const snapshots = db.query(
+  const snapshots = await db.query(
     `SELECT * FROM metrics_history
      WHERE user_hash = ? AND snapshot_date >= ?
      ORDER BY snapshot_date ASC`
@@ -650,7 +656,7 @@ function handleGetHeatmap(userHash: string, url: URL): Response {
   return json(heatmap);
 }
 
-function handleGetDailyRanks(userHash: string, url: URL): Response {
+async function handleGetDailyRanks(userHash: string, url: URL): Promise<Response> {
   const queryDate = url.searchParams.get("date");
   const period = url.searchParams.get("period") ?? "day";
 
@@ -669,15 +675,15 @@ function handleGetDailyRanks(userHash: string, url: URL): Response {
 
   let ranks: Record<string, any>;
   if (period === "week") {
-    ranks = getWeeklyRanksForUser(db, userHash, target);
+    ranks = await getWeeklyRanksForUser(db, userHash, target);
   } else {
-    ranks = getDailyRanksForUser(db, userHash, target);
+    ranks = await getDailyRanksForUser(db, userHash, target);
   }
 
   return json({ date: target, period, ranks });
 }
 
-function handleGetConcurrency(userHash: string, url: URL): Response {
+async function handleGetConcurrency(userHash: string, url: URL): Promise<Response> {
   const db = getDb();
   const queryDate = url.searchParams.get("date");
 
@@ -695,7 +701,7 @@ function handleGetConcurrency(userHash: string, url: URL): Response {
     const dayEnd = `${targetDate}T23:59:59`;
 
     // Fetch concurrency histograms
-    const rows = db.query(
+    const rows = await db.query(
       `SELECT snapshot_hour, histogram FROM concurrency_histogram
        WHERE user_hash = ? AND snapshot_hour >= ? AND snapshot_hour <= ?`
     ).all(userHash, dayStart, dayEnd) as any[];
@@ -704,8 +710,8 @@ function handleGetConcurrency(userHash: string, url: URL): Response {
     for (const row of rows) {
       try {
         const histogram = row.histogram ? JSON.parse(row.histogram) : {};
-        const snapshotDate = row.snapshot_hour.split("T")[0]!;
-        const hour = parseInt(row.snapshot_hour.split("T")[1]!.split(":")[0]!, 10);
+        const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
+        const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
         const hourKey = `${snapshotDate}:${hour}`;
         perHour[hourKey] = { histogram, tokens: 0 };
       } catch {
@@ -714,14 +720,14 @@ function handleGetConcurrency(userHash: string, url: URL): Response {
     }
 
     // Fetch hourly token data
-    const tokenRows = db.query(
+    const tokenRows = await db.query(
       `SELECT snapshot_hour, total_tokens FROM metrics_hourly
        WHERE user_hash = ? AND snapshot_hour >= ? AND snapshot_hour <= ?`
     ).all(userHash, dayStart, dayEnd) as any[];
 
     for (const row of tokenRows) {
-      const snapshotDate = row.snapshot_hour.split("T")[0]!;
-      const hour = parseInt(row.snapshot_hour.split("T")[1]!.split(":")[0]!, 10);
+      const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
+      const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
       const hourKey = `${snapshotDate}:${hour}`;
       if (perHour[hourKey]) {
         perHour[hourKey].tokens = row.total_tokens ?? 0;
@@ -731,7 +737,7 @@ function handleGetConcurrency(userHash: string, url: URL): Response {
     }
 
     // Fetch day sessions
-    const dsRow = db.query(
+    const dsRow = await db.query(
       "SELECT sessions FROM daily_sessions WHERE user_hash = ? AND snapshot_date = ?"
     ).get(userHash, targetDate) as any;
     if (dsRow?.sessions) {
@@ -752,7 +758,7 @@ function handleGetConcurrency(userHash: string, url: URL): Response {
   startTime.setUTCHours(startTime.getUTCHours() - hours);
   const startTimeStr = startTime.toISOString().replace(/\.\d{3}Z$/, "");
 
-  const rows = db.query(
+  const rows = await db.query(
     `SELECT snapshot_hour, histogram FROM concurrency_histogram
      WHERE user_hash = ? AND snapshot_hour >= ?`
   ).all(userHash, startTimeStr) as any[];
@@ -766,8 +772,8 @@ function handleGetConcurrency(userHash: string, url: URL): Response {
         const s = parseInt(sessionsStr, 10);
         if (s > peak) peak = s;
       }
-      const snapshotDate = row.snapshot_hour.split("T")[0]!;
-      const hour = parseInt(row.snapshot_hour.split("T")[1]!.split(":")[0]!, 10);
+      const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
+      const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
       const hourKey = `${snapshotDate}:${hour}`;
       perHour[hourKey] = peak;
     } catch {
@@ -796,7 +802,7 @@ async function handleCreateTeam(request: Request): Promise<Response> {
   }
 
   const db = getDb();
-  const user = db.query("SELECT * FROM users WHERE user_hash = ?").get(body.user_hash) as any;
+  const user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(body.user_hash) as any;
   if (!user) return error("User not found", 404);
   if (user.team_hash) return error("Already in a team. Leave first.", 400);
 
@@ -808,10 +814,10 @@ async function handleCreateTeam(request: Request): Promise<Response> {
   const teamHash = generateTeamHash();
   const now = new Date().toISOString();
 
-  db.query("INSERT INTO teams (team_hash, team_name, created_by, created_at) VALUES (?, ?, ?, ?)").run(
+  await db.query("INSERT INTO teams (team_hash, team_name, created_by, created_at) VALUES (?, ?, ?, ?)").run(
     teamHash, teamName, body.user_hash, now
   );
-  db.query("UPDATE users SET team_hash = ?, updated_at = ? WHERE user_hash = ?").run(
+  await db.query("UPDATE users SET team_hash = ?, updated_at = ? WHERE user_hash = ?").run(
     teamHash, now, body.user_hash
   );
 
@@ -823,15 +829,15 @@ async function handleJoinTeam(teamHash: string, request: Request): Promise<Respo
   if (!body?.user_hash) return error("user_hash is required", 400);
 
   const db = getDb();
-  const user = db.query("SELECT * FROM users WHERE user_hash = ?").get(body.user_hash) as any;
+  const user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(body.user_hash) as any;
   if (!user) return error("User not found", 404);
   if (user.team_hash) return error("Already in a team. Leave first.", 400);
 
-  const team = db.query("SELECT * FROM teams WHERE team_hash = ?").get(teamHash) as any;
+  const team = await db.query("SELECT * FROM teams WHERE team_hash = ?").get(teamHash) as any;
   if (!team) return error("Team not found", 404);
 
   const now = new Date().toISOString();
-  db.query("UPDATE users SET team_hash = ?, updated_at = ? WHERE user_hash = ?").run(teamHash, now, body.user_hash);
+  await db.query("UPDATE users SET team_hash = ?, updated_at = ? WHERE user_hash = ?").run(teamHash, now, body.user_hash);
 
   return json({ status: "joined", team_hash: teamHash, team_name: team.team_name });
 }
@@ -841,34 +847,36 @@ async function handleLeaveTeam(request: Request): Promise<Response> {
   if (!body?.user_hash) return error("user_hash is required", 400);
 
   const db = getDb();
-  const user = db.query("SELECT * FROM users WHERE user_hash = ?").get(body.user_hash) as any;
+  const user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(body.user_hash) as any;
   if (!user) return error("User not found", 404);
   if (!user.team_hash) return error("Not in a team", 400);
 
   const now = new Date().toISOString();
-  db.query("UPDATE users SET team_hash = NULL, updated_at = ? WHERE user_hash = ?").run(now, body.user_hash);
+  await db.query("UPDATE users SET team_hash = NULL, updated_at = ? WHERE user_hash = ?").run(now, body.user_hash);
 
   return json({ status: "left" });
 }
 
-function handleGetTeam(teamHash: string): Response {
+async function handleGetTeam(teamHash: string): Promise<Response> {
   const db = getDb();
-  const team = db.query("SELECT * FROM teams WHERE team_hash = ?").get(teamHash) as any;
+  const team = await db.query("SELECT * FROM teams WHERE team_hash = ?").get(teamHash) as any;
   if (!team) return error("Team not found", 404);
 
-  const members = db.query("SELECT user_hash, username FROM users WHERE team_hash = ?").all(teamHash) as any[];
+  const members = await db.query("SELECT user_hash, username FROM users WHERE team_hash = ?").all(teamHash) as any[];
   const memberHashes = members.map(m => m.user_hash);
 
   let aggTokens = 0, aggMessages = 0, aggSessions = 0, aggToolCalls = 0;
   if (memberHashes.length > 0) {
-    const placeholders = memberHashes.map(() => "?").join(",");
-    const agg = db.query(
+    const placeholders = memberHashes.map((_: any, i: number) => `$${i + 1}`).join(",");
+    const pool = getPool();
+    const { rows: [agg] } = await pool.query(
       `SELECT COALESCE(SUM(total_tokens), 0) as tokens,
               COALESCE(SUM(total_messages), 0) as messages,
               COALESCE(SUM(total_sessions), 0) as sessions,
               COALESCE(SUM(total_tool_calls), 0) as tool_calls
-       FROM user_metrics WHERE user_hash IN (${placeholders})`
-    ).get(...memberHashes) as any;
+       FROM user_metrics WHERE user_hash IN (${placeholders})`,
+      memberHashes
+    );
     aggTokens = agg?.tokens ?? 0;
     aggMessages = agg?.messages ?? 0;
     aggSessions = agg?.sessions ?? 0;
@@ -891,16 +899,17 @@ function handleGetTeam(teamHash: string): Response {
   });
 }
 
-function handleGetTeamHistory(teamHash: string, url: URL): Response {
+async function handleGetTeamHistory(teamHash: string, url: URL): Promise<Response> {
   const days = parseInt(url.searchParams.get("days") ?? "30", 10);
   const db = getDb();
 
-  const members = db.query("SELECT user_hash FROM users WHERE team_hash = ?").all(teamHash) as any[];
+  const members = await db.query("SELECT user_hash FROM users WHERE team_hash = ?").all(teamHash) as any[];
   const memberHashes = members.map(m => m.user_hash);
   if (memberHashes.length === 0) return json([]);
 
-  const placeholders = memberHashes.map(() => "?").join(",");
-  const rows = db.query(
+  const placeholders = memberHashes.map((_: any, i: number) => `$${i + 1}`).join(",");
+  const pool = getPool();
+  const { rows } = await pool.query(
     `SELECT snapshot_date,
             SUM(total_tokens) as tokens,
             SUM(total_messages) as messages,
@@ -910,10 +919,11 @@ function handleGetTeamHistory(teamHash: string, url: URL): Response {
      WHERE user_hash IN (${placeholders})
      GROUP BY snapshot_date
      ORDER BY snapshot_date DESC
-     LIMIT ?`
-  ).all(...memberHashes, days) as any[];
+     LIMIT $${memberHashes.length + 1}`,
+    [...memberHashes, days]
+  );
 
-  return json(rows.map(r => ({
+  return json(rows.map((r: any) => ({
     date: r.snapshot_date,
     tokens: r.tokens ?? 0,
     messages: r.messages ?? 0,
@@ -932,10 +942,10 @@ async function handleSync(request: Request): Promise<Response> {
   const totals = req.totals ?? {};
 
   // Ensure user exists
-  const existingUser = db.query("SELECT user_hash FROM users WHERE user_hash = ?").get(req.user_hash) as any;
+  const existingUser = await db.query("SELECT user_hash FROM users WHERE user_hash = ?").get(req.user_hash) as any;
   if (!existingUser) {
     const now = new Date().toISOString();
-    db.query("INSERT INTO users (user_hash, created_at, updated_at) VALUES (?, ?, ?)").run(req.user_hash, now, now);
+    await db.query("INSERT INTO users (user_hash, created_at, updated_at) VALUES (?, ?, ?)").run(req.user_hash, now, now);
   }
 
   // Compute prompt uniqueness
@@ -960,9 +970,9 @@ async function handleSync(request: Request): Promise<Response> {
   const today = new Date().toISOString().split("T")[0]!;
 
   // Upsert user_metrics
-  const existingMetrics = db.query("SELECT user_hash FROM user_metrics WHERE user_hash = ?").get(req.user_hash) as any;
+  const existingMetrics = await db.query("SELECT user_hash FROM user_metrics WHERE user_hash = ?").get(req.user_hash) as any;
   if (existingMetrics) {
-    db.query(
+    await db.query(
       `UPDATE user_metrics SET
         total_tokens = ?, total_messages = ?, total_sessions = ?, total_tool_calls = ?,
         prompt_uniqueness_score = ?, weighted_score = ?, estimated_spend = ?,
@@ -979,7 +989,7 @@ async function handleSync(request: Request): Promise<Response> {
       req.user_hash,
     );
   } else {
-    db.query(
+    await db.query(
       `INSERT INTO user_metrics (
         user_hash, total_tokens, total_messages, total_sessions, total_tool_calls,
         prompt_uniqueness_score, weighted_score, estimated_spend,
@@ -998,11 +1008,11 @@ async function handleSync(request: Request): Promise<Response> {
   }
 
   // Upsert daily snapshot
-  const existingHist = db.query(
+  const existingHist = await db.query(
     "SELECT id FROM metrics_history WHERE user_hash = ? AND snapshot_date = ?"
   ).get(req.user_hash, today) as any;
   if (existingHist) {
-    db.query(
+    await db.query(
       `UPDATE metrics_history SET
         total_tokens = ?, total_messages = ?, total_sessions = ?, total_tool_calls = ?,
         prompt_uniqueness_score = ?, weighted_score = ?
@@ -1014,7 +1024,7 @@ async function handleSync(request: Request): Promise<Response> {
       req.user_hash, today,
     );
   } else {
-    db.query(
+    await db.query(
       `INSERT INTO metrics_history (
         user_hash, snapshot_date, total_tokens, total_messages, total_sessions, total_tool_calls,
         prompt_uniqueness_score, weighted_score
@@ -1049,15 +1059,15 @@ async function handleSync(request: Request): Promise<Response> {
       }
       if (h < 0 || h > 23) continue;
 
-      const existingHourly = db.query(
+      const existingHourly = await db.query(
         "SELECT id FROM metrics_hourly WHERE user_hash = ? AND snapshot_hour = ?"
       ).get(req.user_hash, snapshotHour) as any;
       if (existingHourly) {
-        db.query("UPDATE metrics_hourly SET total_messages = ? WHERE user_hash = ? AND snapshot_hour = ?").run(
+        await db.query("UPDATE metrics_hourly SET total_messages = ? WHERE user_hash = ? AND snapshot_hour = ?").run(
           count, req.user_hash, snapshotHour
         );
       } else {
-        db.query(
+        await db.query(
           "INSERT INTO metrics_hourly (user_hash, snapshot_hour, total_messages) VALUES (?, ?, ?)"
         ).run(req.user_hash, snapshotHour, count);
       }
@@ -1081,15 +1091,15 @@ async function handleSync(request: Request): Promise<Response> {
       }
       if (h < 0 || h > 23) continue;
 
-      const existing = db.query(
+      const existing = await db.query(
         "SELECT id FROM metrics_hourly WHERE user_hash = ? AND snapshot_hour = ?"
       ).get(req.user_hash, snapshotHour) as any;
       if (existing) {
-        db.query("UPDATE metrics_hourly SET total_tokens = ? WHERE user_hash = ? AND snapshot_hour = ?").run(
+        await db.query("UPDATE metrics_hourly SET total_tokens = ? WHERE user_hash = ? AND snapshot_hour = ?").run(
           tokenCount, req.user_hash, snapshotHour
         );
       } else {
-        db.query(
+        await db.query(
           "INSERT INTO metrics_hourly (user_hash, snapshot_hour, total_tokens) VALUES (?, ?, ?)"
         ).run(req.user_hash, snapshotHour, tokenCount);
       }
@@ -1113,16 +1123,16 @@ async function handleSync(request: Request): Promise<Response> {
       const tokenCountVal = entry.tokenCount ?? 0;
       if (msgCount <= 0 && toolCount <= 0 && tokenCountVal <= 0) continue;
 
-      const existingDay = db.query(
+      const existingDay = await db.query(
         "SELECT id FROM metrics_history WHERE user_hash = ? AND snapshot_date = ?"
       ).get(req.user_hash, entryDate) as any;
       if (existingDay) {
-        db.query(
+        await db.query(
           `UPDATE metrics_history SET daily_messages = ?, daily_tool_calls = ?, daily_tokens = ?
            WHERE user_hash = ? AND snapshot_date = ?`
         ).run(msgCount, toolCount, tokenCountVal, req.user_hash, entryDate);
       } else {
-        db.query(
+        await db.query(
           `INSERT INTO metrics_history (user_hash, snapshot_date, daily_messages, daily_tool_calls, daily_tokens)
            VALUES (?, ?, ?, ?, ?)`
         ).run(req.user_hash, entryDate, msgCount, toolCount, tokenCountVal);
@@ -1148,15 +1158,15 @@ async function handleSync(request: Request): Promise<Response> {
       if (h < 0 || h > 23) continue;
 
       const histogramJson = JSON.stringify(histogram);
-      const existing = db.query(
+      const existing = await db.query(
         "SELECT id FROM concurrency_histogram WHERE user_hash = ? AND snapshot_hour = ?"
       ).get(req.user_hash, snapshotHour) as any;
       if (existing) {
-        db.query(
+        await db.query(
           "UPDATE concurrency_histogram SET histogram = ? WHERE user_hash = ? AND snapshot_hour = ?"
         ).run(histogramJson, req.user_hash, snapshotHour);
       } else {
-        db.query(
+        await db.query(
           "INSERT INTO concurrency_histogram (user_hash, snapshot_hour, histogram) VALUES (?, ?, ?)"
         ).run(req.user_hash, snapshotHour, histogramJson);
       }
@@ -1170,15 +1180,15 @@ async function handleSync(request: Request): Promise<Response> {
       if (!sessionsList || !Array.isArray(sessionsList)) continue;
 
       const sessionsJson = JSON.stringify(sessionsList);
-      const existing = db.query(
+      const existing = await db.query(
         "SELECT id FROM daily_sessions WHERE user_hash = ? AND snapshot_date = ?"
       ).get(req.user_hash, dateStr) as any;
       if (existing) {
-        db.query(
+        await db.query(
           "UPDATE daily_sessions SET sessions = ? WHERE user_hash = ? AND snapshot_date = ?"
         ).run(sessionsJson, req.user_hash, dateStr);
       } else {
-        db.query(
+        await db.query(
           "INSERT INTO daily_sessions (user_hash, snapshot_date, sessions) VALUES (?, ?, ?)"
         ).run(req.user_hash, dateStr, sessionsJson);
       }
@@ -1186,11 +1196,11 @@ async function handleSync(request: Request): Promise<Response> {
   }
 
   // Evaluate badges
-  const metrics = db.query("SELECT * FROM user_metrics WHERE user_hash = ?").get(req.user_hash) as any;
+  const metrics = await db.query("SELECT * FROM user_metrics WHERE user_hash = ?").get(req.user_hash) as any;
   const newBadges: string[] = [];
-  newBadges.push(...evaluateMilestoneBadges(db, req.user_hash, metrics));
-  newBadges.push(...evaluateRankingBadges(db, req.user_hash));
-  newBadges.push(...evaluateTeamBadges(db, req.user_hash));
+  newBadges.push(...await evaluateMilestoneBadges(db, req.user_hash, metrics));
+  newBadges.push(...await evaluateRankingBadges(db, req.user_hash));
+  newBadges.push(...await evaluateTeamBadges(db, req.user_hash));
 
   return json({
     status: "ok",
@@ -1220,7 +1230,7 @@ const TEAM_COL_NAMES: Record<string, string> = {
   cost: "estimated_spend",
 };
 
-function handleGetLeaderboard(category: string, url: URL): Response {
+async function handleGetLeaderboard(category: string, url: URL): Promise<Response> {
   if (!LEADERBOARD_CATEGORIES[category]) {
     return error(`Invalid category. Must be one of: ${Object.keys(LEADERBOARD_CATEGORIES).join(", ")}`, 400);
   }
@@ -1237,7 +1247,7 @@ function handleGetLeaderboard(category: string, url: URL): Response {
   const col = LEADERBOARD_CATEGORIES[category];
 
   if (scope === "individual") {
-    const rows = db.query(
+    const rows = await db.query(
       `SELECT u.user_hash, u.username, ${col} as value, um.weighted_score
        FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
        ORDER BY ${col} DESC
@@ -1253,7 +1263,7 @@ function handleGetLeaderboard(category: string, url: URL): Response {
       tier: computeTier(row.weighted_score).tier,
     }));
 
-    const countRow = db.query("SELECT COUNT(*) as cnt FROM user_metrics").get() as any;
+    const countRow = await db.query("SELECT COUNT(*) as cnt FROM user_metrics").get() as any;
     const total = countRow?.cnt ?? 0;
 
     return json({ category, scope: "individual", entries, total_count: total });
@@ -1264,7 +1274,7 @@ function handleGetLeaderboard(category: string, url: URL): Response {
       ? "(um.total_messages + um.total_sessions)"
       : `um.${teamColName}`;
 
-    const rows = db.query(
+    const rows = await db.query(
       `SELECT u.team_hash, t.team_name, SUM(${teamCol}) as value, COUNT(u.user_hash) as member_count
        FROM users u
        JOIN user_metrics um ON u.user_hash = um.user_hash
@@ -1283,7 +1293,7 @@ function handleGetLeaderboard(category: string, url: URL): Response {
       member_count: row.member_count,
     }));
 
-    const countRow = db.query(
+    const countRow = await db.query(
       "SELECT COUNT(DISTINCT team_hash) as cnt FROM users WHERE team_hash IS NOT NULL"
     ).get() as any;
     const total = countRow?.cnt ?? 0;
@@ -1294,9 +1304,9 @@ function handleGetLeaderboard(category: string, url: URL): Response {
 
 // ─── Badges Handler ─────────────────────────────────────────────────────────
 
-function handleGetAllBadges(): Response {
+async function handleGetAllBadges(): Promise<Response> {
   const db = getDb();
-  const rows = db.query("SELECT * FROM badges ORDER BY category, id").all() as any[];
+  const rows = await db.query("SELECT * FROM badges ORDER BY category, id").all() as any[];
   return json(rows.map(b => ({
     id: b.id,
     name: b.name,
@@ -1308,12 +1318,12 @@ function handleGetAllBadges(): Response {
 
 // ─── Hot Handler ────────────────────────────────────────────────────────────
 
-function handleGetHot(url: URL): Response {
+async function handleGetHot(url: URL): Promise<Response> {
   const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get("limit") ?? "20", 10)));
   const days = Math.min(30, Math.max(1, parseInt(url.searchParams.get("days") ?? "3", 10)));
 
   const db = getDb();
-  const users = getHotUsers(db, limit, days);
+  const users = await getHotUsers(db, limit, days);
   for (const u of users) {
     u.tier = computeTier(u.weighted_score);
   }

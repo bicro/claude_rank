@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import type { DbClient } from "./db";
 
 // ─── Pricing ────────────────────────────────────────────────────────────────
 
@@ -107,27 +107,27 @@ const CATEGORY_COLUMNS: Record<string, string> = {
   weighted: "weighted_score",
 };
 
-function getUserRank(db: Database, userHash: string, category: string): number | null {
+async function getUserRank(db: DbClient, userHash: string, category: string): Promise<number | null> {
   const col = CATEGORY_COLUMNS[category];
   if (!col) return null;
 
-  const userRow = db.query(`SELECT ${col} as value FROM user_metrics WHERE user_hash = ?`).get(userHash) as any;
+  const userRow = await db.query(`SELECT ${col} as value FROM user_metrics WHERE user_hash = ?`).get(userHash) as any;
   if (!userRow) return null;
 
   const val = userRow.value;
   if (val == null) return null;
 
-  const countRow = db.query(`SELECT COUNT(*) as cnt FROM user_metrics WHERE ${col} > ?`).get(val) as any;
+  const countRow = await db.query(`SELECT COUNT(*) as cnt FROM user_metrics WHERE ${col} > ?`).get(val) as any;
   return (countRow?.cnt ?? 0) + 1;
 }
 
-export function getUserRanksWithPercentiles(db: Database, userHash: string): Record<string, any> {
-  const totalRow = db.query("SELECT COUNT(*) as cnt FROM user_metrics").get() as any;
+export async function getUserRanksWithPercentiles(db: DbClient, userHash: string): Promise<Record<string, any>> {
+  const totalRow = await db.query("SELECT COUNT(*) as cnt FROM user_metrics").get() as any;
   const total = totalRow?.cnt ?? 0;
 
   const result: Record<string, any> = {};
   for (const cat of Object.keys(CATEGORY_COLUMNS)) {
-    const rank = getUserRank(db, userHash, cat);
+    const rank = await getUserRank(db, userHash, cat);
     if (rank !== null) {
       result[cat] = rankEntry(rank, total);
     } else {
@@ -137,11 +137,11 @@ export function getUserRanksWithPercentiles(db: Database, userHash: string): Rec
   return result;
 }
 
-export function getDailyRanksForUser(db: Database, userHash: string, targetDate: string): Record<string, any> {
+export async function getDailyRanksForUser(db: DbClient, userHash: string, targetDate: string): Promise<Record<string, any>> {
   const ranks: Record<string, any> = {};
 
   // daily_tokens rank
-  const tokenRows = db.query(
+  const tokenRows = await db.query(
     "SELECT user_hash, daily_tokens FROM metrics_history WHERE snapshot_date = ? AND daily_tokens > 0"
   ).all(targetDate) as any[];
 
@@ -168,7 +168,7 @@ export function getDailyRanksForUser(db: Database, userHash: string, targetDate:
   const dayStart = `${targetDate}T00:00:00`;
   const dayEnd = `${targetDate}T23:59:59`;
 
-  const concRows = db.query(
+  const concRows = await db.query(
     "SELECT user_hash, histogram FROM concurrency_histogram WHERE snapshot_hour >= ? AND snapshot_hour <= ?"
   ).all(dayStart, dayEnd) as any[];
 
@@ -229,7 +229,7 @@ export function getDailyRanksForUser(db: Database, userHash: string, targetDate:
   return ranks;
 }
 
-export function getWeeklyRanksForUser(db: Database, userHash: string, weekEndDate: string): Record<string, any> {
+export async function getWeeklyRanksForUser(db: DbClient, userHash: string, weekEndDate: string): Promise<Record<string, any>> {
   const ranks: Record<string, any> = {};
 
   // compute week start (6 days before)
@@ -239,7 +239,7 @@ export function getWeeklyRanksForUser(db: Database, userHash: string, weekEndDat
   const weekStart = startDate.toISOString().split("T")[0]!;
 
   // avg_spend: rank by total tokens over 7 days
-  const tokenSums = db.query(
+  const tokenSums = await db.query(
     `SELECT user_hash, SUM(daily_tokens) as total FROM metrics_history
      WHERE snapshot_date >= ? AND snapshot_date <= ? AND daily_tokens > 0
      GROUP BY user_hash`
@@ -265,7 +265,7 @@ export function getWeeklyRanksForUser(db: Database, userHash: string, weekEndDat
   const dayStartDt = `${weekStart}T00:00:00`;
   const dayEndDt = `${weekEndDate}T23:59:59`;
 
-  const concRows = db.query(
+  const concRows = await db.query(
     "SELECT user_hash, snapshot_hour, histogram FROM concurrency_histogram WHERE snapshot_hour >= ? AND snapshot_hour <= ?"
   ).all(dayStartDt, dayEndDt) as any[];
 
@@ -278,7 +278,8 @@ export function getWeeklyRanksForUser(db: Database, userHash: string, weekEndDat
       continue;
     }
     const uh = row.user_hash;
-    const d = row.snapshot_hour.split("T")[0]!;
+    const sep = row.snapshot_hour.includes("T") ? "T" : " ";
+    const d = row.snapshot_hour.split(sep)[0]!;
     if (!userDayPeaks[uh]) userDayPeaks[uh] = {};
     for (const sessionsStr of Object.keys(histogram)) {
       const sc = parseInt(sessionsStr, 10);
@@ -340,40 +341,39 @@ const ALL_BADGES = [
   ...TEAM_BADGES_CONFIG.map(b => ({ ...b, category: "team" })),
 ];
 
-export function seedBadges(db: Database): void {
-  const insertStmt = db.query(
-    "INSERT OR IGNORE INTO badges (id, name, description, category, icon) VALUES (?, ?, ?, ?, ?)"
-  );
+export async function seedBadges(db: DbClient): Promise<void> {
   for (const b of ALL_BADGES) {
-    insertStmt.run(b.id, b.name, b.description, b.category, b.icon ?? null);
+    await db.query(
+      "INSERT INTO badges (id, name, description, category, icon) VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING"
+    ).run(b.id, b.name, b.description, b.category, b.icon ?? null);
   }
 }
 
-function awardBadge(db: Database, userHash: string, badgeId: string): string | null {
-  const existing = db.query(
+async function awardBadge(db: DbClient, userHash: string, badgeId: string): Promise<string | null> {
+  const existing = await db.query(
     "SELECT 1 FROM user_badges WHERE user_hash = ? AND badge_id = ?"
   ).get(userHash, badgeId);
   if (existing) return null;
 
-  db.query(
+  await db.query(
     "INSERT INTO user_badges (user_hash, badge_id, unlocked_at) VALUES (?, ?, ?)"
   ).run(userHash, badgeId, new Date().toISOString());
   return badgeId;
 }
 
-export function evaluateMilestoneBadges(db: Database, userHash: string, metrics: any): string[] {
+export async function evaluateMilestoneBadges(db: DbClient, userHash: string, metrics: any): Promise<string[]> {
   const newlyAwarded: string[] = [];
   for (const badgeDef of MILESTONE_BADGES) {
     const value = metrics?.[badgeDef.field] ?? 0;
     if (value >= badgeDef.threshold) {
-      const result = awardBadge(db, userHash, badgeDef.id);
+      const result = await awardBadge(db, userHash, badgeDef.id);
       if (result) newlyAwarded.push(result);
     }
   }
   return newlyAwarded;
 }
 
-export function evaluateRankingBadges(db: Database, userHash: string): string[] {
+export async function evaluateRankingBadges(db: DbClient, userHash: string): Promise<string[]> {
   const newlyAwarded: string[] = [];
   const categoryCols: Record<string, string> = {
     tokens: "total_tokens",
@@ -389,17 +389,15 @@ export function evaluateRankingBadges(db: Database, userHash: string): string[] 
       ? [(badgeDef as any).category as string]
       : Object.keys(categoryCols);
 
-    let found = false;
     for (const cat of cats) {
       const col = categoryCols[cat];
-      const rows = db.query(
+      const rows = await db.query(
         `SELECT user_hash FROM user_metrics ORDER BY ${col} DESC LIMIT ?`
       ).all(topN) as any[];
       const topHashes = rows.map(r => r.user_hash);
       if (topHashes.includes(userHash)) {
-        const awarded = awardBadge(db, userHash, badgeDef.id);
+        const awarded = await awardBadge(db, userHash, badgeDef.id);
         if (awarded) newlyAwarded.push(awarded);
-        found = true;
         break;
       }
     }
@@ -407,11 +405,11 @@ export function evaluateRankingBadges(db: Database, userHash: string): string[] 
   return newlyAwarded;
 }
 
-export function evaluateTeamBadges(db: Database, userHash: string): string[] {
+export async function evaluateTeamBadges(db: DbClient, userHash: string): Promise<string[]> {
   const newlyAwarded: string[] = [];
-  const user = db.query("SELECT team_hash FROM users WHERE user_hash = ?").get(userHash) as any;
+  const user = await db.query("SELECT team_hash FROM users WHERE user_hash = ?").get(userHash) as any;
   if (user && user.team_hash) {
-    const awarded = awardBadge(db, userHash, "team_player");
+    const awarded = await awardBadge(db, userHash, "team_player");
     if (awarded) newlyAwarded.push(awarded);
   }
   return newlyAwarded;
@@ -419,8 +417,8 @@ export function evaluateTeamBadges(db: Database, userHash: string): string[] {
 
 // ─── Hotness ────────────────────────────────────────────────────────────────
 
-export function getHotUsers(db: Database, limit: number = 20, lookbackDays: number = 3): any[] {
-  const rows = db.query(
+export async function getHotUsers(db: DbClient, limit: number = 20, lookbackDays: number = 3): Promise<any[]> {
+  const rows = await db.query(
     `SELECT um.*, u.username FROM user_metrics um
      JOIN users u ON u.user_hash = um.user_hash
      WHERE um.current_streak > 0`
@@ -435,7 +433,7 @@ export function getHotUsers(db: Database, limit: number = 20, lookbackDays: numb
 
   const hotUsers: any[] = [];
   for (const metrics of rows) {
-    const history = db.query(
+    const history = await db.query(
       `SELECT * FROM metrics_history
        WHERE user_hash = ? AND snapshot_date >= ?
        ORDER BY snapshot_date ASC`

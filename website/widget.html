@@ -564,6 +564,9 @@ let previousConcMins = 0;
 // ── Auth connect ──
 window.startLogin = startLogin;
 function startLogin(provider) {
+  const spinner = document.getElementById('spinnerOverlay');
+  spinner.classList.remove('hidden');
+
   const connectUrl = window.location.origin + '/auth-connect.html?user_hash=' + encodeURIComponent(userHash) + '&provider=' + provider;
   if (window.parent !== window) {
     window.parent.postMessage({ type: 'open-url', url: connectUrl }, '*');
@@ -574,7 +577,11 @@ function startLogin(provider) {
   let pollCount = 0;
   const pollInterval = setInterval(async () => {
     pollCount++;
-    if (pollCount > 60) { clearInterval(pollInterval); return; }
+    if (pollCount > 60) {
+      clearInterval(pollInterval);
+      spinner.classList.add('hidden');
+      return;
+    }
     try {
       const data = await getUserProfile(userHash);
       if (data.auth_provider) {
@@ -587,10 +594,15 @@ function startLogin(provider) {
         let retries = 0;
         const retryInterval = setInterval(async () => {
           retries++;
-          if (retries > 20) { clearInterval(retryInterval); return; }
+          if (retries > 20) {
+            clearInterval(retryInterval);
+            spinner.classList.add('hidden');
+            return;
+          }
           await loadProfile();
           if (totalTokens > 0) {
             clearInterval(retryInterval);
+            spinner.classList.add('hidden');
             await loadActiveDates();
             await loadDayByIndex(activeDates.length - 1);
           }
@@ -968,6 +980,12 @@ async function loadProfile() {
     document.getElementById('linkFull').href = window.location.origin;
   } catch (e) {
     console.error('Failed to load profile:', e);
+    // Show login overlay when profile can't be loaded (e.g. 404 after DB wipe)
+    const overlay = document.getElementById('loginOverlay');
+    const panel = document.querySelector('.panel');
+    overlay.classList.remove('hidden');
+    panel.classList.add('blurred');
+    document.body.style.background = '#1a1a2e';
   }
 }
 
@@ -989,8 +1007,7 @@ window.doLogout = doLogout;
 async function doLogout() {
   userMenu.classList.remove('open');
   try {
-    // Clear cache + social link
-    await fetch(`/api/users/${userHash}/clear-cache`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    // Disconnect social auth and sign out (keep metrics data intact)
     await fetch(`/api/users/${userHash}/connect`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
     await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' });
   } catch {}
