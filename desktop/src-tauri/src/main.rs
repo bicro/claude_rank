@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder};
-use tauri::{command, AppHandle, Emitter, Manager};
+use tauri::{command, AppHandle, Emitter, Listener, Manager};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use log::{error, info, warn};
@@ -25,10 +25,10 @@ use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior};
 
 // Windows-specific imports
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM, RECT};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
-    SetWindowPos, SystemParametersInfoW, HWND_TOPMOST, SPI_GETWORKAREA,
+    SetWindowPos, HWND_TOPMOST,
     SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
     WM_NCACTIVATE, WM_NCPAINT, WM_NCCALCSIZE, WM_NCDESTROY,
 };
@@ -486,6 +486,7 @@ fn position_overlay_window(window: &tauri::WebviewWindow, app: &AppHandle) {
 
             // Center horizontally under the tray icon, place directly below it
             let mut x = tray_x + (tray_w / 2.0) - (ww / 2.0);
+            #[allow(unused_assignments)]
             let mut y = tray_y + tray_h;
 
             // On non-macOS, tray is at bottom — place window above the icon
@@ -996,6 +997,20 @@ fn main() {
                 Arc::clone(&stats_ranking_setup),
             );
 
+            // Handle deep-link URLs (Tauri v2 plugin API)
+            let handle = app.handle().clone();
+            app.listen("deep-link://new-url", move |event| {
+                if let Ok(urls) = serde_json::from_str::<Vec<String>>(event.payload()) {
+                    for url_str in urls {
+                        if url_str.starts_with("clauderank") {
+                            info!("[deep-link] received: {}", url_str);
+                            let _ = show_overlay_sync(&handle);
+                            break;
+                        }
+                    }
+                }
+            });
+
             Ok(())
         })
         .plugin(tauri_plugin_deep_link::init())
@@ -1069,15 +1084,5 @@ fn main() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app_handle, event| {
-            if let tauri::RunEvent::Opened { urls } = event {
-                for url in urls {
-                    if url.scheme() == "clauderank" {
-                        info!("[deep-link] received: {}", url);
-                        let _ = show_overlay_sync(app_handle);
-                        break;
-                    }
-                }
-            }
-        });
+        .run(|_app_handle, _event| {});
 }

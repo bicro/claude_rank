@@ -1,6 +1,6 @@
 # Claude Rank
 
-A global leaderboard system for tracking Claude API usage. Compete with other Claude users, earn badges, join teams, and climb the ranks.
+A global leaderboard system for tracking Claude Code usage. Compete with other Claude users, earn badges, join teams, and climb the ranks.
 
 **Website**: [clauderank.com](https://clauderank.com)
 
@@ -25,22 +25,27 @@ A global leaderboard system for tracking Claude API usage. Compete with other Cl
 
 - **Tier Progression**: Advance through Bronze, Silver, Gold, Platinum, and Diamond tiers
 
+- **Desktop App**: Tauri-based app that monitors your Claude Code logs in real-time, syncs metrics, and displays a tray widget with your stats
+
 ## Project Structure
 
 ```
 claude_rank/
-├── backend/          # FastAPI backend (Python)
-├── desktop/          # Tauri desktop app
+├── server/           # Bun.js backend (TypeScript)
+├── desktop/          # Tauri 2.x desktop app (Rust + TypeScript)
 ├── website/          # Static website (HTML/JS/CSS)
-└── src-tauri/        # Shared Tauri/Rust code
+├── lib/              # Shared utilities
+├── dev.ts            # Dev script (starts server + desktop)
+└── Dockerfile        # Production container
 ```
 
 ## Tech Stack
 
 | Component | Technology |
 |-----------|------------|
-| Backend | FastAPI, SQLAlchemy, PostgreSQL |
-| Desktop | Tauri 2.x, Rust, TypeScript |
+| Backend | Bun, TypeScript, PostgreSQL |
+| Auth | Better Auth (Google, GitHub, Discord, Twitter, LinkedIn) |
+| Desktop | Tauri 2.x, Rust |
 | Website | Vanilla HTML/JS/CSS |
 
 ## Development
@@ -48,20 +53,22 @@ claude_rank/
 ### Prerequisites
 
 - [Bun](https://bun.sh/)
-- [Rust](https://rustup.rs/)
-- [Python 3.11+](https://python.org/)
+- [Rust](https://rustup.rs/) (for the desktop app)
 
-### Backend
+### Full Stack (Server + Desktop)
 
 ```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+bun run dev.ts
 ```
 
-### Desktop App
+### Server Only
+
+```bash
+cd server
+bun run dev
+```
+
+### Desktop App Only
 
 ```bash
 cd desktop
@@ -71,32 +78,62 @@ bun run dev
 
 ### Website
 
-The website is served statically by the backend. For local development, it's mounted at `/` when running the backend.
+The website is served statically by the server at `/`.
 
 ## API
 
-The backend exposes a REST API at `/api`:
+The server exposes a REST API at `/api`:
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/users/{hash}` | Get user profile |
-| `POST /api/sync` | Sync usage metrics |
-| `GET /api/leaderboard/{category}` | Get leaderboard rankings |
-| `GET /api/teams/{id}` | Get team details |
-| `GET /api/hot` | Get trending users |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/users` | POST | Register a new user |
+| `/api/users/{hash}` | GET | Get user profile & metrics |
+| `/api/users/{hash}/badges` | GET | Get user's badges |
+| `/api/users/{hash}/history` | GET | Get metric history |
+| `/api/users/{hash}/heatmap` | GET | Get hourly usage heatmap |
+| `/api/users/{hash}/daily-ranks` | GET | Get daily rank snapshots |
+| `/api/users/by-username/{username}` | GET | Lookup user by username |
+| `/api/users/{hash}/connect` | POST | Connect OAuth account |
+| `/api/sync` | POST | Sync usage metrics |
+| `/api/leaderboard/{category}` | GET | Get leaderboard rankings |
+| `/api/teams` | POST | Create a team |
+| `/api/teams/{hash}` | GET | Get team details |
+| `/api/teams/{hash}/join` | POST | Join a team |
+| `/api/teams/{hash}/history` | GET | Get team metric history |
+| `/api/teams/leave` | POST | Leave current team |
+| `/api/badges` | GET | Get all badge definitions |
+| `/api/hot` | GET | Get trending users |
+| `/api/auth/*` | * | Better Auth OAuth routes |
 
 ## Environment Variables
 
-Create a `.env` file in the backend directory:
+Copy `.env.example` to `.env.local` and fill in the values:
 
+```bash
+cp .env.example .env.local
 ```
-DATABASE_URL=postgresql://...  # or sqlite:///./local.db for development
-```
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `BETTER_AUTH_SECRET` | Yes | Auth secret (`openssl rand -base64 32`) |
+| `BETTER_AUTH_URL` | Yes | Server URL (e.g. `http://localhost:3001`) |
+| `WIDGET_BASE` | Yes | Widget base URL |
+| `RANKING_API_BASE` | Yes | API base URL |
+| `GOOGLE_CLIENT_ID` / `_SECRET` | No | Google OAuth credentials |
+| `GITHUB_CLIENT_ID` / `_SECRET` | No | GitHub OAuth credentials |
+| `DISCORD_CLIENT_ID` / `_SECRET` | No | Discord OAuth credentials |
+| `TWITTER_CLIENT_ID` / `_SECRET` | No | Twitter/X OAuth credentials |
+| `LINKEDIN_CLIENT_ID` / `_SECRET` | No | LinkedIn OAuth credentials |
 
 ## Deployment
 
-- **Backend**: Deployed on [Render](https://render.com)
-- **Website**: Served by the backend as static files
+The server is containerized with Docker and deployed on [Render](https://render.com).
+
+```bash
+docker build -t claude-rank .
+docker run -p 10000:10000 claude-rank
+```
 
 ## License
 

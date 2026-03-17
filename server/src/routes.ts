@@ -1,4 +1,5 @@
 import { getDb, getPool } from "./db";
+import { auth } from "./auth";
 import {
   computeWeightedScore,
   computeTier,
@@ -31,6 +32,32 @@ async function parseBody(request: Request): Promise<any> {
   } catch {
     return null;
   }
+}
+
+/** Get the authenticated Better Auth session from the request cookie. */
+async function getAuthSession(request: Request) {
+  try {
+    return await auth.api.getSession({ headers: request.headers });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Verify the request has a valid session whose user owns the given user_hash.
+ * Returns an error Response if unauthorized, or null if authorized.
+ */
+async function requireOwner(request: Request, userHash: string): Promise<Response | null> {
+  const session = await getAuthSession(request);
+  if (!session?.user?.id) return error("Unauthorized", 401);
+
+  const db = getDb();
+  const user = await db.query(
+    "SELECT user_hash FROM users WHERE auth_id = ? AND user_hash = ?"
+  ).get(session.user.id, userHash) as any;
+
+  if (!user) return error("Forbidden", 403);
+  return null;
 }
 
 /** Extract YYYY-MM-DD from an ISO string or Date */
@@ -145,7 +172,7 @@ export async function handleApiRequest(url: URL, request: Request): Promise<Resp
   // POST /api/users/:user_hash/clear-cache
   const clearCacheMatch = path.match(/^\/api\/users\/([^/]+)\/clear-cache$/);
   if (clearCacheMatch && method === "POST") {
-    return handleClearCache(clearCacheMatch[1]!);
+    return handleClearCache(clearCacheMatch[1]!, request);
   }
 
   // GET /api/users/:user_hash/history
@@ -269,6 +296,9 @@ async function handleSetUsername(userHash: string, request: Request): Promise<Re
   const body = await parseBody(request);
   if (!body?.username) return error("username is required", 400);
 
+  const authErr = await requireOwner(request, userHash);
+  if (authErr) return authErr;
+
   const db = getDb();
   const user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
   if (!user) return error("User not found", 404);
@@ -302,7 +332,10 @@ async function handleGetUserByUsername(username: string): Promise<Response> {
   return json({ user_hash: user.user_hash, username: user.username });
 }
 
-async function handleClearCache(userHash: string): Promise<Response> {
+async function handleClearCache(userHash: string, request: Request): Promise<Response> {
+  const authErr = await requireOwner(request, userHash);
+  if (authErr) return authErr;
+
   const db = getDb();
   await db.query("DELETE FROM user_metrics WHERE user_hash = ?").run(userHash);
   await db.query("DELETE FROM metrics_history WHERE user_hash = ?").run(userHash);
@@ -318,6 +351,21 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
   if (!body) return error("Invalid request body", 400);
 
   const db = getDb();
+  const provider = body.provider || null;
+
+  // Disconnect (logout) — clear social fields; no session required
+  // (the user_hash itself is the secret — only the owner knows it)
+  if (!provider) {
+    const now = new Date().toISOString();
+    await db.query(
+      `UPDATE users SET display_name = NULL, avatar_url = NULL, auth_provider = NULL, auth_id = NULL, social_url = NULL, updated_at = ? WHERE user_hash = ?`
+    ).run(now, userHash);
+    return json({ status: "disconnected" });
+  }
+
+  // Require authenticated Better Auth session for connecting
+  const session = await getAuthSession(request);
+  if (!session?.user?.id) return error("Unauthorized", 401);
 
   // Ensure user exists
   let user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
@@ -328,17 +376,14 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
   }
 
   const now = new Date().toISOString();
-  const provider = body.provider || null;
   let displayName = body.name || null;
   let avatarUrl = body.image || null;
-  const authId = body.auth_id || null;
+  // Use the session's user ID as auth_id — never trust the client-supplied value
+  const authId = session.user.id;
 
-  // Disconnect (logout) — clear social fields
-  if (!provider) {
-    await db.query(
-      `UPDATE users SET display_name = NULL, avatar_url = NULL, auth_provider = NULL, auth_id = NULL, social_url = NULL, updated_at = ? WHERE user_hash = ?`
-    ).run(now, userHash);
-    return json({ status: "disconnected" });
+  // Prevent re-linking a user_hash already connected to a different auth user
+  if (user.auth_id && user.auth_id !== authId) {
+    return error("This account is already linked to a different user", 403);
   }
 
   // Fetch fresh profile data from the provider via Better Auth's stored access token.
@@ -801,6 +846,9 @@ async function handleCreateTeam(request: Request): Promise<Response> {
     return error("user_hash and team_name are required", 400);
   }
 
+  const authErr = await requireOwner(request, body.user_hash);
+  if (authErr) return authErr;
+
   const db = getDb();
   const user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(body.user_hash) as any;
   if (!user) return error("User not found", 404);
@@ -828,6 +876,9 @@ async function handleJoinTeam(teamHash: string, request: Request): Promise<Respo
   const body = await parseBody(request);
   if (!body?.user_hash) return error("user_hash is required", 400);
 
+  const authErr = await requireOwner(request, body.user_hash);
+  if (authErr) return authErr;
+
   const db = getDb();
   const user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(body.user_hash) as any;
   if (!user) return error("User not found", 404);
@@ -845,6 +896,9 @@ async function handleJoinTeam(teamHash: string, request: Request): Promise<Respo
 async function handleLeaveTeam(request: Request): Promise<Response> {
   const body = await parseBody(request);
   if (!body?.user_hash) return error("user_hash is required", 400);
+
+  const authErr = await requireOwner(request, body.user_hash);
+  if (authErr) return authErr;
 
   const db = getDb();
   const user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(body.user_hash) as any;
@@ -934,6 +988,10 @@ async function handleGetTeamHistory(teamHash: string, url: URL): Promise<Respons
 
 // ─── Sync Handler ───────────────────────────────────────────────────────────
 
+// TODO: This endpoint accepts any user_hash without authentication. Since sync
+// is called from the CLI (no browser session), it needs a different auth
+// mechanism (e.g. signed requests or per-device API keys) to prevent
+// fabricated metrics from being submitted for arbitrary user_hashes.
 async function handleSync(request: Request): Promise<Response> {
   const req = await parseBody(request);
   if (!req?.user_hash) return error("user_hash is required", 400);

@@ -95,12 +95,12 @@ import { getCachedAvatar, clearCachedAvatar } from './js/avatar.js';
     // Link the social account to the ClaudeRank user_hash
     const connectRes = await fetch(`/api/users/${encodeURIComponent(userHash)}/connect`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         provider: provider || session.user.provider || 'unknown',
         name: session.user.name || session.user.email || 'User',
         image: session.user.image || null,
-        auth_id: session.user.id,
       }),
     });
 

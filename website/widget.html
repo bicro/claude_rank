@@ -1008,7 +1008,7 @@ async function doLogout() {
   userMenu.classList.remove('open');
   try {
     // Disconnect social auth and sign out (keep metrics data intact)
-    await fetch(`/api/users/${userHash}/connect`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+    await fetch(`/api/users/${userHash}/connect`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
     await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' });
   } catch {}
   clearCachedAvatar();
