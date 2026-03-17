@@ -41,6 +41,12 @@ export async function getAllBadges() {
     return apiFetch('/api/badges');
 }
 
+export function formatPercentile(p) {
+    if (p == null) return null;
+    if (p <= 0) return '0.001';
+    return parseFloat(p.toFixed(3)).toString();
+}
+
 export function formatCost(n) {
     if (n >= 1000) return '$' + (n / 1000).toFixed(1) + 'K';
     return '$' + n.toFixed(2);

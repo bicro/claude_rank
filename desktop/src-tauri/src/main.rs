@@ -60,7 +60,7 @@ struct RankingLeaderboardEntry {
 
 fn ranking_api_base() -> String {
     std::env::var("RANKING_API_BASE")
-        .unwrap_or_else(|_| "https://claude-rank.onrender.com".to_string())
+        .unwrap_or_else(|_| "https://clauderank.com".to_string())
 }
 
 fn widget_base() -> String {
@@ -345,30 +345,6 @@ unsafe extern "system" fn overlay_subclass_proc(
         }
         _ => DefSubclassProc(hwnd, msg, wparam, lparam),
     }
-}
-
-#[cfg(target_os = "windows")]
-fn get_windows_taskbar_height() -> i32 {
-    use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CYSCREEN};
-
-    unsafe {
-        let mut work_area = RECT::default();
-        if SystemParametersInfoW(
-            SPI_GETWORKAREA,
-            0,
-            Some(&mut work_area as *mut _ as *mut _),
-            Default::default(),
-        ).is_ok() {
-            let screen_height = GetSystemMetrics(SM_CYSCREEN);
-            return screen_height - work_area.bottom;
-        }
-    }
-    0
-}
-
-#[cfg(not(target_os = "windows"))]
-fn get_windows_taskbar_height() -> i32 {
-    0
 }
 
 #[cfg(target_os = "windows")]
@@ -1007,6 +983,11 @@ fn main() {
             }
             info!("[shortcut] registered Alt/Super+Space successfully");
 
+            // Pre-create the overlay window (hidden) so it's ready on first click.
+            // Without this, the first tray-icon click creates the webview on-demand
+            // and the window geometry isn't settled yet, causing it to appear offscreen.
+            let _ = ensure_overlay_window(app.handle());
+
             // Start stats file watcher
             stats::watcher::FileWatcher::start(
                 app.handle().clone(),
@@ -1017,6 +998,7 @@ fn main() {
 
             Ok(())
         })
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec![]),
@@ -1082,9 +1064,20 @@ fn main() {
             stats::ranking::leave_team,
             stats::ranking::get_my_ranking,
             stats::ranking::open_ranking_website,
+            stats::ranking::force_sync,
             get_widget_base,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app_handle, _event| {});
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Opened { urls } = event {
+                for url in urls {
+                    if url.scheme() == "clauderank" {
+                        info!("[deep-link] received: {}", url);
+                        let _ = show_overlay_sync(app_handle);
+                        break;
+                    }
+                }
+            }
+        });
 }

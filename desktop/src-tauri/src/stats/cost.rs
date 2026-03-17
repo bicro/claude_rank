@@ -1,84 +1,23 @@
-use super::parser::{ModelUsage, StatsCache};
+use super::parser::StatsCache;
 
-/// Per-million-token pricing for Claude models.
-struct ModelPricing {
-    input: f64,
-    output: f64,
-    cache_read: f64,
-    cache_write: f64,
-}
-
-/// Look up pricing by model name. Falls back to Sonnet pricing for unknown models.
-fn pricing_for_model(model: &str) -> ModelPricing {
-    // Normalize: lowercase, strip date suffix for matching
-    let m = model.to_lowercase();
-
-    if m.contains("opus") {
-        ModelPricing {
-            input: 15.0,
-            output: 75.0,
-            cache_read: 1.5,
-            cache_write: 18.75,
-        }
-    } else if m.contains("haiku") {
-        ModelPricing {
-            input: 0.80,
-            output: 4.0,
-            cache_read: 0.08,
-            cache_write: 1.0,
-        }
-    } else {
-        // Sonnet (default for unknown models)
-        ModelPricing {
-            input: 3.0,
-            output: 15.0,
-            cache_read: 0.30,
-            cache_write: 3.75,
-        }
-    }
-}
-
-fn cost_for_usage(model: &str, usage: &ModelUsage) -> f64 {
-    let p = pricing_for_model(model);
-    let mtok = 1_000_000.0;
-
-    (usage.input_tokens as f64 / mtok) * p.input
-        + (usage.output_tokens as f64 / mtok) * p.output
-        + (usage.cache_read_input_tokens as f64 / mtok) * p.cache_read
-        + (usage.cache_creation_input_tokens as f64 / mtok) * p.cache_write
-}
-
-/// Compute total cost across all models from a StatsCache.
-pub fn total_cost(stats: &StatsCache) -> f64 {
-    stats
-        .model_usage
-        .iter()
-        .map(|(model, usage)| cost_for_usage(model, usage))
-        .sum()
-}
-
-/// Format cost for display in the menu bar (e.g. "$4.20").
-pub fn format_cost(cost: f64) -> String {
-    if cost < 0.01 {
-        "$0.00".to_string()
-    } else if cost < 10.0 {
-        format!("${:.2}", cost)
-    } else if cost < 100.0 {
-        format!("${:.1}", cost)
-    } else {
-        format!("${:.0}", cost)
-    }
-}
-
-/// Sum today's tokens across all models.
+/// Sum today's tokens using hourly granularity.
+/// Iterates each of the 24 local hours, maps to the corresponding UTC
+/// date:hour key in `hour_tokens`, and sums only those exact hours.
 pub fn today_tokens(stats: &StatsCache) -> u64 {
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    stats
-        .daily_model_tokens
-        .iter()
-        .find(|d| d.date == today)
-        .map(|d| d.tokens_by_model.values().sum::<u64>())
-        .unwrap_or(0)
+    use chrono::{Local, NaiveTime, Timelike, Duration};
+
+    let now = Local::now();
+    let local_date = now.date_naive();
+    let offset_secs = now.offset().local_minus_utc() as i64;
+
+    let mut total = 0u64;
+    for h in 0..24 {
+        let local_hour = local_date.and_time(NaiveTime::from_hms_opt(h, 0, 0).unwrap());
+        let utc_time = local_hour - Duration::seconds(offset_secs);
+        let key = format!("{}:{}", utc_time.format("%Y-%m-%d"), utc_time.hour());
+        total += stats.hour_tokens.get(&key).copied().unwrap_or(0);
+    }
+    total
 }
 
 /// Format a token count for tray display (e.g. "1.2M", "42K").

@@ -1,0 +1,21 @@
+{
+  "name": "claude-rank-auth",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --env-file=../.env.local --hot index.ts",
+    "start": "bun --env-file=../.env.local index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@types/pg": "^8.18.0",
+    "better-auth": "^1.5.5",
+    "pg": "^8.20.0"
+  }
+}
