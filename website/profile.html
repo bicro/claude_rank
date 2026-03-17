@@ -920,32 +920,28 @@
                 async function copyCardAsImage() {
                     const args = window._burnClockRenderArgs;
                     if (!args) return;
-                    const { cardHourlyData: hourlyData, sessions, cardData } = args;
+                    const { cardHourlyData: hourlyData, cardData } = args;
                     if (!hourlyData || !hourlyData.length) return;
 
+                    function escHtml(s) { const d = document.createElement('div'); d.textContent = s || '?'; return d.innerHTML; }
                     function getV5Color(intensity) {
                         const r1 = 245, g1 = 170, b1 = 100;
                         const r2 = 210, g2 = 70, b2 = 15;
-                        const r = Math.round(r1 + (r2 - r1) * intensity);
-                        const g = Math.round(g1 + (g2 - g1) * intensity);
-                        const b = Math.round(b1 + (b2 - b1) * intensity);
-                        return `rgb(${r},${g},${b})`;
-                    }
-                    function escHtml(str) {
-                        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                        return `rgb(${Math.round(r1 + (r2 - r1) * intensity)},${Math.round(g1 + (g2 - g1) * intensity)},${Math.round(b1 + (b2 - b1) * intensity)})`;
                     }
 
-                    const cellW = 22, cellH = 22, gp = 2;
+                    const cellW = 22, cellH = 22, gap = 3;
                     const gridMarginLeft = 60, gridMarginRight = 30;
-                    const cardW = gridMarginLeft + 24 * (cellW + gp) - gp + gridMarginRight;
+                    const cardW = gridMarginLeft + 24 * (cellW + gap) - gap + gridMarginRight;
 
                     let maxSessions = 0;
                     for (const d of hourlyData) {
                         if (d.sessions.length > maxSessions) maxSessions = d.sessions.length;
                     }
                     const maxRows = Math.max(1, maxSessions);
-                    const gridHeight = maxRows * (cellH + gp) - gp;
+                    const gridHeight = maxRows * (cellH + gap) - gap;
 
+                    // Compute stats
                     let totalDevMins = 0;
                     let concurrentMins = 0;
                     for (const d of hourlyData) {
@@ -958,17 +954,26 @@
                         ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
                         : Math.round(concurrentMins) + 'm';
 
+                    // Data from render args
                     const username = cardData.username || 'anonymous';
                     const dayTokens = formatNumber(cardData.dayTokens || 0);
                     const costText = cardData.costText || '$0';
+
+                    // Date display
                     const dateObj = cardData.localDateStr ? new Date(cardData.localDateStr + 'T12:00:00') : new Date();
                     const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
                     const dateText = `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
 
-                    const topY = 30, usernameY = 48, dateY = 80;
-                    const heroY = 140, heroLabelY = 162, pillY = 180;
-                    const divider1Y = 218, gridLabelY = 238, gridTopY2 = 255;
-                    const gridBottomY = gridTopY2 + gridHeight + 24;
+                    // Rank from DOM
+                    const rankBadge = document.getElementById('v5RankBadge');
+                    const rankTextEl = document.getElementById('v5RankText');
+                    const rankText = (rankBadge && rankTextEl && rankBadge.getAttribute('opacity') !== '0') ? rankTextEl.textContent.trim() : '';
+
+                    // Layout Y positions (exact V5 card — matches web display)
+                    const topY = 30, usernameY = 58, dateY = 100;
+                    const heroY = 200, heroLabelY = 235, pillY = 260;
+                    const divider1Y = 310, gridLabelY = 340, gridTopY = 360;
+                    const gridBottomY = gridTopY + gridHeight + 24;
                     const divider2Y = gridBottomY + 10;
                     const statsY = divider2Y + 20;
                     const statsHeight = 70;
@@ -978,121 +983,128 @@
 
                     const fontStack = "'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace";
                     let s = '';
-                    s += `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${cardW} ${cardH}" width="${cardW}" height="${cardH}" font-family="${fontStack}">`;
+                    s += `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${cardW} ${cardH}" width="${cardW * 2}" height="${cardH * 2}" font-family="${fontStack}">`;
                     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
 
+                    // Header + username
                     s += `<text x="30" y="${topY}" fill="#8a8480" font-size="10" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-                    s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="18" font-weight="700">@${escHtml(username)}</text>`;
+                    s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="20" font-weight="700">@${escHtml(username)}</text>`;
 
-                    // Rank pill (if available from DOM)
-                    const rankBadge = document.getElementById('v5RankBadge');
-                    if (rankBadge && rankBadge.getAttribute('opacity') === '1') {
-                        const rankText = (document.getElementById('v5RankText') || {}).textContent || '';
-                        if (rankText) {
-                            const rpH = 22, rpW = 230;
-                            const rpX = cardW - 30 - rpW, rpY = usernameY - 20;
-                            s += `<rect x="${rpX}" y="${rpY}" width="${rpW}" height="${rpH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
-                            s += `<text x="${rpX + rpW / 2}" y="${rpY + rpH / 2 + 4}" fill="#E8692D" font-size="10" font-weight="600" text-anchor="middle" letter-spacing="0.5">${escHtml(rankText)}</text>`;
-                        }
+                    // Rank pill
+                    if (rankText && !rankText.includes('\u2014')) {
+                        const rpH = 28, rpW = 230;
+                        const rpX = cardW - 30 - rpW, rpY = usernameY - 20;
+                        s += `<rect x="${rpX}" y="${rpY}" width="${rpW}" height="${rpH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
+                        s += `<text x="${rpX + rpW / 2}" y="${rpY + rpH / 2 + 4}" fill="#E8692D" font-size="12" font-weight="600" text-anchor="middle" letter-spacing="0.5">${escHtml(rankText)}</text>`;
                     }
 
-                    s += `<text x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="11" font-weight="600" letter-spacing="1.5" text-anchor="middle">${escHtml(dateText)}</text>`;
+                    // Date
+                    s += `<text x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="13" font-weight="600" letter-spacing="1.5" text-anchor="middle">${escHtml(dateText)}</text>`;
 
-                    s += `<text x="${cardW / 2}" y="${heroY}" fill="#1a1a1a" font-size="48" font-weight="800" text-anchor="middle">${escHtml(dayTokens)}</text>`;
-                    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#8a8480" font-size="11" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
+                    // Hero tokens
+                    s += `<text x="${cardW / 2}" y="${heroY}" fill="#1a1a1a" font-size="96" font-weight="800" text-anchor="middle">${escHtml(dayTokens)}</text>`;
+                    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#8a8480" font-size="13" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
 
+                    // Cost pill
                     const spW = 240, spH = 30, spX = (cardW - spW) / 2;
                     s += `<rect x="${spX}" y="${pillY}" width="${spW}" height="${spH}" rx="15" ry="15" fill="#f5f0eb"/>`;
-                    s += `<text x="${cardW / 2}" y="${pillY + spH / 2 + 5}" fill="#8a8480" font-size="10" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
+                    s += `<text x="${cardW / 2}" y="${pillY + spH / 2 + 5}" fill="#8a8480" font-size="12" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
                     s += `<tspan fill="#E8692D">${escHtml(costText)}</tspan> EST. TOKEN VALUE</text>`;
 
+                    // Divider 1
                     s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
 
-                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="9" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
+                    // Grid label + legend
+                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="11" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
                     const legendW = 80, legendH = 10;
-                    const gridRightEdge = gridMarginLeft + 23 * (cellW + gp) + cellW;
+                    const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
                     const legendY = gridLabelY - 10;
                     s += `<defs><linearGradient id="v5LG" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgb(245,170,100)"/><stop offset="100%" stop-color="rgb(210,70,15)"/></linearGradient></defs>`;
-                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="8" font-weight="600" text-anchor="end">HIGH</text>`;
+                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="9" font-weight="600" text-anchor="end">HIGH</text>`;
                     const highTW = 28, legendX = gridRightEdge - highTW - legendW;
                     s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="3" ry="3" fill="url(#v5LG)"/>`;
-                    s += `<text x="${legendX - 6}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="8" font-weight="600" text-anchor="end">LOW</text>`;
+                    s += `<text x="${legendX - 6}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="9" font-weight="600" text-anchor="end">LOW</text>`;
 
+                    // Row labels
                     for (let row = 0; row < maxRows; row++) {
-                        const y = gridTopY2 + (maxRows - 1 - row) * (cellH + gp) + cellH / 2 + 4;
-                        s += `<text x="30" y="${y}" fill="#8a8480" font-size="8" font-weight="600">A${row + 1}</text>`;
+                        const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 4;
+                        s += `<text x="30" y="${y}" fill="#8a8480" font-size="10" font-weight="600">A${row + 1}</text>`;
                     }
 
+                    // Grid cells
                     for (let col = 0; col < 24; col++) {
                         const data = hourlyData[col];
                         for (let row = 0; row < maxRows; row++) {
-                            const x = gridMarginLeft + col * (cellW + gp);
-                            const y = gridTopY2 + (maxRows - 1 - row) * (cellH + gp);
-                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="#d8d2ca" opacity="0.8"/>`;
+                            const x = gridMarginLeft + col * (cellW + gap);
+                            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#e0ddd9" opacity="0.8"/>`;
                         }
                         for (const session of data.sessions) {
                             if (session.index > maxRows) continue;
                             const row = session.index - 1;
-                            const x = gridMarginLeft + col * (cellW + gp);
-                            const y = gridTopY2 + (maxRows - 1 - row) * (cellH + gp);
-                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="${getV5Color(session.intensity || 0.5)}"/>`;
+                            const x = gridMarginLeft + col * (cellW + gap);
+                            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${getV5Color(session.intensity || 0.5)}"/>`;
                         }
                     }
 
                     // Current hour marker
                     const currentHourCol = hourlyData.findIndex(d => d.isCurrent);
                     if (currentHourCol >= 0) {
-                        const markerX = gridMarginLeft + currentHourCol * (cellW + gp);
-                        s += `<rect x="${markerX}" y="${gridTopY2 + gridHeight + 2}" width="${cellW}" height="2" rx="1" fill="${getV5Color(0.8)}"/>`;
+                        const markerX = gridMarginLeft + currentHourCol * (cellW + gap);
+                        s += `<rect x="${markerX}" y="${gridTopY + gridHeight + 2}" width="${cellW}" height="2" rx="1" fill="${getV5Color(0.8)}"/>`;
                     }
 
-                    const xAxisY = gridTopY2 + gridHeight + 18;
-                    const expFmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
-                    let expStartHour, expMidHour, expEndHour;
-                    if (cardData.isToday) {
-                        const expNowHour = new Date().getHours();
-                        expStartHour = (expNowHour + 1) % 24;
-                        expMidHour = (expNowHour + 13) % 24;
-                        expEndHour = expNowHour;
+                    // Time axis
+                    const xAxisY = gridTopY + gridHeight + 18;
+                    const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
+                    const isToday = cardData.isToday;
+                    let startHour, midHour, endHour;
+                    if (isToday) {
+                        const nowHour = new Date().getHours();
+                        startHour = (nowHour + 1) % 24;
+                        midHour = (nowHour + 13) % 24;
+                        endHour = nowHour;
                     } else {
-                        expStartHour = 0;
-                        expMidHour = 12;
-                        expEndHour = 23;
+                        startHour = 0; midHour = 12; endHour = 23;
                     }
-                    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="8">${expFmtHr(expStartHour)}</text>`;
-                    s += `<text x="${gridMarginLeft + 12 * (cellW + gp)}" y="${xAxisY}" fill="#8a8480" font-size="8">${expFmtHr(expMidHour)}</text>`;
-                    s += `<text x="${gridMarginLeft + 23 * (cellW + gp)}" y="${xAxisY}" fill="#8a8480" font-size="8" text-anchor="end">${expFmtHr(expEndHour)}</text>`;
+                    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="10">${fmtHr(startHour)}</text>`;
+                    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10">${fmtHr(midHour)}</text>`;
+                    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" text-anchor="end">${fmtHr(endHour)}</text>`;
 
+                    // Divider 2
                     s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
 
+                    // Stats row
                     const colW = (cardW - 60) / 3;
                     const sLabels = ['CONCURRENT AGENTS', 'TOTAL AGENT HOURS', 'CONCURRENCY TIME'];
                     const sValues = [maxSessions + '\u00d7', devHours + 'h', concDisplay];
                     const sColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
                     for (let i = 0; i < 3; i++) {
                         const cx = 30 + colW * i + colW / 2;
-                        s += `<text x="${cx}" y="${statsY + 18}" fill="#8a8480" font-size="8" font-weight="700" letter-spacing="0.8" text-anchor="middle">${sLabels[i]}</text>`;
-                        s += `<text x="${cx}" y="${statsY + 50}" fill="${sColors[i]}" font-size="18" font-family="monospace" font-weight="700" text-anchor="middle">${sValues[i]}</text>`;
+                        s += `<text x="${cx}" y="${statsY + 18}" fill="#8a8480" font-size="10" font-weight="700" letter-spacing="1" text-anchor="middle">${sLabels[i]}</text>`;
+                        s += `<text x="${cx}" y="${statsY + 50}" fill="${sColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${sValues[i]}</text>`;
                         if (i < 2) {
                             const divX = 30 + colW * (i + 1);
                             s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#c8c0b8" stroke-width="1"/>`;
                         }
                     }
 
+                    // Divider 3 + footer
                     s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
-                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="9" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
+                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="10" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
                     s += `</svg>`;
 
-                    // SVG → canvas → clipboard
+                    // SVG → canvas → clipboard (2x for retina)
                     const svgBlob = new Blob([s], { type: 'image/svg+xml;charset=utf-8' });
                     const svgUrl = URL.createObjectURL(svgBlob);
                     const img = new Image();
                     await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = svgUrl; });
                     const canvas = document.createElement('canvas');
-                    canvas.width = cardW;
-                    canvas.height = cardH;
+                    canvas.width = cardW * 2;
+                    canvas.height = cardH * 2;
                     const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, cardW, cardH);
+                    ctx.drawImage(img, 0, 0, cardW * 2, cardH * 2);
                     URL.revokeObjectURL(svgUrl);
 
                     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
