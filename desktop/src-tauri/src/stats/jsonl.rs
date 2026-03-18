@@ -700,8 +700,7 @@ fn compute_day_sessions(sessions: &[&SessionStats]) -> HashMap<String, Vec<DaySe
         for entry in request_last.values().chain(no_rid_entries.iter()) {
             if let (Some(ts), Some(ref usage)) = (entry.timestamp, &entry.usage) {
                 let date = ts.format("%Y-%m-%d").to_string();
-                let total = usage.input_tokens + usage.output_tokens
-                    + usage.cache_read_input_tokens + usage.cache_creation_input_tokens;
+                let total = usage.input_tokens + usage.output_tokens;
                 *date_tokens.entry(date).or_default() += total;
             }
         }
@@ -908,10 +907,7 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
                                 .map(|ts| ts.format("%Y-%m-%d").to_string())
                         })
                         .unwrap_or_default();
-                    let total = usage.input_tokens
-                        + usage.output_tokens
-                        + usage.cache_read_input_tokens
-                        + usage.cache_creation_input_tokens;
+                    let total = usage.input_tokens + usage.output_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens;
                     if !date.is_empty() {
                         *daily_tokens
                             .entry(date)

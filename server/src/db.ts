@@ -220,6 +220,14 @@ export async function initDb(): Promise<void> {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_linked_to ON users(linked_to)`);
   } catch { /* already exists */ }
 
+  // Add total_output_tokens column for achievement tracking
+  try {
+    await pool.query(`ALTER TABLE device_metrics ADD COLUMN IF NOT EXISTS total_output_tokens BIGINT DEFAULT 0`);
+  } catch { /* already exists */ }
+  try {
+    await pool.query(`ALTER TABLE user_metrics ADD COLUMN IF NOT EXISTS total_output_tokens BIGINT DEFAULT 0`);
+  } catch { /* already exists */ }
+
   // Backfill device_metrics from user_metrics for existing solo users
   await pool.query(`
     INSERT INTO device_metrics (device_hash, total_tokens, total_messages, total_sessions, total_tool_calls,

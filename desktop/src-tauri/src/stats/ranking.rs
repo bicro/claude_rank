@@ -12,8 +12,11 @@ use super::parser::{DaySessionEntry, StatsCache};
 use super::points::{PointsEngine, PointsState};
 
 fn ranking_api_base() -> String {
+    // Replace "localhost" with "127.0.0.1" to avoid IPv6 resolution issues on macOS
+    // (Bun.serve binds to 0.0.0.0 / IPv4 only; macOS may resolve localhost to ::1)
     std::env::var("RANKING_API_BASE")
         .unwrap_or_else(|_| "https://clauderank.com".to_string())
+        .replace("localhost", "127.0.0.1")
 }
 const SYNC_THROTTLE_SECS: u64 = 300; // 5 minutes
 
@@ -133,6 +136,14 @@ struct TokenBreakdown {
     cache_creation: u64,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct SyncAchievement {
+    id: String,
+    name: String,
+    description: String,
+    unlocked_at: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct SyncResponse {
     #[allow(dead_code)]
@@ -148,6 +159,17 @@ struct SyncResponse {
     /// The device keeps syncing with its own user_hash but uses primary_hash for profile links.
     #[serde(default)]
     primary_hash: Option<String>,
+    // Server-computed points data
+    #[serde(default)]
+    total_points: u64,
+    #[serde(default)]
+    level: u64,
+    #[serde(default)]
+    current_streak: u64,
+    #[serde(default)]
+    achievements: Vec<SyncAchievement>,
+    #[serde(default)]
+    new_achievements: Vec<SyncAchievement>,
 }
 
 // ── Ranking Engine ──
@@ -155,6 +177,7 @@ struct SyncResponse {
 pub struct RankingEngine {
     config: RankingConfig,
     last_sync_time: Option<Instant>,
+    is_syncing: bool,
 }
 
 impl RankingEngine {
@@ -163,6 +186,7 @@ impl RankingEngine {
         Self {
             config,
             last_sync_time: None,
+            is_syncing: false,
         }
     }
 
@@ -571,6 +595,11 @@ pub async fn force_sync(
     app: tauri::AppHandle,
 ) -> Result<(), String> {
     info!("[ranking] Force sync triggered");
+    // Refresh metrics first so we sync fresh JSONL data (not stale/empty cache)
+    {
+        let mut m = metrics.lock().map_err(|e| e.to_string())?;
+        m.refresh();
+    }
     {
         let mut engine = ranking.lock().map_err(|e| e.to_string())?;
         engine.reset_sync_timer();
@@ -595,13 +624,15 @@ pub fn try_sync(
         Ok(p) => p.points_state().clone(),
         Err(_) => return,
     };
+    let points_clone = Arc::clone(points);
 
-    let (should_sync, payload_json) = {
+    let payload_json = {
         let mut engine = match ranking.lock() {
             Ok(e) => e,
             Err(_) => return,
         };
-        if !engine.should_sync() {
+        if !engine.should_sync() || engine.is_syncing {
+            info!("[ranking] Sync skipped: should_sync={}, is_syncing={}", engine.should_sync(), engine.is_syncing);
             return;
         }
         engine.ensure_sync_secret();
@@ -613,25 +644,23 @@ pub fn try_sync(
                 return;
             }
         };
-        engine.mark_synced();
-        (true, json)
+        engine.is_syncing = true;
+        json
     };
 
-    if !should_sync {
-        return;
-    }
-
     let app_handle = app.clone();
-    let _ranking_clone = Arc::clone(ranking);
+    let ranking_clone = Arc::clone(ranking);
 
     // Spawn async sync task
     tauri::async_runtime::spawn(async move {
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(5))
+            .timeout(std::time::Duration::from_secs(30))
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
         let url = format!("{}/api/sync", ranking_api_base());
+        info!("[ranking] Sending sync POST to {} (payload {} bytes)", url, payload_json.len());
 
+        let mut success = false;
         match client
             .post(&url)
             .header("Content-Type", "application/json")
@@ -643,10 +672,45 @@ pub fn try_sync(
                 if resp.status().is_success() {
                     if let Ok(data) = resp.json::<SyncResponse>().await {
                         info!(
-                            "[ranking] Synced OK. weighted={:.2}, badges={}",
+                            "[ranking] Synced OK. weighted={:.2}, points={}, level={}, streak={}, badges={}, achievements={}",
                             data.weighted_score,
-                            data.new_badges.len()
+                            data.total_points,
+                            data.level,
+                            data.current_streak,
+                            data.new_badges.len(),
+                            data.new_achievements.len(),
                         );
+                        success = true;
+
+                        // Update PointsEngine with server-computed values
+                        if let Ok(mut p) = points_clone.lock() {
+                            let achievements: Vec<super::points::Achievement> = data.achievements.iter().map(|a| {
+                                super::points::Achievement {
+                                    id: a.id.clone(),
+                                    name: a.name.clone(),
+                                    description: a.description.clone(),
+                                    unlocked_at: a.unlocked_at.clone(),
+                                }
+                            }).collect();
+                            p.update_from_server(
+                                data.total_points,
+                                data.level,
+                                data.current_streak,
+                                achievements,
+                            );
+                            let _ = app_handle.emit("points-updated", p.points_state());
+                        }
+
+                        // Emit achievement-unlocked for newly unlocked achievements
+                        for achievement in &data.new_achievements {
+                            let _ = app_handle.emit("achievement-unlocked", &super::points::Achievement {
+                                id: achievement.id.clone(),
+                                name: achievement.name.clone(),
+                                description: achievement.description.clone(),
+                                unlocked_at: achievement.unlocked_at.clone(),
+                            });
+                        }
+
                         // Emit badge events
                         for badge_id in &data.new_badges {
                             let _ = app_handle.emit("badge-unlocked", badge_id);
@@ -654,12 +718,14 @@ pub fn try_sync(
                         // Save primary_hash if this device is linked to a multi-device account
                         if let Some(ref ph) = data.primary_hash {
                             info!("[ranking] Device linked to primary: {}", ph);
-                            if let Ok(mut engine) = _ranking_clone.lock() {
+                            if let Ok(mut engine) = ranking_clone.lock() {
                                 let mut config = engine.config().clone();
                                 config.primary_hash = Some(ph.clone());
                                 engine.update_config(config);
                             }
                         }
+                        // Notify frontend that sync completed so widget can refresh
+                        let _ = app_handle.emit("sync-complete", ());
                     }
                 } else {
                     let status = resp.status();
@@ -668,7 +734,15 @@ pub fn try_sync(
                 }
             }
             Err(e) => {
-                warn!("[ranking] Sync network error: {}", e);
+                warn!("[ranking] Sync network error: {:?}", e);
+            }
+        }
+
+        // Only throttle on success; on failure, allow retry on next poll
+        if let Ok(mut engine) = ranking_clone.lock() {
+            engine.is_syncing = false;
+            if success {
+                engine.mark_synced();
             }
         }
     });

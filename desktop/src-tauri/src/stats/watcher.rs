@@ -36,7 +36,9 @@ impl FileWatcher {
         let p_init = Arc::clone(&points);
         let r_init = Arc::clone(&ranking);
         std::thread::spawn(move || {
+            info!("[stats-watcher] background initial refresh starting");
             Self::refresh(&app_init, &m_init, &p_init, &r_init);
+            info!("[stats-watcher] background initial refresh done");
         });
 
         info!("[stats-watcher] started");
@@ -135,17 +137,20 @@ impl FileWatcher {
             None
         };
 
-        // Update points using the same stats
-        if let (Ok(mut p), Some(ref stats)) = (points.lock(), &stats) {
-            let new_achievements = p.update_from_stats(stats);
-            let _ = app.emit("points-updated", p.points_state());
-            for a in new_achievements {
-                let _ = app.emit("achievement-unlocked", &a);
+        // Estimate points locally from stats for fast feedback between server syncs.
+        // Server values overwrite this estimate on each sync.
+        if let Some(ref stats) = stats {
+            if let Ok(mut p) = points.lock() {
+                p.estimate_from_stats(stats);
+                let _ = app.emit("points-updated", p.points_state());
             }
+        } else if let Ok(p) = points.lock() {
+            let _ = app.emit("points-updated", p.points_state());
         }
 
         // Trigger ranking sync (throttled internally)
         if let Some(ref stats) = stats {
+            info!("[stats-watcher] calling try_sync (sessions={}, messages={})", stats.total_sessions, stats.total_messages);
             super::ranking::try_sync(ranking, stats, points, app);
         }
     }

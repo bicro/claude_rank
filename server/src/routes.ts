@@ -11,6 +11,9 @@ import {
   evaluateTeamBadges,
   estimateCost,
   getHotUsers,
+  computePoints,
+  computeStreak,
+  evaluateAchievements,
 } from "./services";
 import { recomputeUserMetrics, getLinkedHashes } from "./aggregate";
 
@@ -273,6 +276,12 @@ export async function handleApiRequest(url: URL, request: Request): Promise<Resp
     return handleGetHot(url);
   }
 
+  // ─── Admin Routes ─────────────────────────────────────────────────────
+
+  if (path === "/api/admin/truncate-all" && method === "POST") {
+    return handleTruncateAll();
+  }
+
   return null;
 }
 
@@ -480,7 +489,28 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
 async function handleGetUserProfile(userHash: string): Promise<Response> {
   const db = getDb();
   const user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
-  if (!user) return error("User not found", 404);
+  if (!user) {
+    // User doesn't exist yet (e.g. fresh install before first sync) — return empty profile
+    return json({
+      user_hash: userHash,
+      username: null,
+      display_name: null,
+      avatar_url: null,
+      auth_provider: null,
+      social_url: null,
+      team_hash: null,
+      created_at: null,
+      metrics: {
+        total_tokens: 0, total_messages: 0, total_sessions: 0,
+        total_tool_calls: 0, prompt_uniqueness_score: 0, weighted_score: 0,
+        current_streak: 0, total_points: 0, level: 0, last_synced: null,
+        max_concurrent: 0, concurrent_mins: 0, estimated_spend: 0,
+      },
+      ranks: {},
+      tier: computeTier(0),
+      badges: [],
+    });
+  }
 
   // Resolve to primary for profile display
   const primaryHash = user.linked_to || userHash;
@@ -537,7 +567,7 @@ async function handleGetUserProfile(userHash: string): Promise<Response> {
     username: profileUser.username,
     display_name: profileUser.display_name ?? null,
     avatar_url: profileUser.avatar_url ?? null,
-    auth_provider: profileUser.auth_provider ?? null,
+    auth_provider: user.auth_provider ?? null,
     social_url: profileUser.social_url ?? null,
     team_hash: profileUser.team_hash,
     created_at: profileUser.created_at,
@@ -1096,12 +1126,15 @@ async function handleSync(request: Request): Promise<Response> {
   if (!req?.user_hash) return error("user_hash is required", 400);
   if (!req.sync_secret) return error("sync_secret is required", 400);
 
+  console.log(`[sync] Received sync for user=${req.user_hash.substring(0, 8)}… tokens=${req.totals?.total_tokens ?? 0} sessions=${req.totals?.total_sessions ?? 0}`);
+
   const db = getDb();
   const totals = req.totals ?? {};
 
   // Ensure user exists and verify sync_secret (trust-on-first-use)
   const existingUser = await db.query("SELECT user_hash, sync_secret FROM users WHERE user_hash = ?").get(req.user_hash) as any;
   if (!existingUser) {
+    console.log(`[sync] Auto-creating new user ${req.user_hash.substring(0, 8)}…`);
     const now = new Date().toISOString();
     await db.query("INSERT INTO users (user_hash, sync_secret, created_at, updated_at) VALUES (?, ?, ?, ?)").run(req.user_hash, req.sync_secret, now, now);
   } else if (!existingUser.sync_secret) {
@@ -1129,84 +1162,77 @@ async function handleSync(request: Request): Promise<Response> {
 
   const estimatedSpend = req.token_breakdown ? estimateCost(req.token_breakdown) : 0.0;
 
+  // Extract total_output_tokens from token_breakdown
+  let totalOutputTokens = 0;
+  if (req.token_breakdown && typeof req.token_breakdown === "object") {
+    for (const usage of Object.values(req.token_breakdown) as any[]) {
+      if (usage && typeof usage === "object") {
+        totalOutputTokens += (usage.output ?? 0);
+      }
+    }
+  }
+
   const now = new Date().toISOString();
   const today = new Date().toISOString().split("T")[0]!;
 
-  // Upsert device_metrics (per-device raw data)
-  const existingDevice = await db.query("SELECT device_hash FROM device_metrics WHERE device_hash = ?").get(req.user_hash) as any;
-  if (existingDevice) {
-    await db.query(
-      `UPDATE device_metrics SET
-        total_tokens = ?, total_messages = ?, total_sessions = ?, total_tool_calls = ?,
-        prompt_uniqueness_score = ?, weighted_score = ?, estimated_spend = ?,
-        current_streak = ?, total_points = ?, level = ?, last_synced = ?,
-        total_session_time_secs = ?, total_active_time_secs = ?, total_idle_time_secs = ?
-       WHERE device_hash = ?`
-    ).run(
-      totals.total_tokens ?? 0, totals.total_messages ?? 0,
-      totals.total_sessions ?? 0, totals.total_tool_calls ?? 0,
-      promptUniqueness, weighted, estimatedSpend,
-      totals.current_streak ?? 0, totals.total_points ?? 0, totals.level ?? 0, now,
-      totals.total_session_time_secs ?? 0, totals.total_active_time_secs ?? 0,
-      totals.total_idle_time_secs ?? 0,
-      req.user_hash,
-    );
-  } else {
-    await db.query(
-      `INSERT INTO device_metrics (
-        device_hash, total_tokens, total_messages, total_sessions, total_tool_calls,
-        prompt_uniqueness_score, weighted_score, estimated_spend,
-        current_streak, total_points, level, last_synced,
-        total_session_time_secs, total_active_time_secs, total_idle_time_secs
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      req.user_hash,
-      totals.total_tokens ?? 0, totals.total_messages ?? 0,
-      totals.total_sessions ?? 0, totals.total_tool_calls ?? 0,
-      promptUniqueness, weighted, estimatedSpend,
-      totals.current_streak ?? 0, totals.total_points ?? 0, totals.level ?? 0, now,
-      totals.total_session_time_secs ?? 0, totals.total_active_time_secs ?? 0,
-      totals.total_idle_time_secs ?? 0,
-    );
-  }
+  // Upsert device_metrics (per-device raw data) — atomic to avoid race conditions
+  // Note: current_streak, total_points, level from client are stored for backward compat
+  // but the server computes its own values in recomputeUserMetrics.
+  await db.query(
+    `INSERT INTO device_metrics (
+      device_hash, total_tokens, total_messages, total_sessions, total_tool_calls,
+      prompt_uniqueness_score, weighted_score, estimated_spend,
+      current_streak, total_points, level, total_output_tokens, last_synced,
+      total_session_time_secs, total_active_time_secs, total_idle_time_secs
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (device_hash) DO UPDATE SET
+      total_tokens = EXCLUDED.total_tokens, total_messages = EXCLUDED.total_messages,
+      total_sessions = EXCLUDED.total_sessions, total_tool_calls = EXCLUDED.total_tool_calls,
+      prompt_uniqueness_score = EXCLUDED.prompt_uniqueness_score, weighted_score = EXCLUDED.weighted_score,
+      estimated_spend = EXCLUDED.estimated_spend, current_streak = EXCLUDED.current_streak,
+      total_points = EXCLUDED.total_points, level = EXCLUDED.level,
+      total_output_tokens = EXCLUDED.total_output_tokens, last_synced = EXCLUDED.last_synced,
+      total_session_time_secs = EXCLUDED.total_session_time_secs,
+      total_active_time_secs = EXCLUDED.total_active_time_secs,
+      total_idle_time_secs = EXCLUDED.total_idle_time_secs`
+  ).run(
+    req.user_hash,
+    totals.total_tokens ?? 0, totals.total_messages ?? 0,
+    totals.total_sessions ?? 0, totals.total_tool_calls ?? 0,
+    promptUniqueness, weighted, estimatedSpend,
+    totals.current_streak ?? 0, totals.total_points ?? 0, totals.level ?? 0,
+    totalOutputTokens, now,
+    totals.total_session_time_secs ?? 0, totals.total_active_time_secs ?? 0,
+    totals.total_idle_time_secs ?? 0,
+  );
 
   // Recompute aggregated user_metrics (sums across all linked devices)
   const syncUser = await db.query("SELECT linked_to FROM users WHERE user_hash = ?").get(req.user_hash) as any;
   const primaryHash = syncUser?.linked_to || req.user_hash;
   await recomputeUserMetrics(primaryHash);
 
-  // Upsert daily snapshot
-  const existingHist = await db.query(
-    "SELECT id FROM metrics_history WHERE user_hash = ? AND snapshot_date = ?"
-  ).get(req.user_hash, today) as any;
-  if (existingHist) {
-    await db.query(
-      `UPDATE metrics_history SET
-        total_tokens = ?, total_messages = ?, total_sessions = ?, total_tool_calls = ?,
-        prompt_uniqueness_score = ?, weighted_score = ?
-       WHERE user_hash = ? AND snapshot_date = ?`
-    ).run(
-      totals.total_tokens ?? 0, totals.total_messages ?? 0,
-      totals.total_sessions ?? 0, totals.total_tool_calls ?? 0,
-      promptUniqueness, weighted,
-      req.user_hash, today,
-    );
-  } else {
-    await db.query(
-      `INSERT INTO metrics_history (
-        user_hash, snapshot_date, total_tokens, total_messages, total_sessions, total_tool_calls,
-        prompt_uniqueness_score, weighted_score
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      req.user_hash, today,
-      totals.total_tokens ?? 0, totals.total_messages ?? 0,
-      totals.total_sessions ?? 0, totals.total_tool_calls ?? 0,
-      promptUniqueness, weighted,
-    );
-  }
+  // Upsert daily snapshot — atomic to avoid race conditions
+  await db.query(
+    `INSERT INTO metrics_history (
+      user_hash, snapshot_date, total_tokens, total_messages, total_sessions, total_tool_calls,
+      prompt_uniqueness_score, weighted_score
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (user_hash, snapshot_date) DO UPDATE SET
+      total_tokens = EXCLUDED.total_tokens, total_messages = EXCLUDED.total_messages,
+      total_sessions = EXCLUDED.total_sessions, total_tool_calls = EXCLUDED.total_tool_calls,
+      prompt_uniqueness_score = EXCLUDED.prompt_uniqueness_score, weighted_score = EXCLUDED.weighted_score`
+  ).run(
+    req.user_hash, today,
+    totals.total_tokens ?? 0, totals.total_messages ?? 0,
+    totals.total_sessions ?? 0, totals.total_tool_calls ?? 0,
+    promptUniqueness, weighted,
+  );
 
-  // Persist hour_counts
+  const pool = getPool();
+
+  // Persist hour_counts — batched
   if (req.hour_counts && typeof req.hour_counts === "object") {
+    const rows: [string, string, number][] = [];
     for (const [hourStr, count] of Object.entries(req.hour_counts)) {
       if (typeof count !== "number" || count <= 0) continue;
       let snapshotHour: string;
@@ -1222,28 +1248,23 @@ async function handleSync(request: Request): Promise<Response> {
           const todayDate = now.split("T")[0]!;
           snapshotHour = `${todayDate}T${String(h).padStart(2, "0")}:00:00`;
         }
-      } catch {
-        continue;
-      }
+      } catch { continue; }
       if (h < 0 || h > 23) continue;
-
-      const existingHourly = await db.query(
-        "SELECT id FROM metrics_hourly WHERE user_hash = ? AND snapshot_hour = ?"
-      ).get(req.user_hash, snapshotHour) as any;
-      if (existingHourly) {
-        await db.query("UPDATE metrics_hourly SET total_messages = ? WHERE user_hash = ? AND snapshot_hour = ?").run(
-          count, req.user_hash, snapshotHour
-        );
-      } else {
-        await db.query(
-          "INSERT INTO metrics_hourly (user_hash, snapshot_hour, total_messages) VALUES (?, ?, ?)"
-        ).run(req.user_hash, snapshotHour, count);
-      }
+      rows.push([req.user_hash, snapshotHour, count]);
+    }
+    if (rows.length > 0) {
+      const values = rows.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(", ");
+      await pool.query(
+        `INSERT INTO metrics_hourly (user_hash, snapshot_hour, total_messages) VALUES ${values}
+         ON CONFLICT (user_hash, snapshot_hour) DO UPDATE SET total_messages = EXCLUDED.total_messages`,
+        rows.flat(),
+      );
     }
   }
 
-  // Persist hour_tokens
+  // Persist hour_tokens — batched
   if (req.hour_tokens && typeof req.hour_tokens === "object") {
+    const rows: [string, string, number][] = [];
     for (const [hourStr, tokenCount] of Object.entries(req.hour_tokens)) {
       if (typeof tokenCount !== "number" || tokenCount <= 0) continue;
       if (!hourStr.includes(":")) continue;
@@ -1254,62 +1275,49 @@ async function handleSync(request: Request): Promise<Response> {
         const datePart = hourStr.substring(0, lastColon);
         h = parseInt(hourStr.substring(lastColon + 1), 10);
         snapshotHour = `${datePart}T${String(h).padStart(2, "0")}:00:00`;
-      } catch {
-        continue;
-      }
+      } catch { continue; }
       if (h < 0 || h > 23) continue;
-
-      const existing = await db.query(
-        "SELECT id FROM metrics_hourly WHERE user_hash = ? AND snapshot_hour = ?"
-      ).get(req.user_hash, snapshotHour) as any;
-      if (existing) {
-        await db.query("UPDATE metrics_hourly SET total_tokens = ? WHERE user_hash = ? AND snapshot_hour = ?").run(
-          tokenCount, req.user_hash, snapshotHour
-        );
-      } else {
-        await db.query(
-          "INSERT INTO metrics_hourly (user_hash, snapshot_hour, total_tokens) VALUES (?, ?, ?)"
-        ).run(req.user_hash, snapshotHour, tokenCount);
-      }
+      rows.push([req.user_hash, snapshotHour, tokenCount]);
+    }
+    if (rows.length > 0) {
+      const values = rows.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(", ");
+      await pool.query(
+        `INSERT INTO metrics_hourly (user_hash, snapshot_hour, total_tokens) VALUES ${values}
+         ON CONFLICT (user_hash, snapshot_hour) DO UPDATE SET total_tokens = EXCLUDED.total_tokens`,
+        rows.flat(),
+      );
     }
   }
 
-  // Persist daily_activity
+  // Persist daily_activity — batched
   if (req.daily_activity && Array.isArray(req.daily_activity)) {
+    const rows: (string | number)[][] = [];
     for (const entry of req.daily_activity) {
       if (!entry || typeof entry !== "object" || !entry.date) continue;
-      let entryDate: string;
-      try {
-        entryDate = entry.date;
-        // Validate date format
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(entryDate)) continue;
-      } catch {
-        continue;
-      }
+      const entryDate = entry.date;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(entryDate)) continue;
       const msgCount = entry.messageCount ?? 0;
       const toolCount = entry.toolCallCount ?? 0;
       const tokenCountVal = entry.tokenCount ?? 0;
       if (msgCount <= 0 && toolCount <= 0 && tokenCountVal <= 0) continue;
-
-      const existingDay = await db.query(
-        "SELECT id FROM metrics_history WHERE user_hash = ? AND snapshot_date = ?"
-      ).get(req.user_hash, entryDate) as any;
-      if (existingDay) {
-        await db.query(
-          `UPDATE metrics_history SET daily_messages = ?, daily_tool_calls = ?, daily_tokens = ?
-           WHERE user_hash = ? AND snapshot_date = ?`
-        ).run(msgCount, toolCount, tokenCountVal, req.user_hash, entryDate);
-      } else {
-        await db.query(
-          `INSERT INTO metrics_history (user_hash, snapshot_date, daily_messages, daily_tool_calls, daily_tokens)
-           VALUES (?, ?, ?, ?, ?)`
-        ).run(req.user_hash, entryDate, msgCount, toolCount, tokenCountVal);
-      }
+      rows.push([req.user_hash, entryDate, msgCount, toolCount, tokenCountVal]);
+    }
+    if (rows.length > 0) {
+      const values = rows.map((_, i) => `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5})`).join(", ");
+      await pool.query(
+        `INSERT INTO metrics_history (user_hash, snapshot_date, daily_messages, daily_tool_calls, daily_tokens)
+         VALUES ${values}
+         ON CONFLICT (user_hash, snapshot_date) DO UPDATE SET
+           daily_messages = EXCLUDED.daily_messages, daily_tool_calls = EXCLUDED.daily_tool_calls,
+           daily_tokens = EXCLUDED.daily_tokens`,
+        rows.flat(),
+      );
     }
   }
 
-  // Persist concurrency_histogram
+  // Persist concurrency_histogram — batched
   if (req.concurrency_histogram && typeof req.concurrency_histogram === "object") {
+    const rows: [string, string, string][] = [];
     for (const [hourKey, histogram] of Object.entries(req.concurrency_histogram)) {
       if (!hourKey.includes(":")) continue;
       if (!histogram || typeof histogram !== "object") continue;
@@ -1320,46 +1328,35 @@ async function handleSync(request: Request): Promise<Response> {
         const datePart = hourKey.substring(0, lastColon);
         h = parseInt(hourKey.substring(lastColon + 1), 10);
         snapshotHour = `${datePart}T${String(h).padStart(2, "0")}:00:00`;
-      } catch {
-        continue;
-      }
+      } catch { continue; }
       if (h < 0 || h > 23) continue;
-
-      const histogramJson = JSON.stringify(histogram);
-      const existing = await db.query(
-        "SELECT id FROM concurrency_histogram WHERE user_hash = ? AND snapshot_hour = ?"
-      ).get(req.user_hash, snapshotHour) as any;
-      if (existing) {
-        await db.query(
-          "UPDATE concurrency_histogram SET histogram = ? WHERE user_hash = ? AND snapshot_hour = ?"
-        ).run(histogramJson, req.user_hash, snapshotHour);
-      } else {
-        await db.query(
-          "INSERT INTO concurrency_histogram (user_hash, snapshot_hour, histogram) VALUES (?, ?, ?)"
-        ).run(req.user_hash, snapshotHour, histogramJson);
-      }
+      rows.push([req.user_hash, snapshotHour, JSON.stringify(histogram)]);
+    }
+    if (rows.length > 0) {
+      const values = rows.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(", ");
+      await pool.query(
+        `INSERT INTO concurrency_histogram (user_hash, snapshot_hour, histogram) VALUES ${values}
+         ON CONFLICT (user_hash, snapshot_hour) DO UPDATE SET histogram = EXCLUDED.histogram`,
+        rows.flat(),
+      );
     }
   }
 
-  // Persist day_sessions
+  // Persist day_sessions — batched
   if (req.day_sessions && typeof req.day_sessions === "object") {
+    const rows: [string, string, string][] = [];
     for (const [dateStr, sessionsList] of Object.entries(req.day_sessions)) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
       if (!sessionsList || !Array.isArray(sessionsList)) continue;
-
-      const sessionsJson = JSON.stringify(sessionsList);
-      const existing = await db.query(
-        "SELECT id FROM daily_sessions WHERE user_hash = ? AND snapshot_date = ?"
-      ).get(req.user_hash, dateStr) as any;
-      if (existing) {
-        await db.query(
-          "UPDATE daily_sessions SET sessions = ? WHERE user_hash = ? AND snapshot_date = ?"
-        ).run(sessionsJson, req.user_hash, dateStr);
-      } else {
-        await db.query(
-          "INSERT INTO daily_sessions (user_hash, snapshot_date, sessions) VALUES (?, ?, ?)"
-        ).run(req.user_hash, dateStr, sessionsJson);
-      }
+      rows.push([req.user_hash, dateStr, JSON.stringify(sessionsList)]);
+    }
+    if (rows.length > 0) {
+      const values = rows.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(", ");
+      await pool.query(
+        `INSERT INTO daily_sessions (user_hash, snapshot_date, sessions) VALUES ${values}
+         ON CONFLICT (user_hash, snapshot_date) DO UPDATE SET sessions = EXCLUDED.sessions`,
+        rows.flat(),
+      );
     }
   }
 
@@ -1371,12 +1368,25 @@ async function handleSync(request: Request): Promise<Response> {
   newBadges.push(...await evaluateRankingBadges(db, badgeHash));
   newBadges.push(...await evaluateTeamBadges(db, badgeHash));
 
+  // Server-side achievements evaluation
+  const serverStreak = metrics?.current_streak ?? 0;
+  const { all: achievements, newly_unlocked: newAchievements } =
+    await evaluateAchievements(db, badgeHash, metrics, serverStreak);
+
+  console.log(`[sync] Completed for user=${req.user_hash.substring(0, 8)}… weighted=${(metrics?.weighted_score ?? weighted).toFixed(2)} points=${metrics?.total_points ?? 0} level=${metrics?.level ?? 0} streak=${serverStreak} badges=${newBadges.length} achievements=${newAchievements.length}`);
+
   return json({
     status: "ok",
     weighted_score: metrics?.weighted_score ?? weighted,
     prompt_uniqueness_score: metrics?.prompt_uniqueness_score ?? promptUniqueness,
     new_badges: newBadges,
     primary_hash: primaryHash !== req.user_hash ? primaryHash : undefined,
+    // Server-computed points data
+    total_points: metrics?.total_points ?? 0,
+    level: metrics?.level ?? 0,
+    current_streak: serverStreak,
+    achievements,
+    new_achievements: newAchievements,
   });
 }
 
@@ -1488,6 +1498,19 @@ async function handleGetAllBadges(): Promise<Response> {
 }
 
 // ─── Hot Handler ────────────────────────────────────────────────────────────
+
+async function handleTruncateAll(): Promise<Response> {
+  const pool = getPool();
+  await pool.query(`
+    TRUNCATE user_metrics, device_metrics, metrics_history, metrics_hourly,
+             user_badges, concurrency_histogram, daily_sessions, merge_log,
+             users, teams CASCADE
+  `);
+  await pool.query(`
+    TRUNCATE "session", "account", "verification", "user" CASCADE
+  `);
+  return json({ status: "truncated" });
+}
 
 async function handleGetHot(url: URL): Promise<Response> {
   const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get("limit") ?? "20", 10)));

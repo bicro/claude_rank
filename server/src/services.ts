@@ -361,7 +361,8 @@ async function awardBadge(db: DbClient, userHash: string, badgeId: string): Prom
   if (existing) return null;
 
   await db.query(
-    "INSERT INTO user_badges (user_hash, badge_id, unlocked_at) VALUES (?, ?, ?)"
+    `INSERT INTO user_badges (user_hash, badge_id, unlocked_at) VALUES (?, ?, ?)
+     ON CONFLICT (user_hash, badge_id) DO NOTHING`
   ).run(userHash, badgeId, new Date().toISOString());
   return badgeId;
 }
@@ -418,6 +419,156 @@ export async function evaluateTeamBadges(db: DbClient, userHash: string): Promis
     if (awarded) newlyAwarded.push(awarded);
   }
   return newlyAwarded;
+}
+
+// ─── Points & Levels (Server-Side) ──────────────────────────────────────────
+
+export function computePoints(metrics: {
+  total_messages: number;
+  total_output_tokens: number;
+  total_tool_calls: number;
+  total_sessions: number;
+  active_days: number;
+  current_streak: number;
+}): { total_points: number; level: number } {
+  const total_points =
+    metrics.total_messages * 2 +
+    Math.floor(metrics.total_output_tokens / 1000) * 5 +
+    metrics.total_tool_calls * 3 +
+    metrics.total_sessions * 10 +
+    metrics.active_days * 50 +
+    metrics.current_streak * 10;
+  const level = Math.floor(Math.sqrt(total_points / 100));
+  return { total_points, level };
+}
+
+export async function computeStreak(db: DbClient, hashes: string[]): Promise<number> {
+  const placeholders = hashes.map(() => "?").join(", ");
+  const rows = await db.query(
+    `SELECT DISTINCT snapshot_date FROM metrics_history
+     WHERE user_hash IN (${placeholders}) AND (daily_messages > 0 OR daily_tool_calls > 0 OR daily_tokens > 0)
+     ORDER BY snapshot_date DESC`
+  ).all(...hashes) as any[];
+
+  if (rows.length === 0) return 0;
+
+  const today = new Date();
+  const todayStr = today.toISOString().split("T")[0]!;
+  const yesterday = new Date(today);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split("T")[0]!;
+
+  // Streak must start from today or yesterday
+  const firstDate = rows[0].snapshot_date;
+  if (firstDate !== todayStr && firstDate !== yesterdayStr) return 0;
+
+  let streak = 1;
+  for (let i = 1; i < rows.length; i++) {
+    const prev = new Date(rows[i - 1].snapshot_date + "T00:00:00Z");
+    const curr = new Date(rows[i].snapshot_date + "T00:00:00Z");
+    const diffDays = (prev.getTime() - curr.getTime()) / (1000 * 60 * 60 * 24);
+    if (diffDays === 1) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+// Achievement definitions evaluated server-side
+const ACHIEVEMENT_DEFS = [
+  { id: "first_steps",      name: "First Steps",      description: "Send your first message",       condition: (m: any) => (m.total_messages ?? 0) >= 1 },
+  { id: "thousand_club",    name: "Thousand Club",     description: "Send 1,000 messages",           condition: (m: any) => (m.total_messages ?? 0) >= 1000 },
+  { id: "token_millionaire", name: "Token Millionaire", description: "Generate 1M output tokens",    condition: (m: any) => (m.total_output_tokens ?? 0) >= 1_000_000 },
+  { id: "tool_master",      name: "Tool Master",       description: "Make 1,000 tool calls",         condition: (m: any) => (m.total_tool_calls ?? 0) >= 1000 },
+  { id: "centurion",        name: "Centurion",         description: "Complete 100 sessions",         condition: (m: any) => (m.total_sessions ?? 0) >= 100 },
+  { id: "streak_lord",      name: "Streak Lord",       description: "Maintain a 7-day streak",       condition: (m: any, streak: number) => streak >= 7 },
+];
+
+export interface SyncAchievement {
+  id: string;
+  name: string;
+  description: string;
+  unlocked_at: string;
+}
+
+export async function evaluateAchievements(
+  db: DbClient,
+  userHash: string,
+  metrics: any,
+  streak: number,
+): Promise<{ all: SyncAchievement[]; newly_unlocked: SyncAchievement[] }> {
+  const all: SyncAchievement[] = [];
+  const newly_unlocked: SyncAchievement[] = [];
+
+  // Check night owl from metrics_hourly
+  let isNightOwl = false;
+  const nightRows = await db.query(
+    `SELECT 1 FROM metrics_hourly WHERE user_hash = ? AND total_messages > 0
+     AND (snapshot_hour LIKE '%T00:%' OR snapshot_hour LIKE '%T01:%' OR snapshot_hour LIKE '%T02:%' OR snapshot_hour LIKE '%T03:%')
+     LIMIT 1`
+  ).get(userHash) as any;
+  if (nightRows) isNightOwl = true;
+
+  // Check marathon coder from daily_sessions
+  let isMarathon = false;
+  const sessionRows = await db.query(
+    `SELECT sessions FROM daily_sessions WHERE user_hash = ?`
+  ).all(userHash) as any[];
+  for (const row of sessionRows) {
+    try {
+      const sessions = JSON.parse(row.sessions);
+      if (Array.isArray(sessions) && sessions.some((s: any) => (s.messages ?? s.message_count ?? 0) >= 100)) {
+        isMarathon = true;
+        break;
+      }
+    } catch { /* skip */ }
+  }
+
+  const allDefs = [
+    ...ACHIEVEMENT_DEFS,
+    { id: "night_owl",       name: "Night Owl",       description: "Code between midnight and 4am",   condition: () => isNightOwl },
+    { id: "marathon_coder",  name: "Marathon Coder",  description: "Have a session with 100+ messages", condition: () => isMarathon },
+  ];
+
+  for (const def of allDefs) {
+    if (def.condition(metrics, streak)) {
+      // Check if already awarded
+      const existing = await db.query(
+        "SELECT unlocked_at FROM user_badges WHERE user_hash = ? AND badge_id = ?"
+      ).get(userHash, def.id) as any;
+
+      if (existing) {
+        all.push({ id: def.id, name: def.name, description: def.description, unlocked_at: existing.unlocked_at });
+      } else {
+        // Award it — ensure badge exists first
+        const badgeExists = await db.query("SELECT 1 FROM badges WHERE id = ?").get(def.id);
+        if (!badgeExists) {
+          await db.query(
+            "INSERT INTO badges (id, name, description, category, icon) VALUES (?, ?, ?, 'achievement', '🏆') ON CONFLICT (id) DO NOTHING"
+          ).run(def.id, def.name, def.description);
+        }
+        const unlockedAt = new Date().toISOString();
+        await db.query(
+          "INSERT INTO user_badges (user_hash, badge_id, unlocked_at) VALUES (?, ?, ?) ON CONFLICT (user_hash, badge_id) DO NOTHING"
+        ).run(userHash, def.id, unlockedAt);
+        const achievement = { id: def.id, name: def.name, description: def.description, unlocked_at: unlockedAt };
+        all.push(achievement);
+        newly_unlocked.push(achievement);
+      }
+    } else {
+      // Check if previously awarded (still include in all)
+      const existing = await db.query(
+        "SELECT unlocked_at FROM user_badges WHERE user_hash = ? AND badge_id = ?"
+      ).get(userHash, def.id) as any;
+      if (existing) {
+        all.push({ id: def.id, name: def.name, description: def.description, unlocked_at: existing.unlocked_at });
+      }
+    }
+  }
+
+  return { all, newly_unlocked };
 }
 
 // ─── Hotness ────────────────────────────────────────────────────────────────

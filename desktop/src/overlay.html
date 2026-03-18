@@ -97,6 +97,12 @@ async function loadWidget() {
 }
 loadWidget();
 
+// ── Forward sync-complete to widget iframe so it can refresh data ──
+listen('sync-complete', () => {
+  console.log('[overlay] sync-complete event received, forwarding to iframe, widgetLoaded=', widgetLoaded);
+  frame.contentWindow?.postMessage({ type: 'sync-complete' }, '*');
+});
+
 // ── Animate in/out ──
 const panel = document.querySelector('.panel');
 listen('overlay-visibility-changed', (event) => {

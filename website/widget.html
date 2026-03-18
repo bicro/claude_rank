@@ -942,7 +942,9 @@ document.getElementById('dayNext').addEventListener('click', () => {
 // ── Load profile ──
 async function loadProfile() {
   try {
+    console.log('[widget] loadProfile for', userHash?.substring(0, 8) + '…');
     const data = await getUserProfile(userHash);
+    console.log('[widget] profile response: tokens=', data?.metrics?.total_tokens, 'auth=', data?.auth_provider ?? 'none');
     const usernameEl = document.getElementById('username');
     const avatarEl = document.getElementById('userAvatar');
     const overlay = document.getElementById('loginOverlay');
@@ -1269,6 +1271,17 @@ document.getElementById('linkFull').addEventListener('click', (e) => {
   }
 });
 
+// ── Refresh when desktop sync completes ──
+window.addEventListener('message', async (e) => {
+  if (e.data?.type === 'sync-complete') {
+    console.log('[widget] sync-complete received, reloading data…');
+    await loadProfile();
+    await loadActiveDates();
+    await loadDayByIndex(activeDates.length - 1);
+    console.log('[widget] reload done, totalTokens=', totalTokens);
+  }
+});
+
 // ── Init ──
 (async () => {
   await Promise.all([
@@ -1279,10 +1292,12 @@ document.getElementById('linkFull').addEventListener('click', (e) => {
 
   // Recovery poll: if data is zero (e.g. after logout+reload), retry until sync populates it
   if (totalTokens === 0 && window.parent !== window) {
+    console.log('[widget] totalTokens=0, starting recovery poll');
     let retries = 0;
     const recoveryPoll = setInterval(async () => {
       retries++;
-      if (retries > 20) { clearInterval(recoveryPoll); return; }
+      console.log('[widget] recovery poll attempt', retries);
+      if (retries > 20) { console.log('[widget] recovery poll exhausted'); clearInterval(recoveryPoll); return; }
       await loadProfile();
       if (totalTokens > 0) {
         clearInterval(recoveryPoll);
