@@ -20,7 +20,7 @@ const SECURITY_HEADERS: Record<string, string> = {
     "img-src 'self' data: blob: https://pbs.twimg.com https://avatars.githubusercontent.com https://*.licdn.com https://*.googleusercontent.com https://cdn.discordapp.com",
     "connect-src 'self' https://us.i.posthog.com https://pbs.twimg.com https://avatars.githubusercontent.com https://*.licdn.com https://*.googleusercontent.com https://cdn.discordapp.com",
     "font-src 'self'",
-    "frame-ancestors 'self' tauri://localhost https://tauri.localhost http://127.0.0.1:1430 http://localhost:3001 https://clauderank.com https://www.clauderank.com https://claude-rank-1.onrender.com",
+    "frame-ancestors *",
   ].join("; "),
 };
 
