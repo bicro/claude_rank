@@ -30,7 +30,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
-    SetWindowPos, HWND_TOPMOST, WINDOWPOS,
+    SetWindowPos, SetForegroundWindow, ShowWindow,
+    HWND_TOPMOST, WINDOWPOS, SW_RESTORE,
     SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
     WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE, WM_SIZING, WM_WINDOWPOSCHANGING,
     WM_NCACTIVATE, WM_NCPAINT, WM_NCCALCSIZE, WM_NCDESTROY,
@@ -835,6 +836,19 @@ fn show_overlay_sync(app: &AppHandle) -> Result<(), String> {
     let _ = window.show();
     let _ = window.set_focus();
 
+    // On Windows, Tauri's set_focus() may not be enough to bring a background
+    // app to the foreground (e.g. when activated via deep link from browser).
+    // Use Win32 APIs directly to force the window forward.
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(hwnd) = window.hwnd() {
+            unsafe {
+                let _ = ShowWindow(HWND(hwnd.0), SW_RESTORE);
+                let _ = SetForegroundWindow(HWND(hwnd.0));
+            }
+        }
+    }
+
     *state.overlay_visible.lock().unwrap() = true;
 
     let _ = app.emit("overlay-visibility-changed", json!({ "visible": true }));
@@ -1038,20 +1052,8 @@ fn main() {
             // and the window geometry isn't settled yet, causing it to appear offscreen.
             let _ = ensure_overlay_window(app.handle());
 
-            // On first launch, show the overlay so users know the app is running.
-            // Use a version-stamped marker so the overlay shows again after updates.
-            let launched_marker = dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".ClaudeRank")
-                .join(".launched_v");
-            let current_version = env!("CARGO_PKG_VERSION");
-            let already_launched = launched_marker.exists()
-                && std::fs::read_to_string(&launched_marker)
-                    .map(|v| v.trim() == current_version)
-                    .unwrap_or(false);
-            if !already_launched {
-                std::fs::create_dir_all(launched_marker.parent().unwrap()).ok();
-                std::fs::write(&launched_marker, current_version).ok();
+            // Always show the overlay on launch so users know the app is running.
+            {
                 let handle = app.handle().clone();
                 // Delay so the window/webview is fully ready (longer on Windows for WebView2 init).
                 let delay_ms = if cfg!(target_os = "windows") { 1500 } else { 500 };
@@ -1085,6 +1087,26 @@ fn main() {
 
             Ok(())
         })
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // On Windows, deep-link clicks launch a new process with the URL as an arg.
+            // The single-instance plugin intercepts this and forwards it here instead.
+            info!("[single-instance] activated with args: {:?}", args);
+
+            // Show the overlay regardless of whether a deep-link URL is present —
+            // a second launch attempt should always surface the running app.
+            match show_overlay_sync(app) {
+                Ok(_) => info!("[single-instance] overlay shown successfully"),
+                Err(e) => error!("[single-instance] failed to show overlay: {}", e),
+            }
+
+            for arg in &args {
+                if arg.starts_with("clauderank://") {
+                    info!("[single-instance] deep-link URL: {}", arg);
+                    let _ = app.emit("deep-link-received", json!({ "url": arg }));
+                    break;
+                }
+            }
+        }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,

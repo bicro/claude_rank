@@ -20,6 +20,7 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-log = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = "2"
 log = "0.4"
 notify = { version = "7", features = ["macos_fsevent"] }
 uuid = { version = "1", features = ["v4"] }
