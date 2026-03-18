@@ -39,7 +39,8 @@ function saveCachedProfile(profile) {
 function todayTokens() {
   try {
     const raw = readFileSync(STATS_CACHE_PATH, "utf-8");
-    const stats = JSON.parse(raw);
+    const cache = JSON.parse(raw);
+    const stats = cache.stats || cache;
     const hourTokens = stats.hourTokens || {};
 
     const now = new Date();
@@ -65,7 +66,8 @@ function todayTokens() {
 function todayCost() {
   try {
     const raw = readFileSync(STATS_CACHE_PATH, "utf-8");
-    const stats = JSON.parse(raw);
+    const cache = JSON.parse(raw);
+    const stats = cache.stats || cache;
     const dailyModelTokens = stats.dailyModelTokens || [];
     const modelUsage = stats.modelUsage || {};
 

@@ -16,8 +16,10 @@ export function loadStats() {
   try {
     const data = readFileSync(STATS_CACHE_PATH, "utf-8");
     const cache = JSON.parse(data);
-    if (cache.totalMessages || cache.totalSessions || cache.modelUsage) {
-      return cache;
+    // Desktop app wraps stats in a "stats" key
+    const stats = cache.stats || cache;
+    if (stats.totalMessages || stats.totalSessions || stats.modelUsage) {
+      return stats;
     }
   } catch {
     // No cache — fall through to log parsing
