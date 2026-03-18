@@ -4,6 +4,16 @@ use image::{ImageBuffer, Rgba, RgbaImage};
 /// Embedded font for tray text rendering.
 const FONT_DATA: &[u8] = include_bytes!("../icons/Inter-Medium.ttf");
 
+/// Render just the icon for the tray (no cost text). Used on Windows.
+#[cfg(target_os = "windows")]
+pub fn render_tray_icon_only(icon: &RgbaImage) -> tauri::image::Image<'static> {
+    let size: u32 = 32;
+    let mut img: RgbaImage = ImageBuffer::new(size, size);
+    composite_icon(&mut img, icon, 0, 0, size);
+    let (w, h) = (img.width(), img.height());
+    tauri::image::Image::new_owned(img.into_raw(), w, h)
+}
+
 /// Render a composite tray image: white rounded rect background with icon + cost text.
 ///
 /// The image is rendered at 2x pixel density (44px height = 22pt on Retina).

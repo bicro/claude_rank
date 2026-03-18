@@ -161,6 +161,12 @@ export async function handleApiRequest(url: URL, request: Request): Promise<Resp
     return handleSetUsername(usernameMatch[1]!, request);
   }
 
+  // PUT /api/users/:user_hash/display-name
+  const displayNameMatch = path.match(/^\/api\/users\/([^/]+)\/display-name$/);
+  if (displayNameMatch && method === "PUT") {
+    return handleSetDisplayName(displayNameMatch[1]!, request);
+  }
+
   // POST /api/users/:user_hash/connect — link social auth to user
   const connectMatch = path.match(/^\/api\/users\/([^/]+)\/connect$/);
   if (connectMatch && method === "POST") {
@@ -218,7 +224,7 @@ export async function handleApiRequest(url: URL, request: Request): Promise<Resp
   // GET /api/users/:user_hash — profile (must come after more specific routes)
   const userProfileMatch = path.match(/^\/api\/users\/([^/]+)$/);
   if (userProfileMatch && method === "GET") {
-    return handleGetUserProfile(userProfileMatch[1]!);
+    return handleGetUserProfile(userProfileMatch[1]!, request);
   }
 
   // ─── Teams Routes ──────────────────────────────────────────────────────
@@ -333,6 +339,42 @@ async function handleSetUsername(userHash: string, request: Request): Promise<Re
   const now = new Date().toISOString();
   await db.query("UPDATE users SET username = ?, updated_at = ? WHERE user_hash = ?").run(username, now, userHash);
   return json({ status: "ok", username });
+}
+
+async function handleSetDisplayName(userHash: string, request: Request): Promise<Response> {
+  const body = await parseBody(request);
+  if (!body?.display_name) return error("display_name is required", 400);
+
+  const db = getDb();
+  const user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
+  if (!user) return error("User not found", 404);
+
+  // Dual auth: session (web) OR sync_secret (desktop widget)
+  const session = await getAuthSession(request);
+  if (session?.user?.id) {
+    const owner = await db.query(
+      "SELECT user_hash FROM users WHERE auth_id = ? AND user_hash = ?"
+    ).get(session.user.id, userHash) as any;
+    if (!owner) return error("Forbidden", 403);
+  } else {
+    const syncSecret = request.headers.get("x-sync-secret");
+    if (!syncSecret || !user.sync_secret || syncSecret !== user.sync_secret) {
+      return error("Unauthorized", 401);
+    }
+  }
+
+  const displayName = body.display_name.trim();
+  if (displayName.length < 1 || displayName.length > 50) {
+    return error("Display name must be 1-50 characters", 400);
+  }
+
+  if (containsProfanity(displayName)) {
+    return error("Display name contains inappropriate language", 400);
+  }
+
+  const now = new Date().toISOString();
+  await db.query("UPDATE users SET display_name = ?, updated_at = ? WHERE user_hash = ?").run(displayName, now, userHash);
+  return json({ status: "ok", display_name: displayName });
 }
 
 async function handleGetUserByUsername(username: string): Promise<Response> {
@@ -486,7 +528,7 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
   });
 }
 
-async function handleGetUserProfile(userHash: string): Promise<Response> {
+async function handleGetUserProfile(userHash: string, request: Request): Promise<Response> {
   const db = getDb();
   const user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
   if (!user) {
@@ -509,6 +551,7 @@ async function handleGetUserProfile(userHash: string): Promise<Response> {
       ranks: {},
       tier: computeTier(0),
       badges: [],
+      is_owner: false,
     });
   }
 
@@ -562,6 +605,18 @@ async function handleGetUserProfile(userHash: string): Promise<Response> {
     }
   }
 
+  // Check if the requester owns this profile (check all linked hashes)
+  let isOwner = false;
+  try {
+    const session = await getAuthSession(request);
+    if (session?.user?.id) {
+      const ownerCheck = await db.query(
+        "SELECT 1 FROM users WHERE auth_id = ? AND (user_hash = ? OR linked_to = ?)"
+      ).get(session.user.id, primaryHash, primaryHash) as any;
+      if (ownerCheck) isOwner = true;
+    }
+  } catch {}
+
   return json({
     user_hash: profileUser.user_hash,
     username: profileUser.username,
@@ -571,6 +626,7 @@ async function handleGetUserProfile(userHash: string): Promise<Response> {
     social_url: profileUser.social_url ?? null,
     team_hash: profileUser.team_hash,
     created_at: profileUser.created_at,
+    is_owner: isOwner,
     metrics: {
       total_tokens: metrics?.total_tokens ?? 0,
       total_messages: metrics?.total_messages ?? 0,
@@ -1049,7 +1105,7 @@ async function handleGetTeam(teamHash: string): Promise<Response> {
   const team = await db.query("SELECT * FROM teams WHERE team_hash = ?").get(teamHash) as any;
   if (!team) return error("Team not found", 404);
 
-  const members = await db.query("SELECT user_hash, username FROM users WHERE team_hash = ?").all(teamHash) as any[];
+  const members = await db.query("SELECT user_hash, username, display_name, auth_provider FROM users WHERE team_hash = ?").all(teamHash) as any[];
   const memberHashes = members.map(m => m.user_hash);
 
   let aggTokens = 0, aggMessages = 0, aggSessions = 0, aggToolCalls = 0;
@@ -1076,7 +1132,7 @@ async function handleGetTeam(teamHash: string): Promise<Response> {
     created_by: team.created_by,
     created_at: team.created_at,
     member_count: members.length,
-    members: members.map(m => ({ user_hash: m.user_hash, username: m.username })),
+    members: members.map(m => ({ user_hash: m.user_hash, username: m.username, display_name: m.display_name && m.auth_provider ? m.display_name : null })),
     metrics: {
       total_tokens: aggTokens,
       total_messages: aggMessages,
@@ -1428,7 +1484,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
 
   if (scope === "individual") {
     const rows = await db.query(
-      `SELECT u.user_hash, u.username, ${col} as value, um.weighted_score
+      `SELECT u.user_hash, u.username, u.display_name, u.auth_provider, ${col} as value, um.weighted_score
        FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
        WHERE u.linked_to IS NULL
        ORDER BY ${col} DESC
@@ -1439,6 +1495,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
       rank: offset + i + 1,
       user_hash: row.user_hash,
       username: row.username,
+      display_name: row.display_name && row.auth_provider ? row.display_name : null,
       value: typeof row.value === "number" && !Number.isInteger(row.value) ? row.value : Number(row.value),
       weighted_score: row.weighted_score,
       tier: computeTier(row.weighted_score).tier,

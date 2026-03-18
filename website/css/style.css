@@ -355,6 +355,8 @@ a:hover { text-decoration: underline; }
 @keyframes blink-caret { 50% { border-color: transparent; } }
 .landing-hero p { color: var(--text-secondary); font-size: 13px; margin-top: 16px; letter-spacing: 0.3px; }
 .hero-download-btn { display: inline-block; margin-top: 20px; padding: 12px 32px; font-size: 11px; border-radius: 8px; color: #fff; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; background: #111; }
+#showAllPlatforms { background: none; border: none; color: var(--text-secondary); font-size: 11px; cursor: pointer; padding: 4px 8px; text-decoration: underline; text-underline-offset: 3px; }
+#showAllPlatforms:hover { color: var(--text-primary); }
 
 /* ── Hero Search ── */
 .hero-search {

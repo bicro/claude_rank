@@ -21,6 +21,22 @@ export async function getUserByUsername(username) {
     return apiFetch(`/api/users/by-username/${encodeURIComponent(username)}`);
 }
 
+export async function setDisplayName(userHash, displayName, syncSecret) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (syncSecret) headers['X-Sync-Secret'] = syncSecret;
+    const resp = await fetch(`${API_BASE}/api/users/${userHash}/display-name`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify({ display_name: displayName }),
+    });
+    if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `API error ${resp.status}`);
+    }
+    return resp.json();
+}
+
 export async function getUserBadges(userHash) {
     return apiFetch(`/api/users/${userHash}/badges`);
 }

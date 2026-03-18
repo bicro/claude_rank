@@ -20,7 +20,7 @@ const SECURITY_HEADERS: Record<string, string> = {
     "img-src 'self' data: blob: https://pbs.twimg.com https://avatars.githubusercontent.com https://*.licdn.com https://*.googleusercontent.com https://cdn.discordapp.com",
     "connect-src 'self' https://us.i.posthog.com https://pbs.twimg.com https://avatars.githubusercontent.com https://*.licdn.com https://*.googleusercontent.com https://cdn.discordapp.com",
     "font-src 'self'",
-    "frame-ancestors *",
+    "frame-ancestors * tauri://localhost http://tauri.localhost https://tauri.localhost",
   ].join("; "),
 };
 
@@ -35,7 +35,7 @@ function withSecurityHeaders(response: Response, url: URL): Response {
       "Content-Security-Policy",
       SECURITY_HEADERS["Content-Security-Policy"].replace(
         /frame-ancestors [^;]+/,
-        "frame-ancestors *"
+        "frame-ancestors * tauri://localhost http://tauri.localhost https://tauri.localhost"
       )
     );
   }

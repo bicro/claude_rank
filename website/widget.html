@@ -178,6 +178,18 @@
   .user-menu-item:hover { background: var(--pill-bg); }
   .user-menu-item.danger { color: #ef4444; }
   .user-menu-item.danger:hover { background: rgba(239,68,68,0.08); }
+  .display-name-input {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: inherit;
+    background: #fff;
+    color: var(--text-primary);
+    border: 1.5px solid var(--accent);
+    border-radius: 6px;
+    padding: 1px 6px;
+    outline: none;
+    width: 100%;
+  }
 
   .rank-pill {
     display: inline-flex; align-items: center;
@@ -457,6 +469,7 @@
         <div class="username" id="username">Loading...</div>
       </div>
       <div class="user-menu" id="userMenu">
+        <button class="user-menu-item" id="editDisplayNameBtn">Edit Display Name</button>
         <button class="user-menu-item" id="viewRankingsBtn">View Rankings</button>
         <button class="user-menu-item danger" onclick="doLogout()">Sign Out</button>
       </div>
@@ -535,7 +548,7 @@
 </div>
 
 <script type="module">
-import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, formatNumber, formatCost, formatPercentile, animateValue } from './js/api.js?v=2';
+import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, setDisplayName, formatNumber, formatCost, formatPercentile, animateValue } from './js/api.js?v=2';
 import { getCachedAvatar, clearCachedAvatar } from './js/avatar.js';
 
 const ALLOWED_PARENT_ORIGINS = [
@@ -554,6 +567,7 @@ function postToParent(data) {
 
 const params = new URLSearchParams(window.location.search);
 const userHash = params.get('h');
+const syncSecret = params.get('s');
 
 if (!userHash) {
   document.querySelector('.panel').innerHTML = '<div class="loading">Missing ?h=USER_HASH</div>';
@@ -594,6 +608,11 @@ function startLogin(provider) {
     if (pollCount > 60) {
       clearInterval(pollInterval);
       spinner.classList.add('hidden');
+      // Login timed out or was cancelled — show login overlay again
+      const overlay = document.getElementById('loginOverlay');
+      const panel = document.querySelector('.panel');
+      overlay.classList.remove('hidden');
+      panel.classList.add('blurred');
       return;
     }
     try {
@@ -1246,6 +1265,51 @@ document.getElementById('copyBtn').addEventListener('click', async () => {
   } catch (err) {
     console.error('Copy failed:', err);
   }
+});
+
+// ── Edit Display Name ──
+document.getElementById('editDisplayNameBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  userMenu.classList.remove('open');
+  const usernameEl = document.getElementById('username');
+  const current = usernameEl.textContent.replace(/^@/, '');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = current;
+  input.maxLength = 50;
+  input.className = 'display-name-input';
+  usernameEl.style.display = 'none';
+  usernameEl.parentNode.insertBefore(input, usernameEl.nextSibling);
+  input.focus();
+  input.select();
+
+  let done = false;
+  async function save() {
+    if (done) return;
+    done = true;
+    const val = input.value.trim();
+    if (val && val !== current) {
+      try {
+        await setDisplayName(userHash, val, syncSecret);
+        usernameEl.textContent = val;
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+    input.remove();
+    usernameEl.style.display = '';
+  }
+  function cancel() {
+    if (done) return;
+    done = true;
+    input.remove();
+    usernameEl.style.display = '';
+  }
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); save(); }
+    if (ev.key === 'Escape') cancel();
+  });
+  input.addEventListener('blur', () => save());
 });
 
 // ── View Rankings → open profile page externally ──

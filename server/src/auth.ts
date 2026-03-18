@@ -5,6 +5,12 @@ export const auth = betterAuth({
   database: getPool(),
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3001",
+  trustedOrigins: [
+    process.env.BETTER_AUTH_URL || "http://localhost:3001",
+    "https://clauderank.com",
+    "https://www.clauderank.com",
+    "https://claude-rank.onrender.com",
+  ],
   user: {
     changeEmail: { enabled: false },
   },

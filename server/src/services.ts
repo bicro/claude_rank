@@ -575,7 +575,7 @@ export async function evaluateAchievements(
 
 export async function getHotUsers(db: DbClient, limit: number = 20, lookbackDays: number = 3): Promise<any[]> {
   const rows = await db.query(
-    `SELECT um.*, u.username FROM user_metrics um
+    `SELECT um.*, u.username, u.display_name, u.auth_provider FROM user_metrics um
      JOIN users u ON u.user_hash = um.user_hash
      WHERE um.current_streak > 0 AND u.linked_to IS NULL`
   ).all() as any[];
@@ -607,6 +607,7 @@ export async function getHotUsers(db: DbClient, limit: number = 20, lookbackDays
     hotUsers.push({
       user_hash: metrics.user_hash,
       username: metrics.username,
+      display_name: metrics.display_name && metrics.auth_provider ? metrics.display_name : null,
       current_streak: metrics.current_streak,
       total_points: metrics.total_points,
       level: metrics.level,

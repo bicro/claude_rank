@@ -103,11 +103,16 @@ impl FileWatcher {
         }
     }
 
+    #[allow(unused_variables)]
     fn update_tray_icon(app: &AppHandle, label: &str) {
         let state = app.state::<crate::AppState>();
         let base_icon = state.tray_icon_base.lock().unwrap();
         // Only render if we have a valid base icon (not the 1x1 placeholder)
         if base_icon.width() > 1 {
+            // Windows: icon-only (no cost text in tray)
+            #[cfg(target_os = "windows")]
+            let rendered = crate::tray_render::render_tray_icon_only(&base_icon);
+            #[cfg(not(target_os = "windows"))]
             let rendered = crate::tray_render::render_tray_image(&base_icon, label);
             let guard = state.tray_icon.lock().unwrap();
             if let Some(tray) = guard.as_ref() {

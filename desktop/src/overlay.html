@@ -74,6 +74,7 @@ const { getCurrentWindow } = window.__TAURI__.window;
 // ── Enable dragging via JS (CSS app-region:drag doesn't work with transparent frameless windows) ──
 document.querySelector('.drag-strip').addEventListener('mousedown', (e) => {
   if (e.button !== 0 || e.target.closest('.no-drag')) return;
+  invoke('notify_drag_start');
   getCurrentWindow().startDragging();
 });
 
@@ -89,7 +90,7 @@ async function loadWidget() {
   try {
     const widgetBase = await invoke('get_widget_base');
     const id = await invoke('get_ranking_identity');
-    widgetUrl = widgetBase + '/widget.html?h=' + encodeURIComponent(id.user_hash);
+    widgetUrl = widgetBase + '/widget.html?h=' + encodeURIComponent(id.user_hash) + '&s=' + encodeURIComponent(id.sync_secret || '');
     frame.src = widgetUrl + '&_t=' + Date.now();
   } catch (e) {
     console.error('Failed to load identity:', e);

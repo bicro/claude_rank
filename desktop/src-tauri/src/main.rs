@@ -25,15 +25,25 @@ use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior};
 
 // Windows-specific imports
 #[cfg(target_os = "windows")]
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
-    SetWindowPos, HWND_TOPMOST,
+    SetWindowPos, HWND_TOPMOST, WINDOWPOS,
     SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+    WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE, WM_SIZING, WM_WINDOWPOSCHANGING,
     WM_NCACTIVATE, WM_NCPAINT, WM_NCCALCSIZE, WM_NCDESTROY,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
+
+/// Tracks whether the user is in a move/resize operation (between WM_ENTERSIZEMOVE and WM_EXITSIZEMOVE).
+#[cfg(target_os = "windows")]
+static IN_SIZE_MOVE: AtomicBool = AtomicBool::new(false);
+/// Tracks whether the current move/resize is a border-drag resize (WM_SIZING received).
+#[cfg(target_os = "windows")]
+static IS_USER_SIZING: AtomicBool = AtomicBool::new(false);
 
 // ============ Leaderboard types ============
 
@@ -197,6 +207,11 @@ async fn open_logs_folder(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[command]
+fn notify_drag_start(state: tauri::State<'_, AppState>) {
+    *state.last_drag_start.lock().unwrap() = std::time::Instant::now();
+}
+
+#[command]
 fn is_debug_mode() -> bool {
     cfg!(debug_assertions)
 }
@@ -217,6 +232,7 @@ pub struct AppState {
     pub overlay_visible: Mutex<bool>,
     pub overlay_pinned: Mutex<bool>,
     pub last_programmatic_position: Mutex<std::time::Instant>,
+    pub last_drag_start: Mutex<std::time::Instant>,
     pub toggle_menu_item: Mutex<Option<MenuItem<tauri::Wry>>>,
     pub tray_icon: Mutex<Option<TrayIcon<tauri::Wry>>>,
     pub tray_icon_base: Mutex<image::RgbaImage>,
@@ -228,6 +244,7 @@ impl Default for AppState {
             overlay_visible: Mutex::new(false),
             overlay_pinned: Mutex::new(false),
             last_programmatic_position: Mutex::new(std::time::Instant::now()),
+            last_drag_start: Mutex::new(std::time::Instant::now() - std::time::Duration::from_secs(60)),
             toggle_menu_item: Mutex::new(None),
             tray_icon: Mutex::new(None),
             tray_icon_base: Mutex::new(image::RgbaImage::new(1, 1)),
@@ -331,6 +348,32 @@ unsafe extern "system" fn overlay_subclass_proc(
     _dwrefdata: usize,
 ) -> LRESULT {
     match msg {
+        x if x == WM_ENTERSIZEMOVE => {
+            IN_SIZE_MOVE.store(true, Ordering::SeqCst);
+            IS_USER_SIZING.store(false, Ordering::SeqCst);
+            DefSubclassProc(hwnd, msg, wparam, lparam)
+        }
+        x if x == WM_EXITSIZEMOVE => {
+            IN_SIZE_MOVE.store(false, Ordering::SeqCst);
+            IS_USER_SIZING.store(false, Ordering::SeqCst);
+            DefSubclassProc(hwnd, msg, wparam, lparam)
+        }
+        x if x == WM_SIZING => {
+            // WM_SIZING is only sent during border-drag resize, not during move/snap
+            IS_USER_SIZING.store(true, Ordering::SeqCst);
+            DefSubclassProc(hwnd, msg, wparam, lparam)
+        }
+        x if x == WM_WINDOWPOSCHANGING => {
+            // Block snap-triggered resizes: if we're in a move operation (not a
+            // border-drag resize), prevent Windows from changing the window size.
+            if IN_SIZE_MOVE.load(Ordering::SeqCst) && !IS_USER_SIZING.load(Ordering::SeqCst) {
+                let wp = &mut *(lparam.0 as *mut WINDOWPOS);
+                if !wp.flags.contains(SWP_NOSIZE) {
+                    wp.flags |= SWP_NOSIZE;
+                }
+            }
+            DefSubclassProc(hwnd, msg, wparam, lparam)
+        }
         x if x == WM_NCACTIVATE => LRESULT(1),
         x if x == WM_NCPAINT => LRESULT(0),
         x if x == WM_NCCALCSIZE => {
@@ -637,7 +680,10 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
             tauri::WindowEvent::Focused(false) => {
                 let state = app_for_events.state::<AppState>();
                 let pinned = *state.overlay_pinned.lock().unwrap();
-                if !pinned && *state.overlay_visible.lock().unwrap() {
+                // Don't auto-hide if the user is dragging (Windows loses focus during drag)
+                let drag_elapsed = state.last_drag_start.lock().unwrap().elapsed();
+                let is_dragging = drag_elapsed < std::time::Duration::from_secs(2);
+                if !pinned && !is_dragging && *state.overlay_visible.lock().unwrap() {
                     *state.overlay_visible.lock().unwrap() = false;
                     let _ = app_for_events.emit("overlay-visibility-changed", serde_json::json!({ "visible": false }));
                     if let Some(menu_item) = state.toggle_menu_item.lock().unwrap().as_ref() {
@@ -940,7 +986,10 @@ fn main() {
             // Store base icon for later re-rendering with updated cost text
             *state.tray_icon_base.lock().unwrap() = tray_rgba.clone();
 
-            // Render initial composite tray image (icon + "$0.00" on white background)
+            // Render initial tray image: icon-only on Windows, icon + cost on macOS
+            #[cfg(target_os = "windows")]
+            let initial_icon = tray_render::render_tray_icon_only(&tray_rgba);
+            #[cfg(not(target_os = "windows"))]
             let initial_icon = tray_render::render_tray_image(&tray_rgba, "0");
 
             let tray = TrayIconBuilder::new()
@@ -988,6 +1037,29 @@ fn main() {
             // Without this, the first tray-icon click creates the webview on-demand
             // and the window geometry isn't settled yet, causing it to appear offscreen.
             let _ = ensure_overlay_window(app.handle());
+
+            // On first launch, show the overlay so users know the app is running.
+            // Use a version-stamped marker so the overlay shows again after updates.
+            let launched_marker = dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".ClaudeRank")
+                .join(".launched_v");
+            let current_version = env!("CARGO_PKG_VERSION");
+            let already_launched = launched_marker.exists()
+                && std::fs::read_to_string(&launched_marker)
+                    .map(|v| v.trim() == current_version)
+                    .unwrap_or(false);
+            if !already_launched {
+                std::fs::create_dir_all(launched_marker.parent().unwrap()).ok();
+                std::fs::write(&launched_marker, current_version).ok();
+                let handle = app.handle().clone();
+                // Delay so the window/webview is fully ready (longer on Windows for WebView2 init).
+                let delay_ms = if cfg!(target_os = "windows") { 1500 } else { 500 };
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+                    let _ = show_overlay_sync(&handle);
+                });
+            }
 
             // Start stats file watcher
             stats::watcher::FileWatcher::start(
@@ -1064,6 +1136,7 @@ fn main() {
             get_autostart_enabled,
             set_autostart_enabled,
             is_debug_mode,
+            notify_drag_start,
             open_overlay_devtools,
             open_logs_folder,
             get_leaderboard,

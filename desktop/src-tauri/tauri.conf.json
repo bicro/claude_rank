@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://localhost:3001 https://clauderank.com https://www.clauderank.com https://claude-rank.onrender.com; frame-src https://clauderank.com https://www.clauderank.com https://claude-rank.onrender.com http://localhost:3001"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://localhost:3001 https://clauderank.com https://www.clauderank.com https://claude-rank.onrender.com; frame-src https://clauderank.com https://www.clauderank.com https://claude-rank.onrender.com http://localhost:3001; frame-ancestors *"
     }
   },
   "plugins": {
@@ -39,16 +39,16 @@
       "dmg": {
         "background": "icons/dmg-background.png",
         "windowSize": {
-          "width": 540,
-          "height": 380
+          "width": 660,
+          "height": 440
         },
         "appPosition": {
-          "x": 130,
-          "y": 190
+          "x": 175,
+          "y": 240
         },
         "applicationFolderPosition": {
-          "x": 410,
-          "y": 190
+          "x": 485,
+          "y": 240
         }
       }
     },

@@ -79,7 +79,7 @@
                     const tierIcon = (!isTeam && e.weighted_score != null) ? `<span class="leaderboard-tier">${getTier(e.weighted_score).icon}</span>` : '';
                     const name = isTeam
                         ? `<a href="/team.html?hash=${e.team_hash}">${e.team_name}</a>`
-                        : `<a href="/profile.html?hash=${e.user_hash}">${e.username || 'Anonymous'}</a>${tierIcon}`;
+                        : `<a href="/profile.html?hash=${e.user_hash}">${e.display_name || e.username || 'Anonymous'}</a>${tierIcon}`;
                     const extra = isTeam ? `<td>${e.member_count}</td>` : '';
                     return `<tr>
                         <td class="rank-cell ${rankClass}">${e.rank}</td>

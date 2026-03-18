@@ -92,7 +92,7 @@
                                 ${team.members.map(m => `
                                     <tr>
                                         <td class="username-cell">
-                                            <a href="/profile.html?hash=${m.user_hash}">${m.username || 'Anonymous'}</a>
+                                            <a href="/profile.html?hash=${m.user_hash}">${m.display_name || m.username || 'Anonymous'}</a>
                                         </td>
                                     </tr>
                                 `).join('')}
