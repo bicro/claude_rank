@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { loadOrCreateIdentity, getLookupHash, CLAUDE_RANK_DIR } from "./lib/identity.mjs";
 import { fetchUserProfile } from "./lib/api.mjs";
-import { fmtTokens, fmtNum, getTier, tierEmoji, estimateCost } from "./lib/format.mjs";
+import { fmtTokens, fmtNum, tierEmoji, estimateCost } from "./lib/format.mjs";
 
 const PROFILE_CACHE = join(CLAUDE_RANK_DIR, "profile-cache.json");
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -14,8 +14,6 @@ const DIM = "\x1b[2m";
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
 const ORANGE = "\x1b[38;5;208m";
-const GREEN = "\x1b[32m";
-const YELLOW = "\x1b[33m";
 const CYAN = "\x1b[36m";
 
 function loadCachedProfile() {
@@ -121,7 +119,6 @@ async function main() {
 
   const m = profile.metrics || profile;
   const level = m.level ?? 0;
-  const tier = getTier(level);
   const emoji = tierEmoji(level);
   const rank = profile.ranks?.weighted?.rank;
   const streak = m.current_streak ?? 0;
@@ -130,17 +127,16 @@ async function main() {
   const tokens = todayTokens();
   const cost = todayCost();
 
-  // Line 1: Identity — level, tier, rank, streak, points
+  // Line 1: Identity — level, rank, streak
   const parts = [];
-  parts.push(`${emoji} ${BOLD}Lv.${level}${RESET} ${tier}`);
-  if (rank) parts.push(`${CYAN}#${rank}${RESET}`);
+  parts.push(`${DIM}──${RESET} ${BOLD}${ORANGE}Claude Rank${RESET} ${DIM}──${RESET} ${emoji} ${BOLD}Lv.${level}${RESET}`);
+  if (rank) parts.push(`${CYAN}#${rank} Globally${RESET}`);
   if (streak > 0) parts.push(`🔥${streak}d`);
-  parts.push(`${DIM}${points} pts${RESET}`);
-  console.log(parts.join("  "));
+  console.log(parts.join(` ${DIM}│${RESET} `));
 
-  // Line 2: Today's usage — tokens burned, est. cost
+  // Line 2: Today's usage — tokens burned, est. cost, points
   const tokenStr = tokens > 0 ? fmtTokens(tokens) : "0";
-  console.log(`${ORANGE}${tokenStr}${RESET} tokens today  ${DIM}${cost} est.${RESET}`);
+  console.log(`${ORANGE}⚡ ${tokenStr}${RESET} tokens today ${DIM}│${RESET} ~${cost} ${DIM}│${RESET} ${DIM}${points} pts${RESET}`);
 }
 
 main();
