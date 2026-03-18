@@ -81,4 +81,47 @@ log "Apple notarization credential/permission check passed."
 
 log "All permission checks passed. Running Tauri build..."
 cd "$PROJECT_ROOT"
-exec bunx tauri build --target universal-apple-darwin "$@"
+bunx tauri build --target universal-apple-darwin "$@"
+
+# Rebuild DMG with background image (Tauri's codesigning strips DMG backgrounds)
+DMG_DIR="$PROJECT_ROOT/src-tauri/target/universal-apple-darwin/release/bundle/dmg"
+APP_DIR="$PROJECT_ROOT/src-tauri/target/universal-apple-darwin/release/bundle/macos"
+BACKGROUND="$PROJECT_ROOT/src-tauri/icons/dmg-background.png"
+APP_NAME="Claude Rank"
+
+if [[ -d "$APP_DIR/$APP_NAME.app" ]] && command -v create-dmg >/dev/null 2>&1; then
+  log "Rebuilding DMG with background image..."
+
+  # Remove the Tauri-generated DMG
+  rm -f "$DMG_DIR"/*.dmg
+
+  create-dmg \
+    --volname "$APP_NAME" \
+    --background "$BACKGROUND" \
+    --window-size 660 440 \
+    --icon-size 80 \
+    --icon "$APP_NAME.app" 175 240 \
+    --app-drop-link 485 240 \
+    "$DMG_DIR/$APP_NAME.dmg" \
+    "$APP_DIR/$APP_NAME.app"
+
+  # Codesign the new DMG
+  log "Signing rebuilt DMG..."
+  codesign --force --sign "$APPLE_SIGNING_IDENTITY" "$DMG_DIR/$APP_NAME.dmg"
+
+  # Notarize the new DMG
+  log "Notarizing rebuilt DMG..."
+  xcrun notarytool submit "$DMG_DIR/$APP_NAME.dmg" \
+    --apple-id "$APPLE_ID" \
+    --password "$APPLE_PASSWORD" \
+    --team-id "$APPLE_TEAM_ID" \
+    --wait
+
+  # Staple the notarization ticket
+  log "Stapling notarization ticket..."
+  xcrun stapler staple "$DMG_DIR/$APP_NAME.dmg"
+
+  log "DMG rebuilt, signed, and notarized at $DMG_DIR/$APP_NAME.dmg"
+else
+  log "WARNING: Could not rebuild DMG with background (missing app bundle or create-dmg)"
+fi

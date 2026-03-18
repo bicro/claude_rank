@@ -35,21 +35,21 @@
     "macOS": {
       "signingIdentity": "Developer ID Application: Frisson Labs, CO. (G7FQB386Q9)",
       "hardenedRuntime": true,
-      "entitlements": "Entitlements.plist"
-    },
-    "dmg": {
-      "background": "icons/dmg-background.png",
-      "windowSize": {
-        "width": 660,
-        "height": 440
-      },
-      "appPosition": {
-        "x": 175,
-        "y": 240
-      },
-      "applicationFolderPosition": {
-        "x": 485,
-        "y": 240
+      "entitlements": "Entitlements.plist",
+      "dmg": {
+        "background": "icons/dmg-background.png",
+        "windowSize": {
+          "width": 660,
+          "height": 440
+        },
+        "appPosition": {
+          "x": 175,
+          "y": 240
+        },
+        "applicationFolderPosition": {
+          "x": 485,
+          "y": 240
+        }
       }
     },
     "windows": {

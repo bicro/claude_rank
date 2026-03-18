@@ -268,6 +268,9 @@ struct WindowPrefs {
     /// Per-monitor saved positions, keyed by monitor_key()
     #[serde(default)]
     positions: HashMap<String, MonitorPosition>,
+    /// App version that wrote these prefs (cleared on upgrade/reinstall)
+    #[serde(default)]
+    app_version: String,
 }
 
 /// Stable key for a monitor: name if available, otherwise origin coordinates.
@@ -461,14 +464,17 @@ fn position_overlay_window(window: &tauri::WebviewWindow, app: &AppHandle) {
         .scale_factor()
         .unwrap_or(1.0);
 
-    // Restore saved width only (height is driven by widget content)
+    // Restore saved size (logical pixels) or apply defaults
     let prefs = load_window_prefs();
-    if let Some(ref prefs) = prefs {
-        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
-            width: prefs.width,
-            height: prefs.height,
-        }));
-    }
+    let (restore_w, restore_h) = if let Some(ref prefs) = prefs {
+        (prefs.width as f64, prefs.height as f64)
+    } else {
+        (380.0, 480.0)
+    };
+    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+        width: restore_w,
+        height: restore_h,
+    }));
 
     // Determine which monitor the tray icon is on (used for saved-position lookup & anchoring)
     let tray_rect = state
@@ -643,13 +649,20 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
         match event {
             tauri::WindowEvent::Resized(size) => {
                 if size.width > 0 && size.height > 0 {
+                    let scale = app_for_events.get_webview_window("overlay")
+                        .and_then(|w| w.scale_factor().ok())
+                        .unwrap_or(1.0);
+                    let logical_w = (size.width as f64 / scale).round() as u32;
+                    let logical_h = (size.height as f64 / scale).round() as u32;
                     let mut prefs = load_window_prefs().unwrap_or(WindowPrefs {
-                        width: size.width,
-                        height: size.height,
+                        width: logical_w,
+                        height: logical_h,
                         positions: HashMap::new(),
+                        app_version: String::new(),
                     });
-                    prefs.width = size.width;
-                    prefs.height = size.height;
+                    prefs.width = logical_w;
+                    prefs.height = logical_h;
+                    prefs.app_version = app_for_events.config().version.clone().unwrap_or_default();
                     save_window_prefs(&prefs);
                 }
             }
@@ -660,13 +673,15 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
                             let key = monitor_key(mon);
                             let mut prefs = load_window_prefs().unwrap_or(WindowPrefs {
                                 width: 380,
-                                height: 620,
+                                height: 480,
                                 positions: HashMap::new(),
+                                app_version: String::new(),
                             });
                             prefs.positions.insert(key, MonitorPosition {
                                 x: pos.x as f64,
                                 y: pos.y as f64,
                             });
+                            prefs.app_version = app_for_events.config().version.clone().unwrap_or_default();
                             save_window_prefs(&prefs);
                         }
                     }
@@ -986,12 +1001,14 @@ fn main() {
             // Create tray menu
             let toggle_item =
                 MenuItem::with_id(app, "toggle", "Show Widget", true, None::<&str>)?;
+            let reset_item =
+                MenuItem::with_id(app, "reset_window", "Reset Window", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
             let state = app.state::<AppState>();
             *state.toggle_menu_item.lock().unwrap() = Some(toggle_item.clone());
 
-            let menu = Menu::with_items(app, &[&toggle_item, &quit_item])?;
+            let menu = Menu::with_items(app, &[&toggle_item, &reset_item, &quit_item])?;
 
             let tray_png = image::load_from_memory(include_bytes!("../icons/tray-icon.png"))
                 .expect("failed to decode tray icon PNG");
@@ -1014,6 +1031,21 @@ fn main() {
                     match event.id.as_ref() {
                         "toggle" => {
                             toggle_overlay_sync(_app);
+                        }
+                        "reset_window" => {
+                            // Delete saved prefs and reset window to default size/position
+                            let _ = std::fs::remove_file(window_prefs_path());
+                            let state = _app.state::<AppState>();
+                            *state.overlay_pinned.lock().unwrap() = false;
+                            if let Some(window) = _app.get_webview_window("overlay") {
+                                let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+                                    width: 380.0,
+                                    height: 480.0,
+                                }));
+                                position_overlay_window(&window, _app);
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
                         }
                         "quit" => {
                             quit_app();
@@ -1046,6 +1078,14 @@ fn main() {
                 return Err(e.into());
             }
             info!("[shortcut] registered Alt/Super+Space successfully");
+
+            // Clear stale window prefs on version change (reinstall/upgrade)
+            let current_version = app.config().version.clone().unwrap_or_default();
+            if let Some(prefs) = load_window_prefs() {
+                if prefs.app_version != current_version {
+                    let _ = std::fs::remove_file(window_prefs_path());
+                }
+            }
 
             // Pre-create the overlay window (hidden) so it's ready on first click.
             // Without this, the first tray-icon click creates the webview on-demand
