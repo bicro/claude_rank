@@ -373,7 +373,16 @@ async function handleSetDisplayName(userHash: string, request: Request): Promise
   }
 
   const now = new Date().toISOString();
-  await db.query("UPDATE users SET display_name = ?, updated_at = ? WHERE user_hash = ?").run(displayName, now, userHash);
+
+  // Resolve the primary hash so we can update all linked devices
+  const target = await db.query("SELECT linked_to FROM users WHERE user_hash = ?").get(userHash) as any;
+  const primaryHash = target?.linked_to || userHash;
+
+  // Update the primary and all secondaries in one shot
+  await db.query(
+    "UPDATE users SET display_name = ?, updated_at = ? WHERE user_hash = ? OR linked_to = ?"
+  ).run(displayName, now, primaryHash, primaryHash);
+
   return json({ status: "ok", display_name: displayName });
 }
 
@@ -517,6 +526,13 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
     `UPDATE users SET display_name = ?, avatar_url = ?, auth_provider = ?, auth_id = ?,
      social_url = ?, username = COALESCE(?, username), updated_at = ? WHERE user_hash = ?`
   ).run(displayName, avatarUrl, provider, authId, socialUrl, username, now, userHash);
+
+  // Propagate display_name and avatar_url to all linked devices
+  const target = await db.query("SELECT linked_to FROM users WHERE user_hash = ?").get(userHash) as any;
+  const primaryHash = target?.linked_to || userHash;
+  await db.query(
+    "UPDATE users SET display_name = ?, avatar_url = ?, updated_at = ? WHERE (user_hash = ? OR linked_to = ?) AND user_hash != ?"
+  ).run(displayName, avatarUrl, now, primaryHash, primaryHash, userHash);
 
   return json({
     status: "connected",
