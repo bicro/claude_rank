@@ -61,6 +61,50 @@ function getV5Color(intensity) {
     return `rgb(${Math.round(r1 + (r2 - r1) * intensity)},${Math.round(g1 + (g2 - g1) * intensity)},${Math.round(b1 + (b2 - b1) * intensity)})`;
 }
 
+export function renderActivityTimeline(svg, hourlyData, isDark) {
+    const cellW = 16, cellH = 16, gap = 2;
+    const margin = 8;
+    const cardW = margin + 24 * (cellW + gap) - gap + margin;
+
+    let maxSessions = 0;
+    for (const data of hourlyData) {
+        if (data.sessions.length > maxSessions) maxSessions = data.sessions.length;
+    }
+    const maxRows = Math.max(1, maxSessions);
+    const gridHeight = maxRows * (cellH + gap) - gap;
+    const gridTopY = margin;
+    const cardH = gridTopY + gridHeight + margin;
+
+    const emptyCell = isDark ? '#1e1e1e' : '#e0ddd9';
+    const getColor = isDark
+        ? (i) => { const r1=245,g1=170,b1=100,r2=210,g2=70,b2=15; return `rgb(${Math.round(r1+(r2-r1)*i)},${Math.round(g1+(g2-g1)*i)},${Math.round(b1+(b2-b1)*i)})`; }
+        : getV5Color;
+
+    svg.setAttribute('viewBox', `0 0 ${cardW} ${cardH}`);
+
+    let s = '';
+
+    // Grid cells only
+    for (let col = 0; col < 24; col++) {
+        const data = hourlyData[col];
+        for (let row = 0; row < maxRows; row++) {
+            const x = margin + col * (cellW + gap);
+            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
+            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${emptyCell}" opacity="0.8"/>`;
+        }
+        for (const session of data.sessions) {
+            if (session.index > maxRows) continue;
+            const row = session.index - 1;
+            const x = margin + col * (cellW + gap);
+            const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
+            const color = getColor(session.intensity || 0.5);
+            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${color}"/>`;
+        }
+    }
+
+    svg.innerHTML = s;
+}
+
 export function renderShareableCardV5(svg, hourlyData, sessions, cardData) {
     sessions = sessions || [];
     const cellW = 22, cellH = 22, gap = 3;
