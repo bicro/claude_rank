@@ -64,50 +64,56 @@
 
     <div id="hotUsersSection"></div>
 
-    <div style="max-width:1200px;margin:0 auto;padding:60px 24px 0">
-        <h2 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--text-secondary);padding-bottom:12px;border-bottom:1px solid var(--border, #e0ddd9);margin-bottom:0">Global Rankings</h2>
+    <div class="section-header-bar" data-tooltip="Rankings based on today's activity only. Resets each day.">
+        <h2 class="section-header-text">Daily Global Rankings</h2>
     </div>
-    <div id="topCategories" class="top-categories">
+    <div id="dailyCategories" class="top-categories">
+        <div class="loading">Loading leaderboards</div>
+    </div>
+
+    <div class="section-header-bar" data-tooltip="Cumulative rankings across all time since account creation.">
+        <h2 class="section-header-text">Lifetime Global Rankings</h2>
+    </div>
+    <div id="alltimeCategories" class="top-categories">
         <div class="loading">Loading leaderboards</div>
     </div>
 
     <script type="module">
-        import { getLeaderboard, getHotUsers, formatNumber, formatCost, getCategoryLabel, getCategoryIcon, CATEGORIES, getTier } from './js/api.js?v=2';
+        import { getLeaderboard, getHotUsers, formatNumber, formatCost, formatLeaderboardValueHtml, getCategoryLabel, getCategoryIcon, getCategoryTooltip, CATEGORIES, getTier } from './js/api.js?v=2';
 
-        async function loadLanding() {
-            const container = document.getElementById('topCategories');
+        function renderCategoryCards(containerId, entries, period) {
+            const container = document.getElementById(containerId);
             const cards = [];
-
-            const results = await Promise.allSettled(
-                CATEGORIES.map(cat => getLeaderboard(cat, 'individual', 3, 0))
-            );
 
             for (let i = 0; i < CATEGORIES.length; i++) {
                 const cat = CATEGORIES[i];
-                const result = results[i];
+                const result = entries[i];
                 const label = getCategoryLabel(cat);
                 const icon = getCategoryIcon(cat);
 
                 let entriesHtml = '';
                 if (result.status === 'fulfilled' && result.value.entries.length > 0) {
-                    entriesHtml = result.value.entries.map((e, idx) => `
-                        <div class="top-entry">
-                            <div class="top-rank top-rank-${idx + 1}">${idx + 1}</div>
+                    entriesHtml = result.value.entries.map((e, idx) => {
+                        const avatarHtml = e.avatar_url
+                            ? `<img src="${e.avatar_url}" alt="" class="top-entry-avatar" loading="lazy">`
+                            : `<div class="top-entry-avatar-fallback">${(e.display_name || e.username || '?').charAt(0).toUpperCase()}</div>`;
+                        return `
+                        <a class="top-entry" href="/profile.html?hash=${e.user_hash}">
+                            <span class="top-entry-rank">${idx + 1}</span>
+                            ${avatarHtml}
                             <div class="top-entry-info">
-                                <div class="top-entry-name">
-                                    <a href="/profile.html?hash=${e.user_hash}">${e.display_name || e.username || 'Anonymous'}</a>
-                                </div>
-                                <div class="top-entry-value">${cat === 'cost' ? formatCost(e.value) : formatNumber(e.value)}</div>
+                                <div class="top-entry-name">${e.display_name || e.username || 'Anonymous'}</div>
+                                <div class="top-entry-value">${formatLeaderboardValueHtml(cat, e.value, e.cost)}</div>
                             </div>
-                        </div>
-                    `).join('');
+                        </a>`;
+                    }).join('');
                 } else {
                     entriesHtml = '<div class="top-entry"><div class="top-entry-info" style="color:var(--text-secondary)">No data yet</div></div>';
                 }
 
                 cards.push(`
                     <div class="category-card">
-                        <div class="category-card-header">
+                        <div class="category-card-header" data-tooltip="${getCategoryTooltip(cat)}">
                             <h3>${icon} ${label}</h3>
                             <a href="/leaderboard.html?category=${cat}">View all &rarr;</a>
                         </div>
@@ -117,6 +123,18 @@
             }
 
             container.innerHTML = cards.join('');
+        }
+
+        async function loadLanding() {
+            const today = new Date().toISOString().split('T')[0];
+
+            const [dailyResults, alltimeResults] = await Promise.all([
+                Promise.allSettled(CATEGORIES.map(cat => getLeaderboard(cat, 'daily', 5, 0, today))),
+                Promise.allSettled(CATEGORIES.map(cat => getLeaderboard(cat, 'alltime', 5, 0))),
+            ]);
+
+            renderCategoryCards('dailyCategories', dailyResults, 'daily');
+            renderCategoryCards('alltimeCategories', alltimeResults, 'alltime');
         }
 
         async function loadHotUsers() {
@@ -255,6 +273,64 @@
                 btn.classList.remove('open');
             }
         });
+    </script>
+    <script>
+    (function() {
+        var tip = document.createElement('div');
+        tip.className = 'cr-tooltip';
+        tip.innerHTML = '<div class="cr-tooltip-body"></div>';
+        document.body.appendChild(tip);
+        var body = tip.querySelector('.cr-tooltip-body');
+        var showTimeout, typeTimer, fullText = '', charIdx = 0;
+
+        function stopTyping() {
+            clearInterval(typeTimer);
+            typeTimer = null;
+        }
+        function startTyping(text) {
+            stopTyping();
+            fullText = text;
+            charIdx = 0;
+            body.innerHTML = '<span class="cr-cursor"></span>';
+            typeTimer = setInterval(function() {
+                if (charIdx >= fullText.length) { stopTyping(); return; }
+                var cursor = body.querySelector('.cr-cursor');
+                if (cursor) cursor.remove();
+                body.insertAdjacentText('beforeend', fullText[charIdx]);
+                body.insertAdjacentHTML('beforeend', '<span class="cr-cursor"></span>');
+                charIdx++;
+            }, 18);
+        }
+        document.addEventListener('mouseover', function(e) {
+            var el = e.target.closest('[data-tooltip]');
+            if (!el) return;
+            clearTimeout(showTimeout);
+            var text = el.getAttribute('data-tooltip');
+            tip.style.left = e.clientX + 14 + 'px';
+            tip.style.top = e.clientY + 14 + 'px';
+            showTimeout = setTimeout(function() {
+                tip.classList.add('visible');
+                startTyping(text);
+            }, 80);
+        });
+        document.addEventListener('mousemove', function(e) {
+            if (!tip.classList.contains('visible') && !showTimeout) return;
+            var x = e.clientX + 14, y = e.clientY + 14;
+            if (x + 290 > window.innerWidth) x = e.clientX - 290;
+            if (y + 80 > window.innerHeight) y = e.clientY - 80;
+            tip.style.left = x + 'px';
+            tip.style.top = y + 'px';
+        });
+        document.addEventListener('mouseout', function(e) {
+            var el = e.target.closest('[data-tooltip]');
+            if (!el) return;
+            clearTimeout(showTimeout);
+            showTimeout = null;
+            stopTyping();
+            tip.classList.remove('visible');
+            body.innerHTML = '';
+        });
+    })();
     </script>
 </body>
 </html>

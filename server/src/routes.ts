@@ -282,6 +282,10 @@ export async function handleApiRequest(url: URL, request: Request): Promise<Resp
     return handleGetHot(url);
   }
 
+  if (path === "/api/hot/cards" && method === "GET") {
+    return handleGetHotCards(url);
+  }
+
   // ─── Admin Routes ─────────────────────────────────────────────────────
 
   if (path === "/api/admin/truncate-all" && method === "POST") {
@@ -1432,6 +1436,71 @@ async function handleSync(request: Request): Promise<Response> {
     }
   }
 
+  // Compute concurrency aggregates for metrics_history
+  // Process all dates that had concurrency_histogram data in this sync
+  {
+    const concurrencyDates = new Set<string>();
+    if (req.concurrency_histogram && typeof req.concurrency_histogram === "object") {
+      for (const hourKey of Object.keys(req.concurrency_histogram)) {
+        if (!hourKey.includes(":")) continue;
+        const lastColon = hourKey.lastIndexOf(":");
+        const datePart = hourKey.substring(0, lastColon);
+        concurrencyDates.add(datePart);
+      }
+    }
+    // Also include today
+    concurrencyDates.add(today);
+
+    const allHashes = await getLinkedHashes(db, primaryHash);
+
+    for (const syncDate of concurrencyDates) {
+      const dayStart = `${syncDate}T00:00:00`;
+      const dayEnd = `${syncDate}T23:59:59`;
+
+      const ph2 = allHashes.map((_, i) => `$${i + 1}`).join(", ");
+      const { rows: histRows } = await pool.query(
+        `SELECT histogram FROM concurrency_histogram
+         WHERE user_hash IN (${ph2}) AND snapshot_hour >= $${allHashes.length + 1} AND snapshot_hour <= $${allHashes.length + 2}`,
+        [...allHashes, dayStart, dayEnd],
+      );
+
+      let peakConcurrency = 0;
+      let totalAgentMins = 0;
+      let concurrentMinsAgg = 0;
+
+      // Merge histograms per hour, then compute aggregates
+      const perHourMerged: Record<string, Record<string, number>> = {};
+      for (const row of histRows as any[]) {
+        try {
+          const histogram = row.histogram ? JSON.parse(row.histogram) : {};
+          // Use a single merged bucket per hour
+          const hourKey = "merged";
+          if (!perHourMerged[hourKey]) perHourMerged[hourKey] = {};
+          for (const [sessionsStr, minutes] of Object.entries(histogram)) {
+            perHourMerged[hourKey][sessionsStr] = (perHourMerged[hourKey][sessionsStr] ?? 0) + (minutes as number);
+          }
+        } catch { continue; }
+      }
+
+      // Compute from merged histograms
+      for (const histogram of Object.values(perHourMerged)) {
+        for (const [sessionsStr, minutes] of Object.entries(histogram)) {
+          const sessionCount = parseInt(sessionsStr, 10);
+          if (sessionCount > peakConcurrency) peakConcurrency = sessionCount;
+          totalAgentMins += minutes;
+          if (sessionCount >= 2) concurrentMinsAgg += minutes;
+        }
+      }
+
+      // Update metrics_history for primary hash
+      await pool.query(
+        `UPDATE metrics_history SET peak_concurrency = $1, total_agent_mins = $2, concurrent_mins = $3
+         WHERE user_hash = $4 AND snapshot_date = $5`,
+        [peakConcurrency, totalAgentMins, concurrentMinsAgg, primaryHash, syncDate],
+      );
+    }
+  }
+
   // Evaluate badges using aggregated metrics for the primary user
   const badgeHash = primaryHash;
   const metrics = await db.query("SELECT * FROM user_metrics WHERE user_hash = ?").get(badgeHash) as any;
@@ -1464,96 +1533,244 @@ async function handleSync(request: Request): Promise<Response> {
 
 // ─── Leaderboard Handler ───────────────────────────────────────────────────
 
-const LEADERBOARD_CATEGORIES: Record<string, string> = {
-  tokens: "total_tokens",
-  messages: "(total_messages + total_sessions)",
-  tools: "total_tool_calls",
-  uniqueness: "prompt_uniqueness_score",
-  weighted: "weighted_score",
-  cost: "estimated_spend",
-};
-
-const TEAM_COL_NAMES: Record<string, string> = {
-  tokens: "total_tokens",
-  messages: "total_messages",
-  tools: "total_tool_calls",
-  uniqueness: "prompt_uniqueness_score",
-  weighted: "weighted_score",
-  cost: "estimated_spend",
-};
+const VALID_CATEGORIES = ["tokens", "concurrent_agents", "agent_hours", "concurrency_time", "consistency", "messages"];
 
 async function handleGetLeaderboard(category: string, url: URL): Promise<Response> {
-  if (!LEADERBOARD_CATEGORIES[category]) {
-    return error(`Invalid category. Must be one of: ${Object.keys(LEADERBOARD_CATEGORIES).join(", ")}`, 400);
+  if (!VALID_CATEGORIES.includes(category)) {
+    return error(`Invalid category. Must be one of: ${VALID_CATEGORIES.join(", ")}`, 400);
   }
 
-  const scope = url.searchParams.get("scope") ?? "individual";
-  if (scope !== "individual" && scope !== "team") {
-    return error("scope must be 'individual' or 'team'", 400);
+  const period = url.searchParams.get("period") ?? "alltime";
+  if (period !== "daily" && period !== "alltime") {
+    return error("period must be 'daily' or 'alltime'", 400);
   }
 
   const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50", 10)));
   const offset = Math.max(0, parseInt(url.searchParams.get("offset") ?? "0", 10));
 
   const db = getDb();
-  const col = LEADERBOARD_CATEGORIES[category];
+  const pool = getPool();
 
-  if (scope === "individual") {
-    const rows = await db.query(
-      `SELECT u.user_hash, u.username, u.display_name, u.auth_provider, ${col} as value, um.weighted_score
-       FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
-       WHERE u.linked_to IS NULL
-       ORDER BY ${col} DESC
-       LIMIT ? OFFSET ?`
-    ).all(limit, offset) as any[];
+  if (period === "daily") {
+    const dateParam = url.searchParams.get("date") ?? new Date().toISOString().split("T")[0]!;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      return error("Invalid date format, use YYYY-MM-DD", 400);
+    }
+
+    let rows: any[];
+    let countSql: string;
+    let countParams: any[];
+
+    if (category === "tokens") {
+      rows = await db.query(
+        `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+          mh.daily_tokens as value, um.weighted_score,
+          CASE WHEN um.total_tokens > 0
+            THEN um.estimated_spend * (CAST(mh.daily_tokens AS FLOAT) / um.total_tokens)
+            ELSE 0 END as cost
+        FROM metrics_history mh
+        JOIN users u ON mh.user_hash = u.user_hash
+        JOIN user_metrics um ON u.user_hash = um.user_hash
+        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.daily_tokens > 0
+        ORDER BY mh.daily_tokens DESC
+        LIMIT ? OFFSET ?`
+      ).all(dateParam, limit, offset) as any[];
+      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.daily_tokens > 0`;
+      countParams = [dateParam];
+    } else if (category === "concurrent_agents") {
+      rows = await db.query(
+        `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+          mh.peak_concurrency as value, um.weighted_score
+        FROM metrics_history mh
+        JOIN users u ON mh.user_hash = u.user_hash
+        JOIN user_metrics um ON u.user_hash = um.user_hash
+        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.peak_concurrency > 0
+        ORDER BY mh.peak_concurrency DESC
+        LIMIT ? OFFSET ?`
+      ).all(dateParam, limit, offset) as any[];
+      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.peak_concurrency > 0`;
+      countParams = [dateParam];
+    } else if (category === "agent_hours") {
+      rows = await db.query(
+        `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+          mh.total_agent_mins as value, um.weighted_score
+        FROM metrics_history mh
+        JOIN users u ON mh.user_hash = u.user_hash
+        JOIN user_metrics um ON u.user_hash = um.user_hash
+        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.total_agent_mins > 0
+        ORDER BY mh.total_agent_mins DESC
+        LIMIT ? OFFSET ?`
+      ).all(dateParam, limit, offset) as any[];
+      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.total_agent_mins > 0`;
+      countParams = [dateParam];
+    } else if (category === "concurrency_time") {
+      rows = await db.query(
+        `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+          mh.concurrent_mins as value, um.weighted_score
+        FROM metrics_history mh
+        JOIN users u ON mh.user_hash = u.user_hash
+        JOIN user_metrics um ON u.user_hash = um.user_hash
+        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.concurrent_mins > 0
+        ORDER BY mh.concurrent_mins DESC
+        LIMIT ? OFFSET ?`
+      ).all(dateParam, limit, offset) as any[];
+      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.concurrent_mins > 0`;
+      countParams = [dateParam];
+    } else if (category === "messages") {
+      rows = await db.query(
+        `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+          mh.daily_messages as value, um.weighted_score
+        FROM metrics_history mh
+        JOIN users u ON mh.user_hash = u.user_hash
+        JOIN user_metrics um ON u.user_hash = um.user_hash
+        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.daily_messages > 0
+        ORDER BY mh.daily_messages DESC
+        LIMIT ? OFFSET ?`
+      ).all(dateParam, limit, offset) as any[];
+      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.daily_messages > 0`;
+      countParams = [dateParam];
+    } else {
+      // consistency — same for daily and alltime
+      rows = await db.query(
+        `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+          um.current_streak as value, um.weighted_score
+        FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
+        WHERE u.linked_to IS NULL AND um.current_streak > 0
+        ORDER BY um.current_streak DESC
+        LIMIT ? OFFSET ?`
+      ).all(limit, offset) as any[];
+      countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL AND um.current_streak > 0`;
+      countParams = [];
+    }
 
     const entries = rows.map((row, i) => ({
       rank: offset + i + 1,
       user_hash: row.user_hash,
       username: row.username,
-      display_name: row.display_name && row.auth_provider ? row.display_name : null,
-      value: typeof row.value === "number" && !Number.isInteger(row.value) ? row.value : Number(row.value),
+      display_name: row.display_name,
+      avatar_url: row.avatar_url ?? null,
+      value: Number(row.value),
+      cost: row.cost != null ? Number(row.cost) : undefined,
       weighted_score: row.weighted_score,
       tier: computeTier(row.weighted_score).tier,
     }));
 
-    const countRow = await db.query("SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL").get() as any;
-    const total = countRow?.cnt ?? 0;
+    const { rows: countRows } = await pool.query(countSql, countParams);
+    const total = (countRows[0] as any)?.cnt ?? 0;
 
-    return json({ category, scope: "individual", entries, total_count: total });
-  } else {
-    // Team scope
-    const teamColName = TEAM_COL_NAMES[category];
-    const teamCol = category === "messages"
-      ? "(um.total_messages + um.total_sessions)"
-      : `um.${teamColName}`;
-
-    const rows = await db.query(
-      `SELECT u.team_hash, t.team_name, SUM(${teamCol}) as value, COUNT(u.user_hash) as member_count
-       FROM users u
-       JOIN user_metrics um ON u.user_hash = um.user_hash
-       JOIN teams t ON u.team_hash = t.team_hash
-       WHERE u.team_hash IS NOT NULL AND u.linked_to IS NULL
-       GROUP BY u.team_hash, t.team_name
-       ORDER BY value DESC
-       LIMIT ? OFFSET ?`
-    ).all(limit, offset) as any[];
-
-    const entries = rows.map((row, i) => ({
-      rank: offset + i + 1,
-      team_hash: row.team_hash,
-      team_name: row.team_name,
-      value: typeof row.value === "number" && !Number.isInteger(row.value) ? row.value : Number(row.value),
-      member_count: row.member_count,
-    }));
-
-    const countRow = await db.query(
-      "SELECT COUNT(DISTINCT team_hash) as cnt FROM users WHERE team_hash IS NOT NULL"
-    ).get() as any;
-    const total = countRow?.cnt ?? 0;
-
-    return json({ category, scope: "team", entries, total_count: total });
+    return json({ category, period: "daily", date: dateParam, entries, total_count: total });
   }
+
+  // All-time period
+  let rows: any[];
+  let countSql: string;
+
+  if (category === "tokens") {
+    rows = await db.query(
+      `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+        um.total_tokens as value, um.weighted_score, um.estimated_spend as cost
+      FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
+      WHERE u.linked_to IS NULL
+      ORDER BY um.total_tokens DESC
+      LIMIT ? OFFSET ?`
+    ).all(limit, offset) as any[];
+    countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL`;
+  } else if (category === "concurrent_agents") {
+    rows = await db.query(
+      `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+        MAX(mh.peak_concurrency) as value, um.weighted_score
+      FROM users u
+      JOIN user_metrics um ON u.user_hash = um.user_hash
+      JOIN metrics_history mh ON u.user_hash = mh.user_hash
+      WHERE u.linked_to IS NULL
+      GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score
+      HAVING MAX(mh.peak_concurrency) > 0
+      ORDER BY value DESC
+      LIMIT ? OFFSET ?`
+    ).all(limit, offset) as any[];
+    countSql = `SELECT COUNT(*) as cnt FROM (
+      SELECT u.user_hash FROM users u
+      JOIN metrics_history mh ON u.user_hash = mh.user_hash
+      WHERE u.linked_to IS NULL
+      GROUP BY u.user_hash HAVING MAX(mh.peak_concurrency) > 0
+    ) sub`;
+  } else if (category === "agent_hours") {
+    rows = await db.query(
+      `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+        SUM(mh.total_agent_mins) as value, um.weighted_score
+      FROM users u
+      JOIN user_metrics um ON u.user_hash = um.user_hash
+      JOIN metrics_history mh ON u.user_hash = mh.user_hash
+      WHERE u.linked_to IS NULL
+      GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score
+      HAVING SUM(mh.total_agent_mins) > 0
+      ORDER BY value DESC
+      LIMIT ? OFFSET ?`
+    ).all(limit, offset) as any[];
+    countSql = `SELECT COUNT(*) as cnt FROM (
+      SELECT u.user_hash FROM users u
+      JOIN metrics_history mh ON u.user_hash = mh.user_hash
+      WHERE u.linked_to IS NULL
+      GROUP BY u.user_hash HAVING SUM(mh.total_agent_mins) > 0
+    ) sub`;
+  } else if (category === "concurrency_time") {
+    rows = await db.query(
+      `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+        SUM(mh.concurrent_mins) as value, um.weighted_score
+      FROM users u
+      JOIN user_metrics um ON u.user_hash = um.user_hash
+      JOIN metrics_history mh ON u.user_hash = mh.user_hash
+      WHERE u.linked_to IS NULL
+      GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score
+      HAVING SUM(mh.concurrent_mins) > 0
+      ORDER BY value DESC
+      LIMIT ? OFFSET ?`
+    ).all(limit, offset) as any[];
+    countSql = `SELECT COUNT(*) as cnt FROM (
+      SELECT u.user_hash FROM users u
+      JOIN metrics_history mh ON u.user_hash = mh.user_hash
+      WHERE u.linked_to IS NULL
+      GROUP BY u.user_hash HAVING SUM(mh.concurrent_mins) > 0
+    ) sub`;
+  } else if (category === "messages") {
+    rows = await db.query(
+      `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+        um.total_messages as value, um.weighted_score
+      FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
+      WHERE u.linked_to IS NULL
+      ORDER BY um.total_messages DESC
+      LIMIT ? OFFSET ?`
+    ).all(limit, offset) as any[];
+    countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL`;
+  } else {
+    // consistency
+    rows = await db.query(
+      `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+        um.current_streak as value, um.weighted_score
+      FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
+      WHERE u.linked_to IS NULL AND um.current_streak > 0
+      ORDER BY um.current_streak DESC
+      LIMIT ? OFFSET ?`
+    ).all(limit, offset) as any[];
+    countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL AND um.current_streak > 0`;
+  }
+
+  const entries = rows.map((row, i) => ({
+    rank: offset + i + 1,
+    user_hash: row.user_hash,
+    username: row.username,
+    display_name: row.display_name,
+    avatar_url: row.avatar_url ?? null,
+    value: Number(row.value),
+    cost: row.cost != null ? Number(row.cost) : undefined,
+    weighted_score: row.weighted_score,
+    tier: computeTier(row.weighted_score).tier,
+  }));
+
+  const { rows: countRows } = await pool.query(countSql);
+  const total = (countRows[0] as any)?.cnt ?? 0;
+
+  return json({ category, period: "alltime", entries, total_count: total });
 }
 
 // ─── Badges Handler ─────────────────────────────────────────────────────────
@@ -1595,4 +1812,91 @@ async function handleGetHot(url: URL): Promise<Response> {
     u.tier = computeTier(u.weighted_score);
   }
   return json({ users });
+}
+
+// Hot cards cache: keyed by limit, stores { data, timestamp }
+const hotCardsCache = new Map<number, { data: any; timestamp: number }>();
+const HOT_CARDS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function handleGetHotCards(url: URL): Promise<Response> {
+  const limit = Math.min(10, Math.max(1, parseInt(url.searchParams.get("limit") ?? "3", 10)));
+
+  const cached = hotCardsCache.get(limit);
+  if (cached && Date.now() - cached.timestamp < HOT_CARDS_CACHE_TTL) {
+    return json(cached.data);
+  }
+
+  const db = getDb();
+  const users = await getHotUsers(db, limit, 3);
+
+  // Fetch yesterday through tomorrow UTC to cover all local timezones
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 86400000).toISOString().split("T")[0]!;
+  const tomorrow = new Date(now.getTime() + 86400000).toISOString().split("T")[0]!;
+  const dayStart = `${yesterday}T00:00:00`;
+  const dayEnd = `${tomorrow}T23:59:59`;
+  const pool = getPool();
+
+  const cards: any[] = [];
+  for (const u of users) {
+    const userHash = u.user_hash;
+    const hashes = await getLinkedHashes(db, userHash);
+    const ph = hashes.map((_: string, i: number) => `$${i + 1}`).join(", ");
+
+    // Fetch concurrency histograms for today
+    const { rows } = await pool.query(
+      `SELECT snapshot_hour, histogram FROM concurrency_histogram
+       WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1} AND snapshot_hour <= $${hashes.length + 2}`,
+      [...hashes, dayStart, dayEnd],
+    );
+
+    const perHour: Record<string, any> = {};
+    for (const row of rows as any[]) {
+      try {
+        const histogram = row.histogram ? JSON.parse(row.histogram) : {};
+        const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
+        const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
+        const hourKey = `${snapshotDate}:${hour}`;
+        if (!perHour[hourKey]) perHour[hourKey] = { histogram: {}, tokens: 0 };
+        for (const [sessionsStr, minutes] of Object.entries(histogram)) {
+          perHour[hourKey].histogram[sessionsStr] = (perHour[hourKey].histogram[sessionsStr] ?? 0) + (minutes as number);
+        }
+      } catch { continue; }
+    }
+
+    // Fetch hourly token data
+    const { rows: tokenRows } = await pool.query(
+      `SELECT snapshot_hour, SUM(total_tokens) as total_tokens FROM metrics_hourly
+       WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1} AND snapshot_hour <= $${hashes.length + 2}
+       GROUP BY snapshot_hour`,
+      [...hashes, dayStart, dayEnd],
+    );
+    for (const row of tokenRows as any[]) {
+      const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
+      const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
+      const hourKey = `${snapshotDate}:${hour}`;
+      if (perHour[hourKey]) {
+        perHour[hourKey].tokens = row.total_tokens ?? 0;
+      } else if (row.total_tokens && row.total_tokens > 0) {
+        perHour[hourKey] = { histogram: {}, tokens: row.total_tokens };
+      }
+    }
+
+    // Get user metrics
+    const metrics = await db.query("SELECT total_tokens, estimated_spend FROM user_metrics WHERE user_hash = ?").get(userHash) as any;
+
+    cards.push({
+      user_hash: userHash,
+      username: u.username,
+      display_name: u.display_name,
+      avatar_url: u.avatar_url || null,
+      total_tokens: metrics?.total_tokens ?? 0,
+      estimated_spend: metrics?.estimated_spend ?? 0,
+      concurrency: perHour,
+    });
+  }
+
+  const result = { cards };
+  hotCardsCache.set(limit, { data: result, timestamp: Date.now() });
+  return json(result);
 }

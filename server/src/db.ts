@@ -130,6 +130,9 @@ export async function initDb(): Promise<void> {
       daily_messages BIGINT DEFAULT 0,
       daily_tool_calls BIGINT DEFAULT 0,
       daily_tokens BIGINT DEFAULT 0,
+      peak_concurrency INTEGER DEFAULT 0,
+      total_agent_mins INTEGER DEFAULT 0,
+      concurrent_mins INTEGER DEFAULT 0,
       UNIQUE(user_hash, snapshot_date)
     );
 
@@ -218,6 +221,17 @@ export async function initDb(): Promise<void> {
   } catch { /* already exists */ }
   try {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_linked_to ON users(linked_to)`);
+  } catch { /* already exists */ }
+
+  // Add concurrency aggregate columns to metrics_history
+  try {
+    await pool.query(`ALTER TABLE metrics_history ADD COLUMN IF NOT EXISTS peak_concurrency INTEGER DEFAULT 0`);
+  } catch { /* already exists */ }
+  try {
+    await pool.query(`ALTER TABLE metrics_history ADD COLUMN IF NOT EXISTS total_agent_mins INTEGER DEFAULT 0`);
+  } catch { /* already exists */ }
+  try {
+    await pool.query(`ALTER TABLE metrics_history ADD COLUMN IF NOT EXISTS concurrent_mins INTEGER DEFAULT 0`);
   } catch { /* already exists */ }
 
   // Add total_output_tokens column for achievement tracking
