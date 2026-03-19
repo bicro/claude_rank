@@ -422,6 +422,23 @@
     letter-spacing: 1.5px;
     color: var(--text-secondary);
   }
+  .spinner-cancel {
+    background: transparent;
+    border: 1px solid rgba(0,0,0,0.15);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+    padding: 6px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .spinner-cancel:hover {
+    border-color: rgba(0,0,0,0.3);
+    color: var(--text-primary);
+  }
 </style>
 </head>
 <body>
@@ -430,6 +447,7 @@
   <div class="spinner-overlay" id="spinnerOverlay">
     <div class="spinner"></div>
     <div class="spinner-label">CLAUDERANK</div>
+    <button class="spinner-cancel" id="spinnerCancel" style="display:none" onclick="cancelLogin()">Cancel</button>
   </div>
 
   <!-- Login overlay (shown when not connected) -->
@@ -474,7 +492,7 @@
         <button class="user-menu-item danger" onclick="doLogout()">Sign Out</button>
       </div>
     </div>
-    <div class="rank-pill" id="rankPill">RANK #&mdash;</div>
+    <div class="rank-pill" id="rankPill" style="cursor:pointer" title="View profile">RANK #&mdash;</div>
   </div>
 
   <!-- 3. Date nav -->
@@ -583,6 +601,7 @@ let totalCost = 0;
 let lastMergedHistograms = {};
 let lastLocalDateStr = '';
 let lastHourlyData = [];
+let loginPollInterval = null;
 let previousDayTokens = 0;
 let previousDayCostRaw = 0;
 let previousPeakAgents = 0;
@@ -591,9 +610,15 @@ let previousConcMins = 0;
 
 // ── Auth connect ──
 window.startLogin = startLogin;
+window.cancelLogin = cancelLogin;
 function startLogin(provider) {
   const spinner = document.getElementById('spinnerOverlay');
   spinner.classList.remove('hidden');
+  document.getElementById('spinnerCancel').style.display = '';
+
+  // Hide login overlay while polling
+  document.getElementById('loginOverlay').classList.add('hidden');
+  document.querySelector('.panel').classList.remove('blurred');
 
   const connectUrl = window.location.origin + '/auth-connect.html?user_hash=' + encodeURIComponent(userHash) + '&provider=' + provider;
   if (window.parent !== window) {
@@ -603,11 +628,13 @@ function startLogin(provider) {
   }
   // Poll for profile update after auth
   let pollCount = 0;
-  const pollInterval = setInterval(async () => {
+  loginPollInterval = setInterval(async () => {
     pollCount++;
     if (pollCount > 60) {
-      clearInterval(pollInterval);
+      clearInterval(loginPollInterval);
+      loginPollInterval = null;
       spinner.classList.add('hidden');
+      document.getElementById('spinnerCancel').style.display = 'none';
       // Login timed out or was cancelled — show login overlay again
       const overlay = document.getElementById('loginOverlay');
       const panel = document.querySelector('.panel');
@@ -618,7 +645,9 @@ function startLogin(provider) {
     try {
       const data = await getUserProfile(userHash);
       if (data.auth_provider) {
-        clearInterval(pollInterval);
+        clearInterval(loginPollInterval);
+        loginPollInterval = null;
+        document.getElementById('spinnerCancel').style.display = 'none';
         // Signal desktop to force re-sync so server has data
         if (window.parent !== window) {
           postToParent({ type: 'force-sync' });
@@ -643,6 +672,17 @@ function startLogin(provider) {
       }
     } catch {}
   }, 3000);
+}
+
+function cancelLogin() {
+  if (loginPollInterval) {
+    clearInterval(loginPollInterval);
+    loginPollInterval = null;
+  }
+  document.getElementById('spinnerOverlay').classList.add('hidden');
+  document.getElementById('spinnerCancel').style.display = 'none';
+  document.getElementById('loginOverlay').classList.remove('hidden');
+  document.querySelector('.panel').classList.add('blurred');
 }
 
 // ── Helpers ──
@@ -1316,6 +1356,16 @@ document.getElementById('editDisplayNameBtn').addEventListener('click', (e) => {
 document.getElementById('viewRankingsBtn').addEventListener('click', (e) => {
   e.preventDefault();
   userMenu.classList.remove('open');
+  const url = window.location.origin + '/profile.html?hash=' + encodeURIComponent(userHash);
+  if (window.parent !== window) {
+    postToParent({ type: 'open-url', url });
+  } else {
+    window.open(url, '_blank');
+  }
+});
+
+// ── Rank pill → open profile page externally ──
+document.getElementById('rankPill').addEventListener('click', () => {
   const url = window.location.origin + '/profile.html?hash=' + encodeURIComponent(userHash);
   if (window.parent !== window) {
     postToParent({ type: 'open-url', url });

@@ -113,6 +113,10 @@ export async function getHotUsers(limit = 20) {
     return apiFetch(`/api/hot?limit=${limit}`);
 }
 
+export async function getHotCards(limit = 3) {
+    return apiFetch(`/api/hot/cards?limit=${limit}`);
+}
+
 export async function getUserHeatmap(userHash, days = 365) {
     return apiFetch(`/api/users/${userHash}/heatmap?days=${days}`);
 }

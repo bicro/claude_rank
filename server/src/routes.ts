@@ -282,6 +282,10 @@ export async function handleApiRequest(url: URL, request: Request): Promise<Resp
     return handleGetHot(url);
   }
 
+  if (path === "/api/hot/cards" && method === "GET") {
+    return handleGetHotCards(url);
+  }
+
   // ─── Admin Routes ─────────────────────────────────────────────────────
 
   if (path === "/api/admin/truncate-all" && method === "POST") {
@@ -1595,4 +1599,91 @@ async function handleGetHot(url: URL): Promise<Response> {
     u.tier = computeTier(u.weighted_score);
   }
   return json({ users });
+}
+
+// Hot cards cache: keyed by limit, stores { data, timestamp }
+const hotCardsCache = new Map<number, { data: any; timestamp: number }>();
+const HOT_CARDS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function handleGetHotCards(url: URL): Promise<Response> {
+  const limit = Math.min(10, Math.max(1, parseInt(url.searchParams.get("limit") ?? "3", 10)));
+
+  const cached = hotCardsCache.get(limit);
+  if (cached && Date.now() - cached.timestamp < HOT_CARDS_CACHE_TTL) {
+    return json(cached.data);
+  }
+
+  const db = getDb();
+  const users = await getHotUsers(db, limit, 3);
+
+  // Fetch yesterday through tomorrow UTC to cover all local timezones
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 86400000).toISOString().split("T")[0]!;
+  const tomorrow = new Date(now.getTime() + 86400000).toISOString().split("T")[0]!;
+  const dayStart = `${yesterday}T00:00:00`;
+  const dayEnd = `${tomorrow}T23:59:59`;
+  const pool = getPool();
+
+  const cards: any[] = [];
+  for (const u of users) {
+    const userHash = u.user_hash;
+    const hashes = await getLinkedHashes(db, userHash);
+    const ph = hashes.map((_: string, i: number) => `$${i + 1}`).join(", ");
+
+    // Fetch concurrency histograms for today
+    const { rows } = await pool.query(
+      `SELECT snapshot_hour, histogram FROM concurrency_histogram
+       WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1} AND snapshot_hour <= $${hashes.length + 2}`,
+      [...hashes, dayStart, dayEnd],
+    );
+
+    const perHour: Record<string, any> = {};
+    for (const row of rows as any[]) {
+      try {
+        const histogram = row.histogram ? JSON.parse(row.histogram) : {};
+        const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
+        const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
+        const hourKey = `${snapshotDate}:${hour}`;
+        if (!perHour[hourKey]) perHour[hourKey] = { histogram: {}, tokens: 0 };
+        for (const [sessionsStr, minutes] of Object.entries(histogram)) {
+          perHour[hourKey].histogram[sessionsStr] = (perHour[hourKey].histogram[sessionsStr] ?? 0) + (minutes as number);
+        }
+      } catch { continue; }
+    }
+
+    // Fetch hourly token data
+    const { rows: tokenRows } = await pool.query(
+      `SELECT snapshot_hour, SUM(total_tokens) as total_tokens FROM metrics_hourly
+       WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1} AND snapshot_hour <= $${hashes.length + 2}
+       GROUP BY snapshot_hour`,
+      [...hashes, dayStart, dayEnd],
+    );
+    for (const row of tokenRows as any[]) {
+      const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
+      const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
+      const hourKey = `${snapshotDate}:${hour}`;
+      if (perHour[hourKey]) {
+        perHour[hourKey].tokens = row.total_tokens ?? 0;
+      } else if (row.total_tokens && row.total_tokens > 0) {
+        perHour[hourKey] = { histogram: {}, tokens: row.total_tokens };
+      }
+    }
+
+    // Get user metrics
+    const metrics = await db.query("SELECT total_tokens, estimated_spend FROM user_metrics WHERE user_hash = ?").get(userHash) as any;
+
+    cards.push({
+      user_hash: userHash,
+      username: u.username,
+      display_name: u.display_name,
+      avatar_url: u.avatar_url || null,
+      total_tokens: metrics?.total_tokens ?? 0,
+      estimated_spend: metrics?.estimated_spend ?? 0,
+      concurrency: perHour,
+    });
+  }
+
+  const result = { cards };
+  hotCardsCache.set(limit, { data: result, timestamp: Date.now() });
+  return json(result);
 }
