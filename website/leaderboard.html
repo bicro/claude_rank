@@ -29,121 +29,212 @@
         </button>
     </header>
 
-    <div class="category-tabs" id="categoryTabs"></div>
-
-    <div class="scope-toggle">
-        <button class="scope-btn active" data-scope="individual" onclick="setScope('individual')">Individual</button>
-        <button class="scope-btn" data-scope="team" onclick="setScope('team')">Team</button>
+    <!-- Daily Global Rankings -->
+    <div class="leaderboard-section">
+        <h2 class="leaderboard-section-title" data-tooltip="Rankings based on a single day's activity. Use the date arrows to browse past days.">DAILY GLOBAL RANKINGS</h2>
+        <div class="date-nav" id="dailyDateNav">
+            <button class="date-nav-btn" id="dailyDatePrev" onclick="window.dailyDatePrev()">&lsaquo;</button>
+            <span class="date-label" id="dailyDateLabel"></span>
+            <button class="date-nav-btn" id="dailyDateNext" onclick="window.dailyDateNext()">&rsaquo;</button>
+        </div>
+        <div class="category-tabs" id="dailyCategoryTabs"></div>
+        <div class="leaderboard-container">
+            <div id="dailyLeaderboardContent"><div class="loading">Loading</div></div>
+        </div>
+        <div class="pagination" id="dailyPagination"></div>
     </div>
 
-    <div class="leaderboard-container">
-        <div id="leaderboardContent"><div class="loading">Loading</div></div>
+    <!-- All-time Global Rankings -->
+    <div class="leaderboard-section">
+        <h2 class="leaderboard-section-title" data-tooltip="Cumulative rankings across all time since account creation.">LIFETIME GLOBAL RANKINGS</h2>
+        <div class="category-tabs" id="alltimeCategoryTabs"></div>
+        <div class="leaderboard-container">
+            <div id="alltimeLeaderboardContent"><div class="loading">Loading</div></div>
+        </div>
+        <div class="pagination" id="alltimePagination"></div>
     </div>
-
-    <div class="pagination" id="pagination"></div>
 
     <script type="module">
-        import { getLeaderboard, formatNumber, formatCost, getCategoryLabel, getCategoryIcon, CATEGORIES, getTier } from './js/api.js';
+        import { getLeaderboard, formatLeaderboardValueHtml, getCategoryLabel, getCategoryIcon, getCategoryTooltip, CATEGORIES, getTier } from './js/api.js';
 
         const params = new URLSearchParams(window.location.search);
-        let currentCategory = params.get('category') || 'tokens';
-        let currentScope = 'individual';
-        let currentOffset = 0;
         const PAGE_SIZE = 50;
 
-        function renderTabs() {
-            const container = document.getElementById('categoryTabs');
-            container.innerHTML = CATEGORIES.map(cat => `
-                <button class="category-tab ${cat === currentCategory ? 'active' : ''}"
-                        onclick="window.setCategory('${cat}')">
+        // Daily state
+        let dailyCategory = params.get('category') || 'tokens';
+        let dailyOffset = 0;
+        let dailyDate = new Date().toISOString().split('T')[0];
+
+        // All-time state
+        let alltimeCategory = params.get('category') || 'tokens';
+        let alltimeOffset = 0;
+
+        function formatDateLabel(dateStr) {
+            const [y, m, d] = dateStr.split('-');
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return months[parseInt(m, 10) - 1] + ' ' + parseInt(d, 10) + ', ' + y;
+        }
+
+        function renderAvatar(entry) {
+            if (entry.avatar_url) {
+                return `<img src="${entry.avatar_url}" alt="" class="leaderboard-avatar" loading="lazy">`;
+            }
+            const name = entry.display_name || entry.username || '?';
+            const initial = name.charAt(0).toUpperCase();
+            return `<div class="leaderboard-avatar-fallback">${initial}</div>`;
+        }
+
+        function renderTabs(containerId, categories, activeCat, setFn) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = categories.map(cat => `
+                <button class="category-tab ${cat === activeCat ? 'active' : ''}"
+                        data-tooltip="${getCategoryTooltip(cat)}"
+                        onclick="window.${setFn}('${cat}')">
                     ${getCategoryIcon(cat)} ${getCategoryLabel(cat)}
                 </button>
             `).join('');
         }
 
-        async function loadLeaderboard() {
-            const content = document.getElementById('leaderboardContent');
+        function renderTable(entries, category, containerId) {
+            if (entries.length === 0) {
+                document.getElementById(containerId).innerHTML = '<div class="loading" style="color:var(--text-secondary)">No entries yet</div>';
+                return;
+            }
+            const rows = entries.map(e => {
+                const rankClass = e.rank <= 3 ? `rank-${e.rank}` : '';
+                const tierIcon = e.weighted_score != null ? `<span class="leaderboard-tier">${getTier(e.weighted_score).icon}</span>` : '';
+                const avatar = renderAvatar(e);
+                const displayName = (e.display_name || e.username || 'Anonymous') + tierIcon;
+                const valueStr = formatLeaderboardValueHtml(category, e.value, e.cost);
+                return `<tr class="leaderboard-row-link" onclick="window.location='/profile.html?hash=${e.user_hash}'">
+                    <td class="rank-cell ${rankClass}">${e.rank}</td>
+                    <td class="avatar-cell">${avatar}</td>
+                    <td class="username-cell">${displayName}</td>
+                    <td class="value-cell">${valueStr}</td>
+                </tr>`;
+            }).join('');
+
+            document.getElementById(containerId).innerHTML = `
+                <table class="leaderboard-table">
+                    <thead><tr>
+                        <th>Rank</th>
+                        <th></th>
+                        <th>User</th>
+                        <th style="text-align:right">${getCategoryLabel(category)}</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        function renderPagination(paginationId, totalCount, offset, prevFn, nextFn) {
+            const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+            const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
+            if (totalPages <= 1) {
+                document.getElementById(paginationId).innerHTML = '';
+                return;
+            }
+            document.getElementById(paginationId).innerHTML = `
+                <button ${currentPage <= 1 ? 'disabled' : ''} onclick="window.${prevFn}()">Previous</button>
+                <span class="page-info">Page ${currentPage} of ${totalPages} (${totalCount} total)</span>
+                <button ${currentPage >= totalPages ? 'disabled' : ''} onclick="window.${nextFn}()">Next</button>
+            `;
+        }
+
+        // ─── Daily ───
+        function updateDailyDateNav() {
+            document.getElementById('dailyDateLabel').textContent = formatDateLabel(dailyDate);
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('dailyDateNext').disabled = dailyDate >= today;
+            const minDate = new Date();
+            minDate.setDate(minDate.getDate() - 13);
+            const minDateStr = minDate.toISOString().split('T')[0];
+            document.getElementById('dailyDatePrev').disabled = dailyDate <= minDateStr;
+        }
+
+        async function loadDailyLeaderboard() {
+            updateDailyDateNav();
+            const content = document.getElementById('dailyLeaderboardContent');
             content.innerHTML = '<div class="loading">Loading</div>';
-
             try {
-                const data = await getLeaderboard(currentCategory, currentScope, PAGE_SIZE, currentOffset);
-                if (data.entries.length === 0) {
-                    content.innerHTML = '<div class="loading" style="color:var(--text-secondary)">No entries yet</div>';
-                    document.getElementById('pagination').innerHTML = '';
-                    return;
-                }
-
-                const isTeam = currentScope === 'team';
-                const rows = data.entries.map(e => {
-                    const rankClass = e.rank <= 3 ? `rank-${e.rank}` : '';
-                    const tierIcon = (!isTeam && e.weighted_score != null) ? `<span class="leaderboard-tier">${getTier(e.weighted_score).icon}</span>` : '';
-                    const name = isTeam
-                        ? `<a href="/team.html?hash=${e.team_hash}">${e.team_name}</a>`
-                        : `<a href="/profile.html?hash=${e.user_hash}">${e.display_name || e.username || 'Anonymous'}</a>${tierIcon}`;
-                    const extra = isTeam ? `<td>${e.member_count}</td>` : '';
-                    return `<tr>
-                        <td class="rank-cell ${rankClass}">${e.rank}</td>
-                        <td class="username-cell">${name}</td>
-                        <td class="value-cell">${currentCategory === 'cost' ? formatCost(e.value) : formatNumber(e.value)}</td>
-                        ${extra}
-                    </tr>`;
-                }).join('');
-
-                const extraHeader = isTeam ? '<th>Members</th>' : '';
-                content.innerHTML = `
-                    <table class="leaderboard-table">
-                        <thead><tr>
-                            <th>Rank</th>
-                            <th>${isTeam ? 'Team' : 'User'}</th>
-                            <th style="text-align:right">${getCategoryLabel(currentCategory)}</th>
-                            ${extraHeader}
-                        </tr></thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                `;
-
-                // Pagination
-                const totalPages = Math.ceil(data.total_count / PAGE_SIZE);
-                const currentPage = Math.floor(currentOffset / PAGE_SIZE) + 1;
-                document.getElementById('pagination').innerHTML = `
-                    <button ${currentPage <= 1 ? 'disabled' : ''} onclick="window.prevPage()">Previous</button>
-                    <span class="page-info">Page ${currentPage} of ${totalPages} (${data.total_count} total)</span>
-                    <button ${currentPage >= totalPages ? 'disabled' : ''} onclick="window.nextPage()">Next</button>
-                `;
+                const data = await getLeaderboard(dailyCategory, 'daily', PAGE_SIZE, dailyOffset, dailyDate);
+                renderTable(data.entries, dailyCategory, 'dailyLeaderboardContent');
+                renderPagination('dailyPagination', data.total_count, dailyOffset, 'dailyPrevPage', 'dailyNextPage');
             } catch (err) {
                 content.innerHTML = `<div class="loading" style="color:var(--red)">Error: ${err.message}</div>`;
             }
         }
 
-        window.setCategory = function(cat) {
-            currentCategory = cat;
-            currentOffset = 0;
-            history.replaceState(null, '', `?category=${cat}`);
-            renderTabs();
-            loadLeaderboard();
+        window.setDailyCategory = function(cat) {
+            dailyCategory = cat;
+            dailyOffset = 0;
+            renderTabs('dailyCategoryTabs', CATEGORIES, dailyCategory, 'setDailyCategory');
+            loadDailyLeaderboard();
         };
 
-        window.setScope = function(scope) {
-            currentScope = scope;
-            currentOffset = 0;
-            document.querySelectorAll('.scope-btn').forEach(b => {
-                b.classList.toggle('active', b.dataset.scope === scope);
-            });
-            loadLeaderboard();
+        window.dailyDatePrev = function() {
+            const d = new Date(dailyDate + 'T12:00:00');
+            d.setDate(d.getDate() - 1);
+            dailyDate = d.toISOString().split('T')[0];
+            dailyOffset = 0;
+            loadDailyLeaderboard();
         };
 
-        window.prevPage = function() {
-            currentOffset = Math.max(0, currentOffset - PAGE_SIZE);
-            loadLeaderboard();
+        window.dailyDateNext = function() {
+            const d = new Date(dailyDate + 'T12:00:00');
+            d.setDate(d.getDate() + 1);
+            const today = new Date().toISOString().split('T')[0];
+            dailyDate = d.toISOString().split('T')[0];
+            if (dailyDate > today) dailyDate = today;
+            dailyOffset = 0;
+            loadDailyLeaderboard();
         };
 
-        window.nextPage = function() {
-            currentOffset += PAGE_SIZE;
-            loadLeaderboard();
+        window.dailyPrevPage = function() {
+            dailyOffset = Math.max(0, dailyOffset - PAGE_SIZE);
+            loadDailyLeaderboard();
         };
 
-        renderTabs();
-        loadLeaderboard();
+        window.dailyNextPage = function() {
+            dailyOffset += PAGE_SIZE;
+            loadDailyLeaderboard();
+        };
+
+        // ─── All-time ───
+        async function loadAlltimeLeaderboard() {
+            const content = document.getElementById('alltimeLeaderboardContent');
+            content.innerHTML = '<div class="loading">Loading</div>';
+            try {
+                const data = await getLeaderboard(alltimeCategory, 'alltime', PAGE_SIZE, alltimeOffset);
+                renderTable(data.entries, alltimeCategory, 'alltimeLeaderboardContent');
+                renderPagination('alltimePagination', data.total_count, alltimeOffset, 'alltimePrevPage', 'alltimeNextPage');
+            } catch (err) {
+                content.innerHTML = `<div class="loading" style="color:var(--red)">Error: ${err.message}</div>`;
+            }
+        }
+
+        window.setAlltimeCategory = function(cat) {
+            alltimeCategory = cat;
+            alltimeOffset = 0;
+            renderTabs('alltimeCategoryTabs', CATEGORIES, alltimeCategory, 'setAlltimeCategory');
+            loadAlltimeLeaderboard();
+        };
+
+        window.alltimePrevPage = function() {
+            alltimeOffset = Math.max(0, alltimeOffset - PAGE_SIZE);
+            loadAlltimeLeaderboard();
+        };
+
+        window.alltimeNextPage = function() {
+            alltimeOffset += PAGE_SIZE;
+            loadAlltimeLeaderboard();
+        };
+
+        // Initial render
+        renderTabs('dailyCategoryTabs', CATEGORIES, dailyCategory, 'setDailyCategory');
+        renderTabs('alltimeCategoryTabs', CATEGORIES, alltimeCategory, 'setAlltimeCategory');
+        loadDailyLeaderboard();
+        loadAlltimeLeaderboard();
     </script>
     <script>
         function toggleTheme() {
@@ -175,6 +266,64 @@
                 btn.classList.remove('open');
             }
         });
+    </script>
+    <script>
+    (function() {
+        var tip = document.createElement('div');
+        tip.className = 'cr-tooltip';
+        tip.innerHTML = '<div class="cr-tooltip-body"></div>';
+        document.body.appendChild(tip);
+        var body = tip.querySelector('.cr-tooltip-body');
+        var showTimeout, typeTimer, fullText = '', charIdx = 0;
+
+        function stopTyping() {
+            clearInterval(typeTimer);
+            typeTimer = null;
+        }
+        function startTyping(text) {
+            stopTyping();
+            fullText = text;
+            charIdx = 0;
+            body.innerHTML = '<span class="cr-cursor"></span>';
+            typeTimer = setInterval(function() {
+                if (charIdx >= fullText.length) { stopTyping(); return; }
+                var cursor = body.querySelector('.cr-cursor');
+                if (cursor) cursor.remove();
+                body.insertAdjacentText('beforeend', fullText[charIdx]);
+                body.insertAdjacentHTML('beforeend', '<span class="cr-cursor"></span>');
+                charIdx++;
+            }, 18);
+        }
+        document.addEventListener('mouseover', function(e) {
+            var el = e.target.closest('[data-tooltip]');
+            if (!el) return;
+            clearTimeout(showTimeout);
+            var text = el.getAttribute('data-tooltip');
+            tip.style.left = e.clientX + 14 + 'px';
+            tip.style.top = e.clientY + 14 + 'px';
+            showTimeout = setTimeout(function() {
+                tip.classList.add('visible');
+                startTyping(text);
+            }, 80);
+        });
+        document.addEventListener('mousemove', function(e) {
+            if (!tip.classList.contains('visible') && !showTimeout) return;
+            var x = e.clientX + 14, y = e.clientY + 14;
+            if (x + 290 > window.innerWidth) x = e.clientX - 290;
+            if (y + 80 > window.innerHeight) y = e.clientY - 80;
+            tip.style.left = x + 'px';
+            tip.style.top = y + 'px';
+        });
+        document.addEventListener('mouseout', function(e) {
+            var el = e.target.closest('[data-tooltip]');
+            if (!el) return;
+            clearTimeout(showTimeout);
+            showTimeout = null;
+            stopTyping();
+            tip.classList.remove('visible');
+            body.innerHTML = '';
+        });
+    })();
     </script>
 </body>
 </html>

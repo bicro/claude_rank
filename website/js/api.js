@@ -9,8 +9,10 @@ async function apiFetch(path) {
     return resp.json();
 }
 
-export async function getLeaderboard(category, scope = 'individual', limit = 50, offset = 0) {
-    return apiFetch(`/api/leaderboard/${category}?scope=${scope}&limit=${limit}&offset=${offset}`);
+export async function getLeaderboard(category, period = 'alltime', limit = 50, offset = 0, date = null) {
+    let url = `/api/leaderboard/${category}?period=${period}&limit=${limit}&offset=${offset}`;
+    if (date) url += `&date=${date}`;
+    return apiFetch(url);
 }
 
 export async function getUserProfile(userHash) {
@@ -77,22 +79,79 @@ export function formatNumber(n) {
 
 export function getCategoryLabel(cat) {
     const labels = {
-        tokens: 'Token Burning',
-        messages: 'Messages + Sessions',
-        tools: 'Tool Calls',
-        uniqueness: 'Prompt Uniqueness',
-        weighted: 'Weighted Score',
-        cost: 'Estimated Spend',
+        tokens: 'Token Spend',
+        concurrent_agents: 'Concurrent Agents',
+        agent_hours: 'Agent Hours',
+        concurrency_time: 'Concurrency Time',
+        consistency: 'Consistency',
     };
     return labels[cat] || cat;
 }
 
 export function getCategoryIcon(cat) {
-    const icons = { tokens: '\u{1f525}', messages: '\u{1f4ac}', tools: '\u{1f527}', uniqueness: '\u{2728}', weighted: '\u{1f3af}', cost: '\u{1f4b0}' };
+    const icons = {
+        tokens: '\u{1f525}',
+        concurrent_agents: '\u{26a1}',
+        agent_hours: '\u{23f1}\u{fe0f}',
+        concurrency_time: '\u{1f500}',
+        consistency: '\u{1f4c5}',
+    };
     return icons[cat] || '';
 }
 
-export const CATEGORIES = ['cost', 'tokens', 'messages', 'tools', 'uniqueness', 'weighted'];
+export const CATEGORIES = ['tokens', 'concurrent_agents', 'agent_hours', 'concurrency_time', 'consistency'];
+
+export function getCategoryTooltip(cat) {
+    const tips = {
+        tokens: 'Total tokens consumed across all Claude models, with estimated dollar cost based on per-model pricing.',
+        concurrent_agents: 'Peak number of Claude Code sessions running simultaneously in a single hour.',
+        agent_hours: 'Total minutes of active Claude Code agent time, converted to hours.',
+        concurrency_time: 'Minutes spent running 2 or more Claude Code sessions at the same time.',
+        consistency: 'Current daily usage streak \u2014 consecutive days with at least one sync.',
+    };
+    return tips[cat] || '';
+}
+
+export function formatAgentHours(mins) {
+    const h = mins / 60;
+    if (h >= 100) return h.toFixed(0) + 'h';
+    if (h >= 10) return h.toFixed(1) + 'h';
+    return h.toFixed(1) + 'h';
+}
+
+export function formatConcurrencyTime(mins) {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h > 0) return h + 'h ' + m + 'm';
+    return m + 'm';
+}
+
+export function formatConcurrentAgents(n) {
+    return n + '\u{00d7}';
+}
+
+export function formatConsistency(days) {
+    return days + (days === 1 ? ' day' : ' days');
+}
+
+export function formatLeaderboardValue(category, value, cost) {
+    if (category === 'tokens') {
+        return formatNumber(value);
+    }
+    if (category === 'concurrent_agents') return formatConcurrentAgents(value);
+    if (category === 'agent_hours') return formatAgentHours(value);
+    if (category === 'concurrency_time') return formatConcurrencyTime(value);
+    if (category === 'consistency') return formatConsistency(value);
+    return formatNumber(value);
+}
+
+export function formatLeaderboardValueHtml(category, value, cost) {
+    const main = formatLeaderboardValue(category, value, cost);
+    if (category === 'tokens' && cost != null && cost > 0) {
+        return main + `<span class="value-sub">${formatCost(cost)}</span>`;
+    }
+    return main;
+}
 
 export const TIERS = [
     { id: 'bronze',   name: 'Bronze',   icon: '\u{1f944}', minScore: 0,    color: '#cd7f32', bg: 'rgba(205,127,50,0.15)' },
