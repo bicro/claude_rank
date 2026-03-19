@@ -132,23 +132,23 @@
                         ${avatarHtml}
                         <div class="profile-info">
                             <h2>${escHtml(displayName)}${socialIconHtml}
-                                <span class="tier-badge tier-${tier.tier.toLowerCase()}">${tierObj.icon} ${tier.tier}</span>
+                                <span class="tier-badge tier-${tier.tier.toLowerCase()}" data-tooltip="Tier is based on your weighted score. Progress to ${tier.next_tier || 'max tier'}: ${Math.round(tier.progress || 0)}%.">${tierObj.icon} ${tier.tier}</span>
                             </h2>
                             <div class="meta">
                                 Joined ${new Date(profile.created_at).toLocaleDateString()}
                                 ${profile.team_hash ? ` &middot; Team: <a href="/team.html?hash=${profile.team_hash}">${profile.team_hash}</a>` : ''}
                             </div>
-                            <div class="xp-display">
+                            <div class="xp-display" data-tooltip="XP is earned from tokens, messages, tool calls, and streaks. Level = floor(sqrt(points / 100)).">
                                 <div class="xp-bar"><div class="xp-fill" style="width:${xpProgress.toFixed(1)}%"></div></div>
                                 <div class="xp-text">Level ${currentLevel} &middot; ${formatNumber(m.total_points)} / ${formatNumber(nextLevelPoints)} XP</div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="profile-section-divider" style="padding-top:24px;"><span>Daily</span></div>
+                    <div class="profile-section-divider" style="padding-top:24px;" data-tooltip="Activity breakdown for a single day. Use the date arrows to navigate between days."><span>Daily</span></div>
 
                     <div class="profile-section-constrained" id="dailyCardSection">
-                        <div class="burn-clock-card-bg">
+                        <div class="burn-clock-card-bg" data-tooltip="Session burn clock. Each bar is one hour of the day. Height = tokens burned, color intensity = activity level. Overlapping bars show concurrent sessions.">
                             <div class="burn-clock-card-date-nav" id="cardDateNav">
                                 <button class="date-nav-btn" id="dayPrev" title="Previous day">&#9664;</button>
                                 <span class="date-label" id="dayLabel">Today</span>
@@ -160,43 +160,43 @@
                         <div class="copy-feedback" id="concurrencyFeedback">Copied to clipboard!</div>
                     </div>
 
-                    <div class="profile-section-divider"><span>Lifetime</span></div>
+                    <div class="profile-section-divider" data-tooltip="Cumulative stats across all time since this account was created."><span>Lifetime</span></div>
 
                     <div class="profile-stats-below">
-                        <div class="stat-category">
+                        <div class="stat-category" data-tooltip="Estimated cost based on per-model token pricing. Includes all input and output tokens across Claude models.">
                             <div class="stat-category-header">
                                 <div class="stat-category-value" data-raw-cost="${m.estimated_spend || 0}">0</div>
                                 <div class="stat-category-label">Total Estimated Spend</div>
                             </div>
                             <div class="stat-category-items">
-                                <div class="stat-card">
+                                <div class="stat-card" data-tooltip="Total input + output tokens consumed across all Claude models.">
                                     <div class="label">Total Tokens</div>
                                     <div class="value" data-raw="${m.total_tokens || 0}">0</div>
                                     ${rankDisplay(ranks.tokens)}
                                 </div>
-                                <div class="stat-card">
+                                <div class="stat-card" data-tooltip="Total messages sent to Claude across all sessions.">
                                     <div class="label">Messages</div>
                                     <div class="value" data-raw="${m.total_messages || 0}">0</div>
                                     ${rankDisplay(ranks.messages)}
                                 </div>
-                                <div class="stat-card">
+                                <div class="stat-card" data-tooltip="Total tool calls executed by Claude Code agents (file edits, bash commands, etc).">
                                     <div class="label">Tool Calls</div>
                                     <div class="value" data-raw="${m.total_tool_calls || 0}">0</div>
                                     ${rankDisplay(ranks.tools)}
                                 </div>
                             </div>
                         </div>
-                        <div class="stat-category">
+                        <div class="stat-category" data-tooltip="Peak number of Claude Code sessions running at the same time today.">
                             <div class="stat-category-header">
                                 <div class="stat-category-value" data-raw="${m.max_concurrent || 0}">${m.max_concurrent ? '0' : '\u2014'}</div>
                                 <div class="stat-category-label">Max Concurrent Agents</div>
                             </div>
                             <div class="stat-category-items">
-                                <div class="stat-card">
+                                <div class="stat-card" data-tooltip="Total number of Claude Code sessions started.">
                                     <div class="label">Sessions</div>
                                     <div class="value" data-raw="${m.total_sessions || 0}">0</div>
                                 </div>
-                                <div class="stat-card">
+                                <div class="stat-card" data-tooltip="Minutes spent running 2 or more Claude Code sessions simultaneously.">
                                     <div class="label">Concurrent Mins</div>
                                     <div class="value" data-raw-mins="${m.concurrent_mins || 0}">${m.concurrent_mins > 0 ? '0' : '\u2014'}</div>
                                 </div>
@@ -218,11 +218,11 @@
 
                     ${history.length > 0 ? `
                     <div class="profile-section-constrained profile-charts">
-                        <div class="chart-container">
+                        <div class="chart-container" data-tooltip="Cumulative token count over the last 30 days. Shows how fast you're burning through tokens.">
                             <h3>Token Growth (Last 30 Days)</h3>
                             <canvas id="tokenChart"></canvas>
                         </div>
-                        <div class="chart-container">
+                        <div class="chart-container" data-tooltip="Daily message count over the last 30 days. Each bar is one day's total messages.">
                             <h3>Messages Over Time</h3>
                             <canvas id="messageChart"></canvas>
                         </div>
@@ -753,6 +753,15 @@
                     s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
                     s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
 
+                    // Tooltip hitboxes
+                    s += `<rect x="30" y="${heroY - 80}" width="${cardW - 60}" height="${pillY + statsPillH - heroY + 90}" fill="transparent" data-tooltip="Total tokens burned today with estimated dollar cost based on per-model pricing." style="cursor:default"/>`;
+                    s += `<rect x="30" y="${gridLabelY - 16}" width="${cardW - 60}" height="${xAxisY - gridLabelY + 24}" fill="transparent" data-tooltip="Each column is one hour (local time). Each row is a concurrent agent slot. Color intensity shows activity level within that hour." style="cursor:default"/>`;
+                    for (let i = 0; i < 3; i++) {
+                        const sx = 30 + colW * i;
+                        const tips = ['Peak number of Claude Code sessions running simultaneously in a single hour today.', 'Total minutes of active agent time across all sessions, converted to hours.', 'Minutes spent running 2 or more sessions at the same time today.'];
+                        s += `<rect x="${sx}" y="${statsY}" width="${colW}" height="${statsHeight}" fill="transparent" data-tooltip="${tips[i]}" style="cursor:default"/>`;
+                    }
+
                     svg.innerHTML = s;
                 }
 
@@ -920,6 +929,15 @@
 
                     s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#2a2a2a" stroke-width="1"/>`;
                     s += `<text x="${cardW / 2}" y="${footerY}" fill="#888888" font-size="10" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
+
+                    // Tooltip hitboxes
+                    s += `<rect x="30" y="${heroY - 80}" width="${cardW - 60}" height="${pillY + statsPillH - heroY + 90}" fill="transparent" data-tooltip="Total tokens burned today with estimated dollar cost based on per-model pricing." style="cursor:default"/>`;
+                    s += `<rect x="30" y="${gridLabelY - 16}" width="${cardW - 60}" height="${xAxisY - gridLabelY + 24}" fill="transparent" data-tooltip="Each column is one hour (local time). Each row is a concurrent agent slot. Color intensity shows activity level within that hour." style="cursor:default"/>`;
+                    for (let i = 0; i < 3; i++) {
+                        const sx = 30 + colW * i;
+                        const tips = ['Peak number of Claude Code sessions running simultaneously in a single hour today.', 'Total minutes of active agent time across all sessions, converted to hours.', 'Minutes spent running 2 or more sessions at the same time today.'];
+                        s += `<rect x="${sx}" y="${statsY}" width="${colW}" height="${statsHeight}" fill="transparent" data-tooltip="${tips[i]}" style="cursor:default"/>`;
+                    }
 
                     svg.innerHTML = s;
                 }
@@ -1335,6 +1353,64 @@
                 btn.classList.remove('open');
             }
         });
+    </script>
+    <script>
+    (function() {
+        var tip = document.createElement('div');
+        tip.className = 'cr-tooltip';
+        tip.innerHTML = '<div class="cr-tooltip-body"></div>';
+        document.body.appendChild(tip);
+        var body = tip.querySelector('.cr-tooltip-body');
+        var showTimeout, typeTimer, fullText = '', charIdx = 0;
+
+        function stopTyping() {
+            clearInterval(typeTimer);
+            typeTimer = null;
+        }
+        function startTyping(text) {
+            stopTyping();
+            fullText = text;
+            charIdx = 0;
+            body.innerHTML = '<span class="cr-cursor"></span>';
+            typeTimer = setInterval(function() {
+                if (charIdx >= fullText.length) { stopTyping(); return; }
+                var cursor = body.querySelector('.cr-cursor');
+                if (cursor) cursor.remove();
+                body.insertAdjacentText('beforeend', fullText[charIdx]);
+                body.insertAdjacentHTML('beforeend', '<span class="cr-cursor"></span>');
+                charIdx++;
+            }, 18);
+        }
+        document.addEventListener('mouseover', function(e) {
+            var el = e.target.closest('[data-tooltip]');
+            if (!el) return;
+            clearTimeout(showTimeout);
+            var text = el.getAttribute('data-tooltip');
+            tip.style.left = e.clientX + 14 + 'px';
+            tip.style.top = e.clientY + 14 + 'px';
+            showTimeout = setTimeout(function() {
+                tip.classList.add('visible');
+                startTyping(text);
+            }, 80);
+        });
+        document.addEventListener('mousemove', function(e) {
+            if (!tip.classList.contains('visible') && !showTimeout) return;
+            var x = e.clientX + 14, y = e.clientY + 14;
+            if (x + 290 > window.innerWidth) x = e.clientX - 290;
+            if (y + 80 > window.innerHeight) y = e.clientY - 80;
+            tip.style.left = x + 'px';
+            tip.style.top = y + 'px';
+        });
+        document.addEventListener('mouseout', function(e) {
+            var el = e.target.closest('[data-tooltip]');
+            if (!el) return;
+            clearTimeout(showTimeout);
+            showTimeout = null;
+            stopTyping();
+            tip.classList.remove('visible');
+            body.innerHTML = '';
+        });
+    })();
     </script>
 </body>
 </html>
