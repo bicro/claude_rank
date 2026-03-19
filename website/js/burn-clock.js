@@ -75,7 +75,7 @@ export function renderActivityTimeline(svg, hourlyData, isDark) {
     const gridTopY = margin;
     const cardH = gridTopY + gridHeight + margin;
 
-    const emptyCell = isDark ? '#1e1e1e' : '#e0ddd9';
+    const emptyCell = isDark ? '#232323' : '#e0ddd9';
     const getColor = isDark
         ? (i) => { const r1=245,g1=170,b1=100,r2=210,g2=70,b2=15; return `rgb(${Math.round(r1+(r2-r1)*i)},${Math.round(g1+(g2-g1)*i)},${Math.round(b1+(b2-b1)*i)})`; }
         : getV5Color;
@@ -285,9 +285,9 @@ export function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
     svg.setAttribute('viewBox', `0 0 ${cardW} ${cardH}`);
 
     let s = '';
-    s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#0d0d0d"/>`;
-    s += `<text x="30" y="${topY}" fill="#888888" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-    s += `<text x="30" y="${usernameY}" fill="#e0e0e0" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
+    s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#111111"/>`;
+    s += `<text x="30" y="${topY}" fill="#999999" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
+    s += `<text x="30" y="${usernameY}" fill="#ececec" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
 
     const rankPillH = 28, rankPillW = 230;
     const rankPillX = cardW - 30 - rankPillW, rankPillY = usernameY - 20;
@@ -296,34 +296,34 @@ export function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
     s += `<text id="v6RankText" x="${rankPillX + rankPillW / 2}" y="${rankPillY + rankPillH / 2 + 4}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.5"></text>`;
     s += `</g>`;
 
-    s += `<text class="card-date-text" x="${cardW / 2}" y="${dateY}" fill="#888888" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle" opacity="0">${dateDisplay}</text>`;
+    s += `<text class="card-date-text" x="${cardW / 2}" y="${dateY}" fill="#999999" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle" opacity="0">${dateDisplay}</text>`;
 
     const heroTokens = formatNumber(cardData.dayTokens || 0);
-    s += `<text id="v5HeroTokens" x="${cardW / 2}" y="${heroY}" fill="#e0e0e0" font-size="96" font-family="inherit" font-weight="800" text-anchor="middle">${heroTokens}</text>`;
-    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#888888" font-size="13" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
+    s += `<text id="v5HeroTokens" x="${cardW / 2}" y="${heroY}" fill="#ececec" font-size="96" font-family="inherit" font-weight="800" text-anchor="middle">${heroTokens}</text>`;
+    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#999999" font-size="13" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
 
     const heroCost = cardData.costText || '$0';
     const statsPillW = 240, statsPillH = 30, statsPillX = (cardW - statsPillW) / 2;
-    s += `<rect x="${statsPillX}" y="${pillY}" width="${statsPillW}" height="${statsPillH}" rx="15" ry="15" fill="#1e1e1e" stroke="none"/>`;
+    s += `<rect x="${statsPillX}" y="${pillY}" width="${statsPillW}" height="${statsPillH}" rx="15" ry="15" fill="#232323" stroke="none"/>`;
     s += `<text x="${cardW / 2}" y="${pillY + statsPillH / 2 + 5}" fill="#999999" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
     s += `<tspan id="v5CostValue" fill="#E8692D">${heroCost}</tspan> EST. TOKEN VALUE</text>`;
 
-    s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#2a2a2a" stroke-width="1"/>`;
-    s += `<text x="30" y="${gridLabelY}" fill="#888888" font-size="11" font-family="inherit" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
+    s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#333333" stroke-width="1"/>`;
+    s += `<text x="30" y="${gridLabelY}" fill="#999999" font-size="11" font-family="inherit" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
 
     const legendW = 80, legendH = 10;
     const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
     const legendY = gridLabelY - 10;
     s += `<defs><linearGradient id="v6LegendGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgb(245,170,100)"/><stop offset="100%" stop-color="rgb(210,70,15)"/></linearGradient></defs>`;
-    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#888888" font-size="9" font-family="inherit" font-weight="600" text-anchor="end">HIGH</text>`;
+    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#999999" font-size="9" font-family="inherit" font-weight="600" text-anchor="end">HIGH</text>`;
     const highTextW = 28;
     const legendX = gridRightEdge - highTextW - legendW;
     s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="3" ry="3" fill="url(#v6LegendGrad)"/>`;
-    s += `<text x="${legendX - 6}" y="${legendY + legendH - 1}" fill="#888888" font-size="9" font-family="inherit" font-weight="600" text-anchor="end">LOW</text>`;
+    s += `<text x="${legendX - 6}" y="${legendY + legendH - 1}" fill="#999999" font-size="9" font-family="inherit" font-weight="600" text-anchor="end">LOW</text>`;
 
     for (let row = 0; row < maxRows; row++) {
         const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 4;
-        s += `<text x="30" y="${y}" fill="#888888" font-size="10" font-family="inherit" font-weight="600">A${row + 1}</text>`;
+        s += `<text x="30" y="${y}" fill="#999999" font-size="10" font-family="inherit" font-weight="600">A${row + 1}</text>`;
     }
 
     for (let col = 0; col < 24; col++) {
@@ -331,7 +331,7 @@ export function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
         for (let row = 0; row < maxRows; row++) {
             const x = gridMarginLeft + col * (cellW + gap);
             const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
-            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#1e1e1e"/>`;
+            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#232323"/>`;
         }
         for (const session of data.sessions) {
             if (session.index > maxRows) continue;
@@ -345,11 +345,11 @@ export function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
 
     const xAxisY = gridTopY + gridHeight + 18;
     const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
-    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#888888" font-size="10" font-family="inherit">${fmtHr(0)}</text>`;
-    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#888888" font-size="10" font-family="inherit">${fmtHr(12)}</text>`;
-    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#888888" font-size="10" font-family="inherit" text-anchor="end">${fmtHr(23)}</text>`;
+    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#999999" font-size="10" font-family="inherit">${fmtHr(0)}</text>`;
+    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#999999" font-size="10" font-family="inherit">${fmtHr(12)}</text>`;
+    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#999999" font-size="10" font-family="inherit" text-anchor="end">${fmtHr(23)}</text>`;
 
-    s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#2a2a2a" stroke-width="1"/>`;
+    s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#333333" stroke-width="1"/>`;
 
     let concurrentMins = 0;
     for (const d of hourlyData) {
@@ -362,20 +362,20 @@ export function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
     const colW = (cardW - 60) / 3;
     const statsLabels = ['CONCURRENT AGENTS', 'TOTAL AGENT HOURS', 'CONCURRENCY TIME'];
     const statsValues = [maxSessions + '\u00d7', devHours + 'h', concDisplay];
-    const statsColors = ['#E8692D', '#e0e0e0', '#e0e0e0'];
+    const statsColors = ['#E8692D', '#ececec', '#ececec'];
 
     for (let i = 0; i < 3; i++) {
         const cx = 30 + colW * i + colW / 2;
-        s += `<text x="${cx}" y="${statsY + 18}" fill="#888888" font-size="10" font-family="inherit" font-weight="700" letter-spacing="1" text-anchor="middle">${statsLabels[i]}</text>`;
+        s += `<text x="${cx}" y="${statsY + 18}" fill="#999999" font-size="10" font-family="inherit" font-weight="700" letter-spacing="1" text-anchor="middle">${statsLabels[i]}</text>`;
         s += `<text id="v5Stat${i}" x="${cx}" y="${statsY + 50}" fill="${statsColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
         if (i < 2) {
             const divX = 30 + colW * (i + 1);
-            s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#2a2a2a" stroke-width="1"/>`;
+            s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#333333" stroke-width="1"/>`;
         }
     }
 
-    s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#2a2a2a" stroke-width="1"/>`;
-    s += `<text x="${cardW / 2}" y="${footerY}" fill="#888888" font-size="10" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
+    s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#333333" stroke-width="1"/>`;
+    s += `<text x="${cardW / 2}" y="${footerY}" fill="#999999" font-size="10" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
 
     svg.innerHTML = s;
 }
