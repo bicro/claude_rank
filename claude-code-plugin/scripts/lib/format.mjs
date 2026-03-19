@@ -60,27 +60,37 @@ export function fmtPercentile(pct) {
   return `top ${pct.toFixed(1)}%`;
 }
 
-/** Estimate cost from tokens (rough: $3/MTok input, $15/MTok output avg) */
+/** Pricing per million tokens (matches server pricing table) */
+const PRICING = [
+  { match: "opus-4-6",  input: 5,    output: 25,   cacheRead: 0.50, cacheWrite: 6.25 },
+  { match: "opus-4-5",  input: 5,    output: 25,   cacheRead: 0.50, cacheWrite: 6.25 },
+  { match: "opus-4",    input: 15,   output: 75,   cacheRead: 1.50, cacheWrite: 18.75 },
+  { match: "opus-3",    input: 15,   output: 75,   cacheRead: 1.50, cacheWrite: 18.75 },
+  { match: "sonnet",    input: 3,    output: 15,   cacheRead: 0.30, cacheWrite: 3.75 },
+  { match: "haiku-4",   input: 1,    output: 5,    cacheRead: 0.10, cacheWrite: 1.25 },
+  { match: "haiku-3-5", input: 0.80, output: 4,    cacheRead: 0.08, cacheWrite: 1 },
+  { match: "haiku-3",   input: 0.25, output: 1.25, cacheRead: 0.03, cacheWrite: 0.30 },
+];
+const FALLBACK_PRICE = { input: 3, output: 15, cacheRead: 0.30, cacheWrite: 3.75 };
+
+function getPrice(model) {
+  const m = model.toLowerCase();
+  return PRICING.find(p => m.includes(p.match)) || FALLBACK_PRICE;
+}
+
+/** Estimate cost from tokens */
 export function estimateCost(modelUsage) {
   let cost = 0;
   for (const [model, usage] of Object.entries(modelUsage || {})) {
-    const isOpus = model.includes("opus");
-    const isSonnet = model.includes("sonnet");
-    const isHaiku = model.includes("haiku");
+    const p = getPrice(model);
 
-    // Approximate pricing per million tokens
-    let inputRate, outputRate;
-    if (isOpus) { inputRate = 15; outputRate = 75; }
-    else if (isSonnet) { inputRate = 3; outputRate = 15; }
-    else if (isHaiku) { inputRate = 0.8; outputRate = 4; }
-    else { inputRate = 3; outputRate = 15; }
+    const inp = usage.inputTokens ?? usage.input_tokens ?? 0;
+    const out = usage.outputTokens ?? usage.output_tokens ?? 0;
+    const cacheRead = usage.cacheReadInputTokens ?? usage.cache_read_input_tokens ?? usage.cache_read ?? 0;
+    const cacheWrite = usage.cacheCreationInputTokens ?? usage.cache_creation_input_tokens ?? usage.cache_creation ?? 0;
 
-    const inp = (usage.inputTokens ?? usage.input_tokens ?? 0) +
-                (usage.cacheReadInputTokens ?? usage.cache_read_input_tokens ?? usage.cache_read ?? 0) * 0.1 +
-                (usage.cacheCreationInputTokens ?? usage.cache_creation_input_tokens ?? usage.cache_creation ?? 0) * 1.25;
-    const out = usage.outputTokens ?? usage.output_tokens ?? usage.output ?? 0;
-
-    cost += (inp / 1_000_000) * inputRate + (out / 1_000_000) * outputRate;
+    cost += (inp / 1e6) * p.input + (out / 1e6) * p.output +
+            (cacheRead / 1e6) * p.cacheRead + (cacheWrite / 1e6) * p.cacheWrite;
   }
   return `$${cost.toFixed(2)}`;
 }
