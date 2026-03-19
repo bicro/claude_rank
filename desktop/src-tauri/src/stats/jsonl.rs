@@ -705,22 +705,11 @@ fn compute_day_sessions(sessions: &[&SessionStats]) -> HashMap<String, Vec<DaySe
             }
         }
 
-        // Compute messages per date: user messages + unique assistant request_ids
+        // Compute messages per date: user prompts only
         let mut date_messages: HashMap<String, u64> = HashMap::new();
         for ts in &session.user_timestamps {
             let date = ts.format("%Y-%m-%d").to_string();
             *date_messages.entry(date).or_default() += 1;
-        }
-        // Count unique assistant request_ids per date
-        let mut date_request_ids: HashMap<String, HashSet<String>> = HashMap::new();
-        for entry in &session.assistant_entries {
-            if let (Some(ts), Some(ref rid)) = (entry.timestamp, &entry.request_id) {
-                let date = ts.format("%Y-%m-%d").to_string();
-                date_request_ids.entry(date).or_default().insert(rid.clone());
-            }
-        }
-        for (date, rids) in &date_request_ids {
-            *date_messages.entry(date.clone()).or_default() += rids.len() as u64;
         }
 
         // Build spans per date (one span per active segment, not merged)
@@ -847,21 +836,6 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
                 request_last.insert(rid.clone(), entry);
             } else {
                 no_rid_entries.push(entry);
-            }
-        }
-
-        // Count unique requestIds as assistant messages
-        total_messages += request_last.len() as u64;
-
-        // Count assistant messages per date (from requestId-deduplicated entries)
-        for entry in request_last.values() {
-            if let Some(ts) = entry.timestamp {
-                let date = ts.format("%Y-%m-%d").to_string();
-                *daily_messages.entry(date.clone()).or_default() += 1;
-
-                if session.is_main {
-                    daily_sessions.entry(date).or_default().insert(idx);
-                }
             }
         }
 

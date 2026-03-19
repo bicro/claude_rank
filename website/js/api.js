@@ -84,6 +84,7 @@ export function getCategoryLabel(cat) {
         agent_hours: 'Agent Hours',
         concurrency_time: 'Concurrency Time',
         consistency: 'Consistency',
+        messages: 'Messages',
     };
     return labels[cat] || cat;
 }
@@ -95,11 +96,12 @@ export function getCategoryIcon(cat) {
         agent_hours: '\u{23f1}\u{fe0f}',
         concurrency_time: '\u{1f500}',
         consistency: '\u{1f4c5}',
+        messages: '\u{1f4ac}',
     };
     return icons[cat] || '';
 }
 
-export const CATEGORIES = ['tokens', 'concurrent_agents', 'agent_hours', 'concurrency_time', 'consistency'];
+export const CATEGORIES = ['tokens', 'concurrent_agents', 'agent_hours', 'concurrency_time', 'consistency', 'messages'];
 
 export function getCategoryTooltip(cat) {
     const tips = {
@@ -108,6 +110,7 @@ export function getCategoryTooltip(cat) {
         agent_hours: 'Total minutes of active Claude Code agent time, converted to hours.',
         concurrency_time: 'Minutes spent running 2 or more Claude Code sessions at the same time.',
         consistency: 'Current daily usage streak \u2014 consecutive days with at least one sync.',
+        messages: 'Total prompts you sent to Claude across all sessions.',
     };
     return tips[cat] || '';
 }
@@ -134,6 +137,10 @@ export function formatConsistency(days) {
     return days + (days === 1 ? ' day' : ' days');
 }
 
+export function formatMessages(n) {
+    return formatNumber(n);
+}
+
 export function formatLeaderboardValue(category, value, cost) {
     if (category === 'tokens') {
         return formatNumber(value);
@@ -142,6 +149,7 @@ export function formatLeaderboardValue(category, value, cost) {
     if (category === 'agent_hours') return formatAgentHours(value);
     if (category === 'concurrency_time') return formatConcurrencyTime(value);
     if (category === 'consistency') return formatConsistency(value);
+    if (category === 'messages') return formatMessages(value);
     return formatNumber(value);
 }
 

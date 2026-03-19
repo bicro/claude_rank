@@ -1533,7 +1533,7 @@ async function handleSync(request: Request): Promise<Response> {
 
 // ─── Leaderboard Handler ───────────────────────────────────────────────────
 
-const VALID_CATEGORIES = ["tokens", "concurrent_agents", "agent_hours", "concurrency_time", "consistency"];
+const VALID_CATEGORIES = ["tokens", "concurrent_agents", "agent_hours", "concurrency_time", "consistency", "messages"];
 
 async function handleGetLeaderboard(category: string, url: URL): Promise<Response> {
   if (!VALID_CATEGORIES.includes(category)) {
@@ -1615,6 +1615,19 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
         LIMIT ? OFFSET ?`
       ).all(dateParam, limit, offset) as any[];
       countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.concurrent_mins > 0`;
+      countParams = [dateParam];
+    } else if (category === "messages") {
+      rows = await db.query(
+        `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+          mh.daily_messages as value, um.weighted_score
+        FROM metrics_history mh
+        JOIN users u ON mh.user_hash = u.user_hash
+        JOIN user_metrics um ON u.user_hash = um.user_hash
+        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.daily_messages > 0
+        ORDER BY mh.daily_messages DESC
+        LIMIT ? OFFSET ?`
+      ).all(dateParam, limit, offset) as any[];
+      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.daily_messages > 0`;
       countParams = [dateParam];
     } else {
       // consistency — same for daily and alltime
@@ -1719,6 +1732,16 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
       WHERE u.linked_to IS NULL
       GROUP BY u.user_hash HAVING SUM(mh.concurrent_mins) > 0
     ) sub`;
+  } else if (category === "messages") {
+    rows = await db.query(
+      `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+        um.total_messages as value, um.weighted_score
+      FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
+      WHERE u.linked_to IS NULL
+      ORDER BY um.total_messages DESC
+      LIMIT ? OFFSET ?`
+    ).all(limit, offset) as any[];
+    countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL`;
   } else {
     // consistency
     rows = await db.query(
