@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { loadOrCreateIdentity, getLookupHash, CLAUDE_RANK_DIR } from "./lib/identity.mjs";
 import { fetchUserProfile } from "./lib/api.mjs";
-import { fmtTokens, fmtNum, tierEmoji, estimateCost } from "./lib/format.mjs";
+import { fmtTokens, estimateCost } from "./lib/format.mjs";
 
 const PROFILE_CACHE = join(CLAUDE_RANK_DIR, "profile-cache.json");
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -118,25 +118,20 @@ async function main() {
   }
 
   const m = profile.metrics || profile;
-  const level = m.level ?? 0;
-  const emoji = tierEmoji(level);
   const rank = profile.ranks?.weighted?.rank;
   const streak = m.current_streak ?? 0;
-  const points = fmtNum(m.total_points ?? 0);
 
   const tokens = todayTokens();
   const cost = todayCost();
+  const tokenStr = tokens > 0 ? fmtTokens(tokens) : "0";
 
-  // Line 1: Identity — level, rank, streak
   const parts = [];
-  parts.push(`${DIM}──${RESET} ${BOLD}${ORANGE}Claude Rank${RESET} ${DIM}──${RESET} ${emoji} ${BOLD}Lv.${level}${RESET}`);
+  parts.push(`${DIM}──${RESET} ${BOLD}${ORANGE}Claude Rank${RESET} ${DIM}──${RESET}`);
   if (rank) parts.push(`${CYAN}#${rank} Globally${RESET}`);
   if (streak > 0) parts.push(`🔥${streak}d`);
+  parts.push(`${ORANGE}⚡ ${tokenStr}${RESET} tokens today`);
+  parts.push(`~${cost}`);
   console.log(parts.join(` ${DIM}│${RESET} `));
-
-  // Line 2: Today's usage — tokens burned, est. cost, points
-  const tokenStr = tokens > 0 ? fmtTokens(tokens) : "0";
-  console.log(`${ORANGE}⚡ ${tokenStr}${RESET} tokens today ${DIM}│${RESET} ~${cost} ${DIM}│${RESET} ${DIM}${points} pts${RESET}`);
 }
 
 main();
