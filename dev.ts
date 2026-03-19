@@ -22,5 +22,9 @@ function cleanup() {
 process.on("SIGINT", cleanup);
 process.on("SIGTERM", cleanup);
 
-await Promise.race([server.exited, desktop.exited]);
+const result = await Promise.race([
+  server.exited.then((code) => ({ process: "server", code })),
+  desktop.exited.then((code) => ({ process: "desktop", code })),
+]);
+console.log(`[dev] ${result.process} exited with code ${result.code}`);
 cleanup();
