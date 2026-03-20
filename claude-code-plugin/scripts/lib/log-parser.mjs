@@ -8,27 +8,13 @@ const CLAUDE_DIR = join(homedir(), ".claude", "projects");
 const STATS_CACHE_PATH = join(CLAUDE_RANK_DIR, "stats-cache.json");
 
 /**
- * Load stats from stats-cache.json if available (written by desktop app),
- * otherwise parse JSONL logs from ~/.claude/projects/.
+ * Always parse JSONL logs and write fresh stats-cache.json.
+ * Returns the computed stats object.
  */
 export function loadStats() {
-  // Try stats-cache.json first (from desktop app)
-  try {
-    const data = readFileSync(STATS_CACHE_PATH, "utf-8");
-    const cache = JSON.parse(data);
-    // Desktop app wraps stats in a "stats" key
-    const stats = cache.stats || cache;
-    if (stats.totalMessages || stats.totalSessions || stats.modelUsage) {
-      return stats;
-    }
-  } catch {
-    // No cache — fall through to log parsing
-  }
-
-  // Parse JSONL logs
   const stats = parseAllLogs();
 
-  // Save to cache for next time
+  // Always write fresh cache
   try {
     writeFileSync(STATS_CACHE_PATH, JSON.stringify(stats, null, 2));
   } catch {
@@ -56,6 +42,8 @@ function parseAllLogs() {
     totalIdleTimeSecs: 0,
     daySessions: {},
     concurrencyHistogram: {},
+    promptHashes: [],
+    toolNames: new Set(),
   };
 
   const dailyMap = {};    // date -> { messageCount, sessionCount, toolCallCount }
@@ -65,7 +53,7 @@ function parseAllLogs() {
   try {
     jsonlFiles = findJsonlFiles(CLAUDE_DIR);
   } catch {
-    return stats; // No claude dir
+    return finalizeStats(stats, dailyMap, dailyTokens);
   }
 
   for (const filePath of jsonlFiles) {
@@ -76,6 +64,10 @@ function parseAllLogs() {
     }
   }
 
+  return finalizeStats(stats, dailyMap, dailyTokens);
+}
+
+function finalizeStats(stats, dailyMap, dailyTokens) {
   // Convert daily maps to arrays
   stats.dailyActivity = Object.entries(dailyMap)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -90,7 +82,79 @@ function parseAllLogs() {
     stats.firstSessionDate = stats.dailyActivity[0].date;
   }
 
+  // Compute streak from daily activity dates
+  stats.currentStreak = computeStreak(stats.dailyActivity.map(d => d.date));
+
+  // Compute points and level
+  const { points, level } = computePointsAndLevel(stats);
+  stats.totalPoints = points;
+  stats.level = level;
+
+  // Convert toolNames Set to sorted array
+  stats.toolNames = [...stats.toolNames].sort();
+
   return stats;
+}
+
+/**
+ * Compute consecutive-day streak ending at today (or yesterday).
+ */
+function computeStreak(dates) {
+  if (dates.length === 0) return 0;
+
+  const dateSet = new Set(dates);
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+
+  // Start from today or yesterday
+  let current = new Date(today);
+  let currentStr = todayStr;
+
+  if (!dateSet.has(currentStr)) {
+    // Check yesterday
+    current.setDate(current.getDate() - 1);
+    currentStr = current.toISOString().slice(0, 10);
+    if (!dateSet.has(currentStr)) return 0;
+  }
+
+  let streak = 0;
+  while (dateSet.has(currentStr)) {
+    streak++;
+    current.setDate(current.getDate() - 1);
+    currentStr = current.toISOString().slice(0, 10);
+  }
+
+  return streak;
+}
+
+/**
+ * Compute points and level using weighted scoring (matches server formula).
+ * Points = weighted_score / 1000, Level = floor(log2(points + 1))
+ */
+function computePointsAndLevel(stats) {
+  let totalTokens = 0;
+  for (const usage of Object.values(stats.modelUsage || {})) {
+    totalTokens += (usage.inputTokens || 0) + (usage.outputTokens || 0) +
+                   (usage.cacheReadInputTokens || 0) + (usage.cacheCreationInputTokens || 0);
+  }
+
+  const totalMessages = stats.totalMessages || 0;
+  const totalSessions = stats.totalSessions || 0;
+  const totalToolCalls = (stats.dailyActivity || []).reduce((s, d) => s + (d.toolCallCount || 0), 0);
+  const totalActiveTimeSecs = stats.totalActiveTimeSecs || 0;
+
+  // Weighted score (matches server weights)
+  const weightedScore =
+    totalTokens * 1.0 +
+    totalMessages * 100 +
+    totalSessions * 500 +
+    totalToolCalls * 50 +
+    totalActiveTimeSecs * 2;
+
+  const points = Math.floor(weightedScore / 1000);
+  const level = points > 0 ? Math.floor(Math.log2(points + 1)) : 0;
+
+  return { points, level };
 }
 
 function findJsonlFiles(dir) {
@@ -158,11 +222,14 @@ function parseJsonlFile(filePath, stats, dailyMap, dailyTokens) {
     }
 
     if (type === "assistant" && msg) {
-      // Count tool uses
+      // Count tool uses and collect tool names
       if (Array.isArray(msg.content)) {
         for (const block of msg.content) {
           if (block.type === "tool_use") {
             sessionToolCalls++;
+            if (block.name) {
+              stats.toolNames.add(block.name);
+            }
             if (date) {
               if (!dailyMap[date]) dailyMap[date] = { messageCount: 0, sessionCount: 0, toolCallCount: 0 };
               dailyMap[date].toolCallCount++;
@@ -202,6 +269,12 @@ function parseJsonlFile(filePath, stats, dailyMap, dailyTokens) {
         }
       }
     }
+  }
+
+  // Compute prompt hash for this session
+  if (firstUserMsg) {
+    const hash = createHash("sha256").update(firstUserMsg).digest("hex");
+    stats.promptHashes.push(hash);
   }
 
   // Mark session in daily activity

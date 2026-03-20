@@ -1,13 +1,15 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, statSync } from "fs";
 import { join } from "path";
 import { loadOrCreateIdentity, getLookupHash, CLAUDE_RANK_DIR } from "./lib/identity.mjs";
 import { fetchUserProfile } from "./lib/api.mjs";
 import { fmtTokens, estimateCost } from "./lib/format.mjs";
+import { loadStats } from "./lib/log-parser.mjs";
 
 const PROFILE_CACHE = join(CLAUDE_RANK_DIR, "profile-cache.json");
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const STATS_CACHE_PATH = join(CLAUDE_RANK_DIR, "stats-cache.json");
+const STALE_THRESHOLD_MS = 90 * 1000; // 90 seconds
 
 // ── ANSI helpers ──
 const DIM = "\x1b[2m";
@@ -33,73 +35,81 @@ function saveCachedProfile(profile) {
   } catch {}
 }
 
-/** Compute today's tokens from hour_tokens in stats cache (matches desktop Rust logic) */
-function todayTokens() {
+/**
+ * Load stats from cache if fresh, otherwise fall back to parsing JSONL directly.
+ */
+function loadStatsData() {
+  // Try stats-cache.json (written by Stop hook after every turn)
   try {
-    const raw = readFileSync(STATS_CACHE_PATH, "utf-8");
-    const cache = JSON.parse(raw);
-    const stats = cache.stats || cache;
-    const hourTokens = stats.hourTokens || {};
+    const st = statSync(STATS_CACHE_PATH);
+    const ageMs = Date.now() - st.mtimeMs;
 
-    const now = new Date();
-    const localYear = now.getFullYear();
-    const localMonth = now.getMonth();
-    const localDate = now.getDate();
-
-    let total = 0;
-    for (let h = 0; h < 24; h++) {
-      const localHour = new Date(localYear, localMonth, localDate, h, 0, 0);
-      const utcDate = localHour.toISOString().slice(0, 10);
-      const utcHour = localHour.getUTCHours();
-      const key = `${utcDate}:${utcHour}`;
-      total += hourTokens[key] || 0;
+    if (ageMs < STALE_THRESHOLD_MS) {
+      const raw = readFileSync(STATS_CACHE_PATH, "utf-8");
+      const cache = JSON.parse(raw);
+      return cache.stats || cache;
     }
-    return total;
   } catch {
-    return 0;
+    // No cache or can't stat — fall through
+  }
+
+  // Fallback: parse JSONL directly (also writes fresh cache)
+  try {
+    return loadStats();
+  } catch {
+    return null;
   }
 }
 
+/** Compute today's tokens from hour_tokens in stats */
+function todayTokens(stats) {
+  const hourTokens = stats?.hourTokens || {};
+  const now = new Date();
+  const localYear = now.getFullYear();
+  const localMonth = now.getMonth();
+  const localDate = now.getDate();
+
+  let total = 0;
+  for (let h = 0; h < 24; h++) {
+    const localHour = new Date(localYear, localMonth, localDate, h, 0, 0);
+    const utcDate = localHour.toISOString().slice(0, 10);
+    const utcHour = localHour.getUTCHours();
+    const key = `${utcDate}:${utcHour}`;
+    total += hourTokens[key] || 0;
+  }
+  return total;
+}
+
 /** Estimate today's cost from today's model token usage */
-function todayCost() {
-  try {
-    const raw = readFileSync(STATS_CACHE_PATH, "utf-8");
-    const cache = JSON.parse(raw);
-    const stats = cache.stats || cache;
-    const dailyModelTokens = stats.dailyModelTokens || [];
-    const modelUsage = stats.modelUsage || {};
+function todayCost(stats) {
+  const dailyModelTokens = stats?.dailyModelTokens || [];
+  const modelUsage = stats?.modelUsage || {};
 
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
-    // Find today's entry
-    const todayEntry = dailyModelTokens.find(d => d.date === todayStr);
-    if (!todayEntry) return "$0";
+  const todayEntry = dailyModelTokens.find(d => d.date === todayStr);
+  if (!todayEntry) return "$0";
 
-    // Build a rough model usage for today only
-    // We don't have per-day breakdown by token type, so estimate from total ratios
-    const todayUsage = {};
-    for (const [model, tokens] of Object.entries(todayEntry.tokensByModel || {})) {
-      const total = modelUsage[model];
-      if (total) {
-        const allTok = (total.inputTokens || 0) + (total.outputTokens || 0) +
-                       (total.cacheReadInputTokens || 0) + (total.cacheCreationInputTokens || 0);
-        if (allTok > 0) {
-          const ratio = tokens / allTok;
-          todayUsage[model] = {
-            inputTokens: (total.inputTokens || 0) * ratio,
-            outputTokens: (total.outputTokens || 0) * ratio,
-            cacheReadInputTokens: (total.cacheReadInputTokens || 0) * ratio,
-            cacheCreationInputTokens: (total.cacheCreationInputTokens || 0) * ratio,
-          };
-        }
+  const todayUsage = {};
+  for (const [model, tokens] of Object.entries(todayEntry.tokensByModel || {})) {
+    const total = modelUsage[model];
+    if (total) {
+      const allTok = (total.inputTokens || 0) + (total.outputTokens || 0) +
+                     (total.cacheReadInputTokens || 0) + (total.cacheCreationInputTokens || 0);
+      if (allTok > 0) {
+        const ratio = tokens / allTok;
+        todayUsage[model] = {
+          inputTokens: (total.inputTokens || 0) * ratio,
+          outputTokens: (total.outputTokens || 0) * ratio,
+          cacheReadInputTokens: (total.cacheReadInputTokens || 0) * ratio,
+          cacheCreationInputTokens: (total.cacheCreationInputTokens || 0) * ratio,
+        };
       }
     }
-
-    return estimateCost(todayUsage);
-  } catch {
-    return "$0";
   }
+
+  return estimateCost(todayUsage);
 }
 
 async function main() {
@@ -121,8 +131,9 @@ async function main() {
   const rank = profile.ranks?.weighted?.rank;
   const streak = m.current_streak ?? 0;
 
-  const tokens = todayTokens();
-  const cost = todayCost();
+  const stats = loadStatsData();
+  const tokens = todayTokens(stats);
+  const cost = todayCost(stats);
   const tokenStr = tokens > 0 ? fmtTokens(tokens) : "0";
 
   const parts = [];

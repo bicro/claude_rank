@@ -16,10 +16,11 @@ function floorValues(obj) {
   return result;
 }
 
-async function main() {
-  const config = loadOrCreateIdentity();
-  const stats = loadStats();
-
+/**
+ * Build the sync payload from stats and config, then POST to the API.
+ * Returns the API response on success, null on failure.
+ */
+export async function buildAndSync(config, stats) {
   // Compute totals from stats
   let totalTokens = 0;
   const tokenBreakdown = {};
@@ -61,9 +62,9 @@ async function main() {
       total_messages: Math.floor(stats.totalMessages || 0),
       total_sessions: Math.floor(stats.totalSessions || 0),
       total_tool_calls: Math.floor(totalToolCalls),
-      current_streak: 0,
-      total_points: 0,
-      level: 0,
+      current_streak: stats.currentStreak || 0,
+      total_points: stats.totalPoints || 0,
+      level: stats.level || 0,
       total_session_time_secs: Math.floor(stats.totalSessionTimeSecs || 0),
       total_active_time_secs: Math.floor(stats.totalActiveTimeSecs || 0),
       total_idle_time_secs: Math.floor(stats.totalIdleTimeSecs || 0),
@@ -74,27 +75,37 @@ async function main() {
     hour_tokens: floorValues(stats.hourTokens || {}),
     concurrency_histogram: stats.concurrencyHistogram || {},
     day_sessions: stats.daySessions || {},
-    prompt_hashes: null,
+    prompt_hashes: stats.promptHashes || null,
     prompts: null,
-    tool_names: null,
+    tool_names: stats.toolNames || null,
   };
 
+  const response = await postSync(payload);
+
+  if (response) {
+    config.last_synced = new Date().toISOString();
+    if (response.primary_hash) config.primary_hash = response.primary_hash;
+    saveIdentity(config);
+
+    // Refresh profile cache for statusline
+    try {
+      const hash = getLookupHash(config);
+      const profile = await fetchUserProfile(hash);
+      writeFileSync(PROFILE_CACHE, JSON.stringify({ ...profile, _ts: Date.now() }));
+    } catch {}
+  }
+
+  return response;
+}
+
+async function main() {
+  const config = loadOrCreateIdentity();
+  const stats = loadStats();
+
   try {
-    const response = await postSync(payload);
+    const response = await buildAndSync(config, stats);
 
-    // Save server-computed data back to config
     if (response) {
-      config.last_synced = new Date().toISOString();
-      if (response.primary_hash) config.primary_hash = response.primary_hash;
-      saveIdentity(config);
-
-      // Refresh profile cache for statusline
-      try {
-        const hash = getLookupHash(config);
-        const profile = await fetchUserProfile(hash);
-        writeFileSync(PROFILE_CACHE, JSON.stringify({ ...profile, _ts: Date.now() }));
-      } catch {}
-
       // Output result for hook consumers
       console.log(JSON.stringify({
         status: "synced",
