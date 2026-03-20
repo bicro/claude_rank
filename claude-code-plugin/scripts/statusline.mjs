@@ -112,6 +112,130 @@ function todayCost(stats) {
   return estimateCost(todayUsage);
 }
 
+// ── Emoji timeline ──
+const DOT_NONE = "⚪";
+const DOT_LOW  = "🟡";
+const DOT_MED  = "🟠";
+const DOT_HIGH = "🔴";
+
+/** Intensity based on active minutes per hour, matching website logic */
+function intensityDot(minutes) {
+  if (minutes <= 0) return DOT_NONE;
+  const intensity = Math.min(minutes / 60, 1);
+  if (intensity > 0.66) return DOT_HIGH;
+  if (intensity > 0.33) return DOT_MED;
+  return DOT_LOW;
+}
+
+/** Get UTC dates that overlap the local day */
+function utcDatesForLocalDay(now) {
+  const y = now.getFullYear(), mo = now.getMonth(), d = now.getDate();
+  const startUTC = new Date(y, mo, d, 0, 0, 0).toISOString().slice(0, 10);
+  const endUTC = new Date(y, mo, d, 23, 59, 59).toISOString().slice(0, 10);
+  const dates = [startUTC];
+  if (endUTC !== startUTC) dates.push(endUTC);
+  return dates;
+}
+
+/**
+ * Build per-ring, per-local-hour active-minutes from daySessions.
+ * Each session span contributes its duration in minutes to the hours it covers.
+ */
+function buildLocalHourSlots(daySessions) {
+  const now = new Date();
+  const utcDates = utcDatesForLocalDay(now);
+
+  const entries = [];
+  for (const utcDate of utcDates) {
+    const dayEntries = daySessions[utcDate];
+    if (!dayEntries) continue;
+    for (const e of dayEntries) {
+      entries.push({ ...e, utcDate });
+    }
+  }
+
+  if (entries.length === 0) return null;
+
+  const y = now.getFullYear(), mo = now.getMonth(), d = now.getDate();
+  const localDayStart = new Date(y, mo, d, 0, 0, 0).getTime();
+  const localDayEnd = new Date(y, mo, d, 23, 59, 59, 999).getTime();
+
+  let maxRing = 0;
+  const slots = {}; // ring -> hour -> active minutes
+
+  for (const e of entries) {
+    const [uy, um, ud] = e.utcDate.split("-").map(Number);
+
+    const startMs = Date.UTC(uy, um - 1, ud, 0, e.start);
+    const endMs = Date.UTC(uy, um - 1, ud, 0, e.end);
+
+    const clampStart = Math.max(startMs, localDayStart);
+    const clampEnd = Math.min(endMs, localDayEnd);
+    if (clampStart > clampEnd) continue;
+
+    const ring = e.ring ?? 0;
+    if (ring > maxRing) maxRing = ring;
+    if (!slots[ring]) slots[ring] = new Array(24).fill(0);
+
+    // Distribute active minutes across local hours
+    const startHour = new Date(clampStart).getHours();
+    const endHour = new Date(clampEnd).getHours();
+
+    for (let h = startHour; h <= endHour; h++) {
+      const hourStart = new Date(y, mo, d, h, 0, 0).getTime();
+      const hourEnd = new Date(y, mo, d, h, 59, 59, 999).getTime();
+      const overlapStart = Math.max(clampStart, hourStart);
+      const overlapEnd = Math.min(clampEnd, hourEnd);
+      const mins = Math.max((overlapEnd - overlapStart) / 60000, 1);
+      slots[ring][h] += mins;
+    }
+  }
+
+  return { slots, maxRing };
+}
+
+/** Format hour as "12 am", "3 pm", etc. */
+function fmtHour(h) {
+  if (h === 0) return "12 am";
+  if (h === 12) return "12 pm";
+  return h < 12 ? `${h} am` : `${h - 12} pm`;
+}
+
+/** Render emoji timeline rows */
+function renderTimeline(daySessions) {
+  const result = buildLocalHourSlots(daySessions);
+  if (!result) return null;
+
+  const { slots, maxRing } = result;
+  const now = new Date();
+  const currentHour = now.getHours();
+
+  const lines = [];
+  for (let r = maxRing; r >= 0; r--) {
+    const hourData = slots[r] || new Array(24).fill(0);
+    const dots = [];
+    for (let h = 0; h < 24; h++) {
+      dots.push(intensityDot(hourData[h]));
+    }
+    // Insert current time marker after the current hour's dot
+    dots.splice(currentHour + 1, 0, `${DIM}│${RESET}`);
+
+    const label = `A${r + 1}`;
+    lines.push(`  ${DIM}${label}${RESET}  ${dots.join("")}`);
+  }
+
+  // Current time label positioned under the marker
+  // Prefix "  A1  " = 6 chars. On Windows terminal emojis are ~1 col each.
+  // Marker is after dot[currentHour], so col = 6 + currentHour + 1
+  const timeLabel = fmtHour(currentHour);
+  const markerCol = 6 + currentHour + 1;
+  // Center the label under the marker
+  const labelStart = Math.max(0, markerCol - Math.floor(timeLabel.length / 2));
+  lines.push(`${" ".repeat(labelStart)}${DIM}${timeLabel}${RESET}`);
+
+  return lines;
+}
+
 async function main() {
   const config = loadOrCreateIdentity();
   const hash = getLookupHash(config);
@@ -142,7 +266,20 @@ async function main() {
   if (streak > 0) parts.push(`🔥${streak}d`);
   parts.push(`${ORANGE}⚡ ${tokenStr}${RESET} tokens today`);
   parts.push(`~${cost}`);
-  console.log(parts.join(` ${DIM}│${RESET} `));
+
+  const output = [parts.join(` ${DIM}│${RESET} `)];
+
+  // Add timeline if we have daySessions data
+  const daySessions = stats?.daySessions;
+  if (daySessions && Object.keys(daySessions).length > 0) {
+    const timeline = renderTimeline(daySessions);
+    if (timeline) {
+      output.push(" "); // slight gap — space char so terminal doesn't collapse the line
+      output.push(...timeline);
+    }
+  }
+
+  console.log(output.join("\n"));
 }
 
 main();
