@@ -135,6 +135,21 @@ async function fetchProviderProfile(
         socialUsername: data?.login,
       };
     }
+    if (provider === "discord") {
+      const res = await fetch("https://discord.com/api/users/@me", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) return null;
+      const data = await res.json() as any;
+      const avatar = data?.avatar
+        ? `https://cdn.discordapp.com/avatars/${data.id}/${data.avatar}.png?size=256`
+        : null;
+      return {
+        name: data?.global_name || data?.username,
+        avatar,
+        socialUsername: data?.username,
+      };
+    }
     if (provider === "linkedin") {
       const res = await fetch("https://api.linkedin.com/v2/userinfo", {
         headers: { Authorization: `Bearer ${accessToken}` },

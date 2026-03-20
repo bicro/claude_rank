@@ -42,11 +42,13 @@
         .date-nav button:disabled { opacity: 0.3; cursor: not-allowed; }
         .date-nav-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); min-width: 140px; text-align: center; }
         .team-burn-section { margin: 0 auto 24px; }
-        #teamBurnCards { display: flex; gap: 20px; overflow-x: auto; padding: 0 calc(50% - 168px) 12px; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; justify-content: flex-start; }
-        #teamBurnCards::-webkit-scrollbar { height: 6px; }
-        #teamBurnCards::-webkit-scrollbar-track { background: transparent; }
-        #teamBurnCards::-webkit-scrollbar-thumb { background: var(--border, #ccc); border-radius: 3px; }
-        #teamBurnCards > div { flex: 0 0 336px; scroll-snap-align: center; }
+        #teamBurnCards { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+        #teamBurnCards.scrollable { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; padding-bottom: 12px; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+        #teamBurnCards.scrollable::-webkit-scrollbar { height: 6px; }
+        #teamBurnCards.scrollable::-webkit-scrollbar-track { background: transparent; }
+        #teamBurnCards.scrollable::-webkit-scrollbar-thumb { background: var(--border, #ccc); border-radius: 3px; }
+        #teamBurnCards > div { flex: 0 0 336px; }
+        #teamBurnCards.scrollable > div { scroll-snap-align: start; }
         #teamBurnCards svg { width: 100%; height: auto; border-radius: 16px; }
         .team-title-row { display: flex; align-items: center; gap: 12px; }
         .team-title-row h2 { margin: 0; }
@@ -63,7 +65,7 @@
         @media (max-width: 640px) {
             .team-period-bar { flex-direction: column; gap: 10px; }
             #teamBurnCards > div { flex: 0 0 85vw; }
-            #teamBurnCards { padding: 0 8px 12px; }
+            #teamBurnCards.scrollable { padding: 0 8px 12px; }
             .team-stats-grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
@@ -243,6 +245,12 @@
                 teamDayPrev.onclick = () => { navOffset -= PERIOD_STEPS[currentPeriod]; loadTeamData(); };
                 teamDayNext.onclick = () => { navOffset += PERIOD_STEPS[currentPeriod]; if (navOffset > 0) navOffset = 0; loadTeamData(); };
 
+                function updateBurnScrollMode() {
+                    const c = document.getElementById('teamBurnCards');
+                    if (!c) return;
+                    c.classList.toggle('scrollable', c.children.length > 3);
+                }
+
                 async function fetchAvatarDataUrl(url) {
                     if (!url) return null;
                     try {
@@ -294,6 +302,7 @@
                                     const cardData = { username: member.display_name || member.username || 'anonymous', dayTokens: member.daily_tokens || 0, costText, localDateStr: todayStr, avatarDataUrl: avatars[i] };
                                     isDark ? renderShareableCardV6(svg, hourlyData, [], cardData) : renderShareableCardV5(svg, hourlyData, [], cardData);
                                 });
+                                updateBurnScrollMode();
                             } else {
                                 cardsContainer.innerHTML = '<div style="color:var(--text-secondary);text-align:center;padding:24px;">No activity today</div>';
                             }
@@ -348,6 +357,7 @@
                                 renderShareableCardV5(svg, hourlyData, [], cardData);
                             }
                         });
+                        updateBurnScrollMode();
                     } catch (err) {
                         cardsContainer.innerHTML = `<div style="color:var(--red);text-align:center;padding:24px;">Error: ${err.message}</div>`;
                     }
