@@ -147,8 +147,14 @@ export function renderShareableCardV5(svg, hourlyData, sessions, cardData) {
 
     let s = '';
     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
-    s += `<text x="30" y="${topY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-    s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
+    const v5HasAvatar = !!cardData.avatarDataUrl;
+    const v5TextX = v5HasAvatar ? 80 : 30;
+    if (v5HasAvatar) {
+        s += `<defs><clipPath id="v5AvatarClip"><circle cx="50" cy="40" r="20"/></clipPath></defs>`;
+        s += `<image href="${cardData.avatarDataUrl}" x="30" y="20" width="40" height="40" clip-path="url(#v5AvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
+    }
+    s += `<text x="${v5TextX}" y="${topY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
+    s += `<text x="${v5TextX}" y="${usernameY}" fill="#1a1a1a" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
 
     const rankPillH = 28, rankPillW = 230;
     const rankPillX = cardW - 30 - rankPillW, rankPillY = usernameY - 20;
@@ -286,8 +292,14 @@ export function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
 
     let s = '';
     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#111111"/>`;
-    s += `<text x="30" y="${topY}" fill="#999999" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-    s += `<text x="30" y="${usernameY}" fill="#ececec" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
+    const v6HasAvatar = !!cardData.avatarDataUrl;
+    const v6TextX = v6HasAvatar ? 80 : 30;
+    if (v6HasAvatar) {
+        s += `<defs><clipPath id="v6AvatarClip"><circle cx="50" cy="40" r="20"/></clipPath></defs>`;
+        s += `<image href="${cardData.avatarDataUrl}" x="30" y="20" width="40" height="40" clip-path="url(#v6AvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
+    }
+    s += `<text x="${v6TextX}" y="${topY}" fill="#999999" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
+    s += `<text x="${v6TextX}" y="${usernameY}" fill="#ececec" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
 
     const rankPillH = 28, rankPillW = 230;
     const rankPillX = cardW - 30 - rankPillW, rankPillY = usernameY - 20;

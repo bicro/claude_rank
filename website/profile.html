@@ -231,11 +231,11 @@
                 `;
 
                 // Load cached avatar
+                let cachedAvatarDataUrl = null;
                 if (profile.avatar_url) {
-                    getCachedAvatar(profile.avatar_url).then(src => {
-                        const img = document.getElementById('profileAvatar');
-                        if (img && src) img.src = src;
-                    });
+                    cachedAvatarDataUrl = await getCachedAvatar(profile.avatar_url);
+                    const img = document.getElementById('profileAvatar');
+                    if (img && cachedAvatarDataUrl) img.src = cachedAvatarDataUrl;
                 }
 
                 // Animate stat values from 0 to target
@@ -334,12 +334,13 @@
                                     pctEl.setAttribute('opacity', '0.5');
                                 }
                             });
-                            // Update rank badges
+                            // Update rank badges (fallback chain: best available metric)
+                            const bestRank = dr.peak_concurrency || dr.daily_tokens || dr.active_mins;
                             for (const vn of ['v5', 'v6']) {
                                 const badge = document.getElementById(vn + 'RankBadge');
-                                if (badge && dr.peak_concurrency) {
+                                if (badge && bestRank) {
                                     const txt = document.getElementById(vn + 'RankText');
-                                    if (txt) txt.textContent = `#${dr.peak_concurrency.rank} GLOBALLY · TOP ${formatPercentile(dr.peak_concurrency.percentile)}%`;
+                                    if (txt) txt.textContent = `#${bestRank.rank} GLOBALLY · TOP ${formatPercentile(bestRank.percentile)}%`;
                                     badge.setAttribute('opacity', '1');
                                 }
                             }
@@ -653,8 +654,14 @@
 
                     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
 
-                    s += `<text x="30" y="${topY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-                    s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
+                    const v5HasAvatar = !!cardData.avatarDataUrl;
+                    const v5TextX = v5HasAvatar ? 80 : 30;
+                    if (v5HasAvatar) {
+                        s += `<defs><clipPath id="v5AvatarClip"><circle cx="50" cy="40" r="20"/></clipPath></defs>`;
+                        s += `<image href="${cardData.avatarDataUrl}" x="30" y="20" width="40" height="40" clip-path="url(#v5AvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
+                    }
+                    s += `<text x="${v5TextX}" y="${topY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
+                    s += `<text x="${v5TextX}" y="${usernameY}" fill="#1a1a1a" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
 
                     const rankPillH = 28;
                     const rankPillW = 230;
@@ -832,8 +839,14 @@
 
                     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#111111"/>`;
 
-                    s += `<text x="30" y="${topY}" fill="#999999" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-                    s += `<text x="30" y="${usernameY}" fill="#ececec" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
+                    const v6HasAvatar = !!cardData.avatarDataUrl;
+                    const v6TextX = v6HasAvatar ? 80 : 30;
+                    if (v6HasAvatar) {
+                        s += `<defs><clipPath id="v6AvatarClip"><circle cx="50" cy="40" r="20"/></clipPath></defs>`;
+                        s += `<image href="${cardData.avatarDataUrl}" x="30" y="20" width="40" height="40" clip-path="url(#v6AvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
+                    }
+                    s += `<text x="${v6TextX}" y="${topY}" fill="#999999" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
+                    s += `<text x="${v6TextX}" y="${usernameY}" fill="#ececec" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
 
                     const rankPillH = 28;
                     const rankPillW = 230;
@@ -1011,9 +1024,15 @@
                     s += `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${cardW} ${cardH}" width="${cardW * 2}" height="${cardH * 2}" font-family="${fontStack}">`;
                     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
 
-                    // Header + username
-                    s += `<text x="30" y="${topY}" fill="#8a8480" font-size="10" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-                    s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="20" font-weight="700">@${escHtml(username)}</text>`;
+                    // Avatar + header + username
+                    const copyHasAvatar = !!cardData.avatarDataUrl;
+                    const copyTextX = copyHasAvatar ? 80 : 30;
+                    if (copyHasAvatar) {
+                        s += `<defs><clipPath id="copyAvatarClip"><circle cx="50" cy="40" r="20"/></clipPath></defs>`;
+                        s += `<image href="${cardData.avatarDataUrl}" x="30" y="20" width="40" height="40" clip-path="url(#copyAvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
+                    }
+                    s += `<text x="${copyTextX}" y="${topY}" fill="#8a8480" font-size="10" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
+                    s += `<text x="${copyTextX}" y="${usernameY}" fill="#1a1a1a" font-size="20" font-weight="700">@${escHtml(username)}</text>`;
 
                     // Rank pill
                     if (rankText && !rankText.includes('\u2014')) {
@@ -1182,6 +1201,7 @@
                         peakRank: null,
                         peakPercentile: null,
                         isToday: isToday,
+                        avatarDataUrl: cachedAvatarDataUrl,
                     };
 
                     // Store for theme-toggle re-render
