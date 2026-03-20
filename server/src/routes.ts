@@ -64,6 +64,32 @@ async function requireOwner(request: Request, userHash: string): Promise<Respons
   return null;
 }
 
+/**
+ * Dual auth: session (web) OR sync_secret (desktop widget).
+ * Returns an error Response if unauthorized, or null if authorized.
+ */
+async function requireOwnerDual(request: Request, userHash: string): Promise<Response | null> {
+  const db = getDb();
+  const user = await db.query("SELECT user_hash, sync_secret, auth_id FROM users WHERE user_hash = ?").get(userHash) as any;
+  if (!user) return error("User not found", 404);
+
+  const session = await getAuthSession(request);
+  if (session?.user?.id) {
+    const owner = await db.query(
+      "SELECT user_hash FROM users WHERE auth_id = ? AND user_hash = ?"
+    ).get(session.user.id, userHash) as any;
+    if (!owner) return error("Forbidden", 403);
+    return null;
+  }
+
+  const syncSecret = request.headers.get("x-sync-secret");
+  if (syncSecret && user.sync_secret && syncSecret === user.sync_secret) {
+    return null;
+  }
+
+  return error("Unauthorized", 401);
+}
+
 /** Extract YYYY-MM-DD from an ISO string or Date */
 function toDateStr(d: Date | string): string {
   const s = typeof d === "string" ? d : d.toISOString();
@@ -243,6 +269,12 @@ export async function handleApiRequest(url: URL, request: Request): Promise<Resp
   const joinMatch = path.match(/^\/api\/teams\/([^/]+)\/join$/);
   if (joinMatch && method === "POST") {
     return handleJoinTeam(joinMatch[1]!, request);
+  }
+
+  // GET /api/teams/:team_hash/burn
+  const teamBurnMatch = path.match(/^\/api\/teams\/([^/]+)\/burn$/);
+  if (teamBurnMatch && method === "GET") {
+    return handleGetTeamBurn(teamBurnMatch[1]!, url);
   }
 
   // GET /api/teams/:team_hash/history
@@ -1055,7 +1087,7 @@ async function handleCreateTeam(request: Request): Promise<Response> {
     return error("user_hash and team_name are required", 400);
   }
 
-  const authErr = await requireOwner(request, body.user_hash);
+  const authErr = await requireOwnerDual(request, body.user_hash);
   if (authErr) return authErr;
 
   const db = getDb();
@@ -1085,7 +1117,7 @@ async function handleJoinTeam(teamHash: string, request: Request): Promise<Respo
   const body = await parseBody(request);
   if (!body?.user_hash) return error("user_hash is required", 400);
 
-  const authErr = await requireOwner(request, body.user_hash);
+  const authErr = await requireOwnerDual(request, body.user_hash);
   if (authErr) return authErr;
 
   const db = getDb();
@@ -1106,7 +1138,7 @@ async function handleLeaveTeam(request: Request): Promise<Response> {
   const body = await parseBody(request);
   if (!body?.user_hash) return error("user_hash is required", 400);
 
-  const authErr = await requireOwner(request, body.user_hash);
+  const authErr = await requireOwnerDual(request, body.user_hash);
   if (authErr) return authErr;
 
   const db = getDb();
@@ -1159,6 +1191,162 @@ async function handleGetTeam(teamHash: string): Promise<Response> {
       total_sessions: aggSessions,
       total_tool_calls: aggToolCalls,
     },
+  });
+}
+
+async function handleGetTeamBurn(teamHash: string, url: URL): Promise<Response> {
+  const db = getDb();
+  const queryDate = url.searchParams.get("date");
+
+  // Validate date param
+  let targetDate: string;
+  const today = new Date().toISOString().split("T")[0]!;
+  if (queryDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
+      return error("Invalid date format, use YYYY-MM-DD", 400);
+    }
+    targetDate = queryDate > today ? today : queryDate;
+  } else {
+    targetDate = today;
+  }
+
+  // Fetch team members
+  const members = await db.query(
+    "SELECT user_hash, username, display_name, avatar_url, auth_provider FROM users WHERE team_hash = ?"
+  ).all(teamHash) as any[];
+
+  if (members.length === 0) {
+    return json({ date: targetDate, members: [] });
+  }
+
+  // Resolve linked hashes for each member
+  const memberHashMap: Record<string, string[]> = {};
+  const allHashes: string[] = [];
+  const hashToMember: Record<string, string> = {};
+
+  for (const m of members) {
+    const linked = await getLinkedHashes(db, m.user_hash);
+    memberHashMap[m.user_hash] = linked;
+    for (const h of linked) {
+      allHashes.push(h);
+      hashToMember[h] = m.user_hash;
+    }
+  }
+
+  const pool = getPool();
+  const ph = allHashes.map((_, i) => `$${i + 1}`).join(", ");
+  const dayStart = `${targetDate}T00:00:00`;
+  const dayEnd = `${targetDate}T23:59:59`;
+
+  // Batch query concurrency histograms
+  const { rows: histRows } = await pool.query(
+    `SELECT user_hash, snapshot_hour, histogram FROM concurrency_histogram
+     WHERE user_hash IN (${ph}) AND snapshot_hour >= $${allHashes.length + 1} AND snapshot_hour <= $${allHashes.length + 2}`,
+    [...allHashes, dayStart, dayEnd],
+  );
+
+  // Batch query hourly tokens
+  const { rows: tokenRows } = await pool.query(
+    `SELECT user_hash, snapshot_hour, total_tokens FROM metrics_hourly
+     WHERE user_hash IN (${ph}) AND snapshot_hour >= $${allHashes.length + 1} AND snapshot_hour <= $${allHashes.length + 2}`,
+    [...allHashes, dayStart, dayEnd],
+  );
+
+  // Batch query daily metrics — supports multi-day range via `days` param
+  const days = Math.min(Math.max(parseInt(url.searchParams.get("days") ?? "1", 10), 1), 365);
+  let dailyRows: any[];
+  if (days === 1) {
+    const res = await pool.query(
+      `SELECT user_hash, daily_tokens FROM metrics_history
+       WHERE user_hash IN (${ph}) AND snapshot_date = $${allHashes.length + 1}`,
+      [...allHashes, targetDate],
+    );
+    dailyRows = res.rows;
+  } else {
+    const rangeStart = new Date(targetDate + "T12:00:00");
+    rangeStart.setDate(rangeStart.getDate() - days + 1);
+    const startDate = toDateStr(rangeStart);
+    const res = await pool.query(
+      `SELECT user_hash, SUM(daily_tokens) as daily_tokens FROM metrics_history
+       WHERE user_hash IN (${ph}) AND snapshot_date >= $${allHashes.length + 1} AND snapshot_date <= $${allHashes.length + 2}
+       GROUP BY user_hash`,
+      [...allHashes, startDate, targetDate],
+    );
+    dailyRows = res.rows;
+  }
+
+  // Group results per primary user_hash
+  const perMember: Record<string, { concurrency: Record<string, any>; daily_tokens: number; estimated_spend: number }> = {};
+  for (const m of members) {
+    perMember[m.user_hash] = { concurrency: {}, daily_tokens: 0, estimated_spend: 0 };
+  }
+
+  // Process histograms
+  for (const row of histRows as any[]) {
+    const primary = hashToMember[row.user_hash];
+    if (!primary) continue;
+    try {
+      const histogram = row.histogram ? JSON.parse(row.histogram) : {};
+      const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
+      const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
+      const hourKey = `${snapshotDate}:${hour}`;
+      if (!perMember[primary].concurrency[hourKey]) {
+        perMember[primary].concurrency[hourKey] = { histogram: {}, tokens: 0 };
+      }
+      for (const [sessionsStr, minutes] of Object.entries(histogram)) {
+        perMember[primary].concurrency[hourKey].histogram[sessionsStr] =
+          (perMember[primary].concurrency[hourKey].histogram[sessionsStr] ?? 0) + (minutes as number);
+      }
+    } catch { continue; }
+  }
+
+  // Process tokens
+  for (const row of tokenRows as any[]) {
+    const primary = hashToMember[row.user_hash];
+    if (!primary) continue;
+    const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
+    const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
+    const hourKey = `${snapshotDate}:${hour}`;
+    if (perMember[primary].concurrency[hourKey]) {
+      perMember[primary].concurrency[hourKey].tokens =
+        (perMember[primary].concurrency[hourKey].tokens ?? 0) + (row.total_tokens ?? 0);
+    } else if (row.total_tokens && row.total_tokens > 0) {
+      perMember[primary].concurrency[hourKey] = { histogram: {}, tokens: row.total_tokens };
+    }
+  }
+
+  // Process daily metrics
+  for (const row of dailyRows as any[]) {
+    const primary = hashToMember[row.user_hash];
+    if (!primary) continue;
+    perMember[primary].daily_tokens += row.daily_tokens ?? 0;
+  }
+
+  // Fetch total spend from user_metrics to compute daily cost proportionally
+  const memberHashes = members.map(m => m.user_hash);
+  const mph = memberHashes.map((_, i) => `$${i + 1}`).join(", ");
+  const { rows: spendRows } = await pool.query(
+    `SELECT user_hash, estimated_spend, total_tokens FROM user_metrics WHERE user_hash IN (${mph})`,
+    memberHashes,
+  );
+  for (const row of spendRows as any[]) {
+    const pm = perMember[row.user_hash];
+    if (pm && pm.daily_tokens > 0 && row.total_tokens > 0 && row.estimated_spend > 0) {
+      pm.estimated_spend = row.estimated_spend * (pm.daily_tokens / row.total_tokens);
+    }
+  }
+
+  return json({
+    date: targetDate,
+    members: members.map(m => ({
+      user_hash: m.user_hash,
+      username: m.username,
+      display_name: m.display_name && m.auth_provider ? m.display_name : null,
+      avatar_url: m.avatar_url,
+      concurrency: perMember[m.user_hash].concurrency,
+      daily_tokens: perMember[m.user_hash].daily_tokens,
+      estimated_spend: perMember[m.user_hash].estimated_spend,
+    })),
   });
 }
 

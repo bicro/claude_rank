@@ -29,8 +29,7 @@
     transform: none;
   }
   .drag-strip {
-    position: absolute;
-    top: 0; left: 0; right: 0;
+    position: relative;
     height: 32px;
     z-index: 10;
     display: flex;
@@ -38,6 +37,7 @@
     align-items: center;
     padding-right: 12px;
     border-radius: 16px 16px 0 0;
+    flex-shrink: 0;
   }
   .btn-close {
     background: none; border: none; color: #999; cursor: pointer;
@@ -138,6 +138,9 @@ window.addEventListener('message', async (e) => {
   }
   if (e.data.type === 'open-url' && e.data.url) {
     invoke('open_url', { url: e.data.url }).catch(err => console.error('Failed to open URL:', err));
+  }
+  if (e.data.type === 'hide') {
+    invoke('hide_overlay').catch(err => console.error('Failed to hide:', err));
   }
   if (e.data.type === 'resize' && e.data.height > 0) {
     const win = getCurrentWindow();

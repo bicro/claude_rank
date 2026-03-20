@@ -40,6 +40,7 @@
             <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
                 <a id="dl-mac" href="https://github.com/bicro/claude_rank/releases/latest/download/ClaudeRank-macOS.dmg" class="btn hero-download-btn" style="display:inline-flex;align-items:center;gap:8px;margin-top:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>Download for macOS</a>
                 <a id="dl-win" href="https://github.com/bicro/claude_rank/releases/latest/download/ClaudeRank-Windows.msi" class="btn hero-download-btn" style="display:inline-flex;align-items:center;gap:8px;margin-top:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.48L3 12zm17-9v8.75l-10 .08V5.21L20 3zm-10 9.04l10 .08V21l-10-1.39V12.04zM3 12.49l6 .09v6.35l-6-1.17V12.49z"/></svg>Download for Windows</a>
+                <a id="dl-linux" href="https://github.com/bicro/claude_rank/releases/latest/download/ClaudeRank-Linux.AppImage" class="btn hero-download-btn" style="display:inline-flex;align-items:center;gap:8px;margin-top:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.368 1.884 1.43.868.134 1.703-.272 2.191-.574.3-.18.599-.306.9-.36.298-.06.648-.036.942-.162.585-.254.956-.7 1.056-1.23.1-.536-.012-1.136-.154-1.74-.142-.6-.335-1.203-.466-1.8a.96.96 0 00-.085-.357c.549-.736.96-1.601 1.123-2.673.165-1.07.053-2.327-.484-3.587-.13-.267-.279-.536-.439-.8.15-.351.256-.694.27-1.042.015-.557-.22-1.1-.585-1.514-.365-.408-.845-.67-1.332-.802-.485-.13-.993-.137-1.48-.058-.477.07-.938.263-1.288.494-.098-.045-.198-.086-.3-.122-.41-.148-.842-.2-1.279-.172a3.935 3.935 0 00-.76.15c-.75-1.466-1.727-2.685-2.455-3.424-.376-.394-.72-.654-1.014-.736a1.04 1.04 0 00-.415-.024zm.086.867c.092.003.18.058.382.27.405.424 1.048 1.29 1.743 2.544a6.567 6.567 0 01-.46.403c-.474.346-1.072.655-1.73.925-.656.267-1.382.484-2.097.605a5.3 5.3 0 01-1.07.086c.27-1.37.945-3.478 2.317-4.318.317-.19.588-.3.915-.515z"/></svg>Download for Linux</a>
             </div>
             <button id="showAllPlatforms" style="display:none">Other platforms</button>
         </div>
@@ -48,14 +49,20 @@
             var ua = navigator.userAgent;
             var os = /Macintosh|Mac OS X/i.test(ua) ? 'mac'
                    : /Windows/i.test(ua) ? 'windows'
+                   : /Linux/i.test(ua) ? 'linux'
                    : null;
+            var allBtns = ['dl-mac', 'dl-win', 'dl-linux'];
             if (os) {
-                document.getElementById(os === 'mac' ? 'dl-win' : 'dl-mac').style.display = 'none';
+                var keep = os === 'mac' ? 'dl-mac' : os === 'windows' ? 'dl-win' : 'dl-linux';
+                allBtns.forEach(function(id) {
+                    if (id !== keep) document.getElementById(id).style.display = 'none';
+                });
                 document.getElementById('showAllPlatforms').style.display = '';
             }
             document.getElementById('showAllPlatforms').onclick = function() {
-                document.getElementById('dl-mac').style.display = 'inline-flex';
-                document.getElementById('dl-win').style.display = 'inline-flex';
+                allBtns.forEach(function(id) {
+                    document.getElementById(id).style.display = 'inline-flex';
+                });
                 this.style.display = 'none';
             };
         })();

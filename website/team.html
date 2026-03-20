@@ -32,8 +32,44 @@
 
     <div id="teamContent"><div class="loading">Loading team</div></div>
 
+    <style>
+        .team-period-bar { display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: 900px; margin: 0 auto 20px; }
+        .period-toggle { display: flex; background: var(--card-bg, #f5f0eb); border: 1px solid var(--border, #e0ddd9); border-radius: 10px; padding: 3px; gap: 0; }
+        .period-btn { font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; padding: 6px 14px; border: none; border-radius: 8px; cursor: pointer; background: transparent; color: var(--text-secondary, #8a8480); transition: background 0.15s, color 0.15s; }
+        .period-btn.active { background: var(--text-primary, #1a1a1a); color: var(--card-bg, #fff); }
+        .date-nav { display: flex; align-items: center; gap: 10px; }
+        .date-nav button { background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; cursor: pointer; color: var(--text-primary); font-size: 13px; }
+        .date-nav button:disabled { opacity: 0.3; cursor: not-allowed; }
+        .date-nav-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); min-width: 140px; text-align: center; }
+        .team-burn-section { margin: 0 auto 24px; }
+        #teamBurnCards { display: flex; gap: 20px; overflow-x: auto; padding: 0 calc(50% - 168px) 12px; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; justify-content: flex-start; }
+        #teamBurnCards::-webkit-scrollbar { height: 6px; }
+        #teamBurnCards::-webkit-scrollbar-track { background: transparent; }
+        #teamBurnCards::-webkit-scrollbar-thumb { background: var(--border, #ccc); border-radius: 3px; }
+        #teamBurnCards > div { flex: 0 0 336px; scroll-snap-align: center; }
+        #teamBurnCards svg { width: 100%; height: auto; border-radius: 16px; }
+        .team-title-row { display: flex; align-items: center; gap: 12px; }
+        .team-title-row h2 { margin: 0; }
+        .invite-code-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-family: inherit; font-size: 13px; font-weight: 600;
+            padding: 6px 14px; border-radius: 8px; cursor: pointer;
+            background: var(--card-bg, #f5f0eb); border: 1px solid var(--border, #e0ddd9);
+            color: var(--text-secondary, #8a8480); transition: border-color 0.15s, color 0.15s;
+        }
+        .invite-code-btn:hover { border-color: var(--text-primary); color: var(--text-primary); }
+        .invite-code-btn.copied { color: #4ade80; border-color: #4ade80; }
+        .team-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+        @media (max-width: 640px) {
+            .team-period-bar { flex-direction: column; gap: 10px; }
+            #teamBurnCards > div { flex: 0 0 85vw; }
+            #teamBurnCards { padding: 0 8px 12px; }
+            .team-stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
     <script type="module">
-        import { getTeam, getTeamHistory, formatNumber } from './js/api.js';
+        import { getTeam, getTeamHistory, getTeamBurn, formatNumber, formatCost } from './js/api.js';
+        import { processHourlyData, renderShareableCardV5, renderShareableCardV6, localDateISO } from './js/burn-clock.js';
 
         const params = new URLSearchParams(window.location.search);
         const teamHash = params.get('hash');
@@ -57,47 +93,51 @@
 
                 container.innerHTML = `
                     <div class="team-header">
-                        <h2>${team.team_name}</h2>
-                        <div class="team-code">Invite code: ${team.team_hash}</div>
+                        <div class="team-title-row">
+                            <h2>${team.team_name}</h2>
+                            <button class="invite-code-btn" id="inviteCodeBtn" title="Click to copy invite code">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                Invite Code
+                            </button>
+                        </div>
                         <div class="meta" style="color:var(--text-secondary);margin-top:4px">
                             ${team.member_count} member${team.member_count !== 1 ? 's' : ''}
                             &middot; Created ${new Date(team.created_at).toLocaleDateString()}
                         </div>
                     </div>
 
-                    <div class="profile-stats">
-                        <div class="stat-card">
-                            <div class="label">Total Tokens</div>
-                            <div class="value">${formatNumber(m.total_tokens)}</div>
+                    <div class="team-period-bar">
+                        <div class="date-nav">
+                            <button id="teamDayPrev">&#9664;</button>
+                            <span class="date-nav-label" id="teamDayLabel">Today</span>
+                            <button id="teamDayNext" disabled>&#9654;</button>
                         </div>
-                        <div class="stat-card">
-                            <div class="label">Messages</div>
-                            <div class="value">${formatNumber(m.total_messages)}</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="label">Sessions</div>
-                            <div class="value">${formatNumber(m.total_sessions)}</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="label">Tool Calls</div>
-                            <div class="value">${formatNumber(m.total_tool_calls)}</div>
+                        <div class="period-toggle" id="periodToggle">
+                            <button class="period-btn" data-period="lifetime">LIFETIME</button>
+                            <button class="period-btn" data-period="1m">1M</button>
+                            <button class="period-btn" data-period="1w">1W</button>
+                            <button class="period-btn active" data-period="1d">1D</button>
                         </div>
                     </div>
 
-                    <div class="team-members">
-                        <h3>Members</h3>
+                    <div class="team-members" style="max-width:900px;margin:0 auto 24px;">
                         <table class="leaderboard-table">
-                            <thead><tr><th>User</th></tr></thead>
-                            <tbody>
-                                ${team.members.map(m => `
-                                    <tr>
-                                        <td class="username-cell">
-                                            <a href="/profile.html?hash=${m.user_hash}">${m.display_name || m.username || 'Anonymous'}</a>
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
+                            <thead><tr><th>#</th><th>User</th><th style="text-align:right">Tokens</th><th style="text-align:right">Cost</th></tr></thead>
+                            <tbody id="rankingBody"></tbody>
                         </table>
+                    </div>
+
+                    <div class="team-burn-section">
+                        <div id="teamBurnCards"></div>
+                    </div>
+
+                    <div style="max-width:900px;margin:0 auto 24px;">
+                        <div class="team-stats-grid">
+                            <div class="stat-card"><div class="label">Total Tokens</div><div class="value">${formatNumber(m.total_tokens)}</div></div>
+                            <div class="stat-card"><div class="label">Messages</div><div class="value">${formatNumber(m.total_messages)}</div></div>
+                            <div class="stat-card"><div class="label">Sessions</div><div class="value">${formatNumber(m.total_sessions)}</div></div>
+                            <div class="stat-card"><div class="label">Tool Calls</div><div class="value">${formatNumber(m.total_tool_calls)}</div></div>
+                        </div>
                     </div>
 
                     ${history.length > 0 ? `
@@ -136,6 +176,197 @@
                         },
                     });
                 }
+
+                // ── Invite code button ──
+                const inviteBtn = document.getElementById('inviteCodeBtn');
+                if (inviteBtn) {
+                    inviteBtn.addEventListener('click', async () => {
+                        try {
+                            await navigator.clipboard.writeText(team.team_hash);
+                            inviteBtn.textContent = 'Copied!';
+                            inviteBtn.classList.add('copied');
+                            setTimeout(() => {
+                                inviteBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Invite Code';
+                                inviteBtn.classList.remove('copied');
+                            }, 1500);
+                        } catch {}
+                    });
+                }
+
+                // ── Period + date navigation ──
+                const PERIODS = { '1d': 1, '1w': 7, '1m': 30, 'lifetime': 0 };
+                const PERIOD_STEPS = { '1d': 1, '1w': 7, '1m': 30, 'lifetime': 0 };
+                let currentPeriod = '1d';
+                let navOffset = 0; // in days from today
+
+                const teamDayPrev = document.getElementById('teamDayPrev');
+                const teamDayNext = document.getElementById('teamDayNext');
+                const teamDayLabel = document.getElementById('teamDayLabel');
+                const periodBtns = document.querySelectorAll('.period-btn');
+                const teamMembers = team.members;
+
+                function getDateLabel() {
+                    if (currentPeriod === 'lifetime') return 'All Time';
+                    const end = new Date(); end.setDate(end.getDate() + navOffset);
+                    const endStr = localDateISO(end);
+                    if (currentPeriod === '1d') {
+                        return navOffset === 0 ? 'Today' : formatDatePretty(endStr);
+                    }
+                    const days = PERIODS[currentPeriod];
+                    const start = new Date(end); start.setDate(start.getDate() - days + 1);
+                    return formatDatePretty(localDateISO(start)) + ' – ' + formatDatePretty(endStr);
+                }
+
+                function formatDatePretty(dateStr) {
+                    const d = new Date(dateStr + 'T12:00:00');
+                    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    return months[d.getMonth()] + ' ' + d.getDate();
+                }
+
+                function updateNav() {
+                    teamDayLabel.textContent = getDateLabel();
+                    const step = PERIOD_STEPS[currentPeriod];
+                    teamDayNext.disabled = navOffset >= 0 || currentPeriod === 'lifetime';
+                    teamDayPrev.disabled = navOffset <= -365 || currentPeriod === 'lifetime';
+                }
+
+                periodBtns.forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        periodBtns.forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        currentPeriod = btn.dataset.period;
+                        navOffset = 0;
+                        loadTeamData();
+                    });
+                });
+
+                teamDayPrev.onclick = () => { navOffset -= PERIOD_STEPS[currentPeriod]; loadTeamData(); };
+                teamDayNext.onclick = () => { navOffset += PERIOD_STEPS[currentPeriod]; if (navOffset > 0) navOffset = 0; loadTeamData(); };
+
+                async function fetchAvatarDataUrl(url) {
+                    if (!url) return null;
+                    try {
+                        const res = await fetch(url);
+                        if (!res.ok) return null;
+                        const blob = await res.blob();
+                        return await new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onload = () => resolve(reader.result);
+                            reader.onerror = reject;
+                            reader.readAsDataURL(blob);
+                        });
+                    } catch { return null; }
+                }
+
+                async function loadTeamData() {
+                    updateNav();
+                    const cardsContainer = document.getElementById('teamBurnCards');
+                    const rankingBody = document.getElementById('rankingBody');
+
+                    if (currentPeriod === 'lifetime') {
+                        // Fetch each member's total tokens from profile
+                        rankingBody.innerHTML = '<tr><td colspan="4" class="loading">Loading...</td></tr>';
+                        cardsContainer.innerHTML = '<div class="loading">Loading burn cards...</div>';
+                        try {
+                            const profiles = await Promise.all(teamMembers.map(async m => {
+                                const p = await fetch('/api/users/' + m.user_hash).then(r => r.json());
+                                return { ...m, display_name: p.display_name || m.display_name, total_tokens: p.metrics?.total_tokens || 0, estimated_spend: p.metrics?.estimated_spend || 0 };
+                            }));
+                            profiles.sort((a, b) => b.total_tokens - a.total_tokens);
+                            renderRankingTable(rankingBody, profiles, 'total_tokens');
+                        } catch { rankingBody.innerHTML = '<tr><td colspan="4" style="color:var(--red)">Error</td></tr>'; }
+                        // Still show today's burn cards
+                        try {
+                            const todayStr = localDateISO(new Date());
+                            const burn = await getTeamBurn(hash, todayStr, 1);
+                            const sorted = [...burn.members].sort((a, b) => (b.daily_tokens || 0) - (a.daily_tokens || 0));
+                            if (sorted.length > 0) {
+                                const avatars = await Promise.all(sorted.map(m => fetchAvatarDataUrl(m.avatar_url)));
+                                cardsContainer.innerHTML = '';
+                                const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+                                sorted.forEach((member, i) => {
+                                    const wrapper = document.createElement('div');
+                                    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                                    wrapper.appendChild(svg);
+                                    cardsContainer.appendChild(wrapper);
+                                    const hourlyData = processHourlyData(member.concurrency, todayStr);
+                                    const costText = member.estimated_spend ? formatCost(member.estimated_spend) : '$0';
+                                    const cardData = { username: member.display_name || member.username || 'anonymous', dayTokens: member.daily_tokens || 0, costText, localDateStr: todayStr, avatarDataUrl: avatars[i] };
+                                    isDark ? renderShareableCardV6(svg, hourlyData, [], cardData) : renderShareableCardV5(svg, hourlyData, [], cardData);
+                                });
+                            } else {
+                                cardsContainer.innerHTML = '<div style="color:var(--text-secondary);text-align:center;padding:24px;">No activity today</div>';
+                            }
+                        } catch { cardsContainer.innerHTML = ''; }
+                        return;
+                    }
+
+                    const endDate = new Date(); endDate.setDate(endDate.getDate() + navOffset);
+                    const dateStr = localDateISO(endDate);
+                    const days = PERIODS[currentPeriod];
+
+                    rankingBody.innerHTML = '<tr><td colspan="4" class="loading">Loading...</td></tr>';
+                    cardsContainer.innerHTML = '<div class="loading">Loading burn cards...</div>';
+
+                    try {
+                        const burn = await getTeamBurn(hash, dateStr, days);
+                        const sorted = [...burn.members].sort((a, b) => (b.daily_tokens || 0) - (a.daily_tokens || 0));
+
+                        // Ranking table
+                        renderRankingTable(rankingBody, sorted, 'daily_tokens');
+
+                        // Burn cards (always show the end date's hourly data)
+                        if (sorted.length === 0) {
+                            cardsContainer.innerHTML = '<div style="color:var(--text-secondary);text-align:center;padding:24px;">No activity</div>';
+                            return;
+                        }
+
+                        const avatars = await Promise.all(sorted.map(m => fetchAvatarDataUrl(m.avatar_url)));
+                        cardsContainer.innerHTML = '';
+                        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+                        sorted.forEach((member, i) => {
+                            const wrapper = document.createElement('div');
+                            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                            wrapper.appendChild(svg);
+                            cardsContainer.appendChild(wrapper);
+
+                            const hourlyData = processHourlyData(member.concurrency, dateStr);
+                            const costText = member.estimated_spend ? formatCost(member.estimated_spend) : '$0';
+
+                            const cardData = {
+                                username: member.display_name || member.username || 'anonymous',
+                                dayTokens: member.daily_tokens || 0,
+                                costText,
+                                localDateStr: dateStr,
+                                avatarDataUrl: avatars[i],
+                            };
+
+                            if (isDark) {
+                                renderShareableCardV6(svg, hourlyData, [], cardData);
+                            } else {
+                                renderShareableCardV5(svg, hourlyData, [], cardData);
+                            }
+                        });
+                    } catch (err) {
+                        cardsContainer.innerHTML = `<div style="color:var(--red);text-align:center;padding:24px;">Error: ${err.message}</div>`;
+                    }
+                }
+
+                function renderRankingTable(tbody, members, tokenKey) {
+                    tbody.innerHTML = members.map((m, i) => `
+                        <tr>
+                            <td style="width:40px;text-align:center;color:var(--text-secondary)">${i + 1}</td>
+                            <td class="username-cell">
+                                <a href="/profile.html?hash=${m.user_hash}">${m.display_name || m.username || 'Anonymous'}</a>
+                            </td>
+                            <td style="text-align:right">${formatNumber(m[tokenKey] || 0)}</td>
+                            <td style="text-align:right">${m.estimated_spend ? formatCost(m.estimated_spend) : '$0'}</td>
+                        </tr>
+                    `).join('');
+                }
+
+                loadTeamData();
 
                 document.title = `${team.team_name} - ClaudeRank`;
             } catch (err) {
