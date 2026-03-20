@@ -22,7 +22,7 @@ tauri-plugin-autostart = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = "2"
 log = "0.4"
-notify = { version = "7", features = ["macos_fsevent"] }
+notify = "7"
 uuid = { version = "1", features = ["v4"] }
 open = "5"
 arboard = { version = "3", features = ["image-data"] }
@@ -31,6 +31,7 @@ ab_glyph = "0.2"
 base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+notify = { version = "7", features = ["macos_fsevent"] }
 objc2 = "0.6"
 objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
