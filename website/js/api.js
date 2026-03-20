@@ -55,6 +55,12 @@ export async function getTeamHistory(teamHash, days = 30) {
     return apiFetch(`/api/teams/${teamHash}/history?days=${days}`);
 }
 
+export async function getTeamBurn(teamHash, dateStr, days = 1) {
+    let url = `/api/teams/${teamHash}/burn?date=${dateStr}`;
+    if (days > 1) url += `&days=${days}`;
+    return apiFetch(url);
+}
+
 export async function getAllBadges() {
     return apiFetch('/api/badges');
 }

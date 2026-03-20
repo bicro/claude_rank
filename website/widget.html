@@ -36,12 +36,277 @@
   }
 
   /* ── 1. CLAUDERANK header ── */
+  .header-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+  }
   .header-label {
     font-size: 10px;
     font-weight: 700;
     color: var(--text-secondary);
     letter-spacing: 2px;
+  }
+  .view-toggle {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    background: var(--pill-bg);
+    border-radius: 10px;
+    padding: 2px;
+    gap: 0;
+  }
+  .view-toggle-btn {
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 3px 10px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-secondary);
+    transition: background 0.15s, color 0.15s;
+  }
+  .view-toggle-btn.active {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  /* ── Team view ── */
+  .team-view { display: none; }
+  .team-view.active { display: block; }
+  .solo-view.hidden { display: none; }
+  .team-header-info {
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  .team-header-info .team-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .team-header-info .team-meta {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 1px;
+    margin-top: 2px;
+  }
+  .team-member-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .team-member-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--divider);
+    gap: 8px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .team-member-row:last-child { border-bottom: none; }
+  .team-member-row:hover { background: var(--pill-bg); border-radius: 6px; }
+  .team-member-rank {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    min-width: 18px;
+    text-align: right;
+  }
+  .team-member-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .team-member-name {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .team-member-tokens {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .team-no-team {
+    text-align: center;
+    padding: 20px 0;
+  }
+  .team-no-team-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+  }
+  .team-action-btn {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 6px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 1.5px solid var(--accent);
+    transition: background 0.15s, color 0.15s;
+  }
+  .team-action-btn.primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .team-action-btn.primary:hover { opacity: 0.9; }
+  .team-action-btn.secondary {
+    background: transparent;
+    color: var(--accent);
+  }
+  .team-action-btn.secondary:hover { background: var(--pill-bg); }
+  .team-input {
+    width: 100%;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 10px;
+    border: 1.5px solid var(--divider);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text-primary);
+    outline: none;
     margin-bottom: 8px;
+  }
+  .team-input:focus { border-color: var(--accent); }
+  .team-input-section { display: none; margin-bottom: 8px; }
+  .team-input-section.show { display: block; }
+  .team-error {
+    font-size: 10px;
+    color: #ef4444;
+    margin-top: 4px;
+    min-height: 14px;
+  }
+  .team-footer {
+    text-align: center;
+    margin-top: 8px;
+  }
+  .team-footer a {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 1px;
+    text-decoration: none;
+  }
+  .team-footer a:hover { color: var(--text-primary); text-decoration: underline; }
+  .team-invite-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    margin-top: 8px;
+    padding: 7px 10px;
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    background: var(--pill-bg);
+    border: 1px solid var(--divider);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .team-invite-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .team-invite-btn:hover svg { stroke: var(--accent); }
+  .team-invite-feedback {
+    font-size: 10px; color: #4ade80; text-align: center;
+    opacity: 0; transition: opacity 0.2s; margin-top: 4px;
+  }
+  .team-invite-feedback.show { opacity: 1; }
+  .team-period-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+  }
+  .team-period-toggle {
+    display: flex;
+    background: var(--pill-bg);
+    border: 1px solid var(--divider);
+    border-radius: 10px;
+    padding: 2px;
+    gap: 0;
+  }
+  .team-period-btn {
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 4px 10px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-secondary);
+    transition: background 0.15s, color 0.15s;
+  }
+  .team-period-btn.active {
+    background: var(--text-primary);
+    color: var(--bg, #fff);
+  }
+
+  /* ── Leave team confirm ── */
+  .confirm-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.92);
+    border-radius: 16px;
+    z-index: 40;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .confirm-overlay.show { display: flex; }
+  .confirm-text {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-align: center;
+  }
+  .confirm-buttons {
+    display: flex;
+    gap: 8px;
+  }
+  .confirm-btn {
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 6px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: none;
+  }
+  .confirm-btn.danger {
+    background: #ef4444;
+    color: #fff;
+  }
+  .confirm-btn.cancel {
+    background: var(--pill-bg);
+    color: var(--text-primary);
   }
 
   /* ── 2. User row ── */
@@ -476,8 +741,23 @@
     </div>
   </div>
 
-  <!-- 1. CLAUDERANK -->
-  <div class="header-label">CLAUDERANK</div>
+  <!-- Confirm overlay -->
+  <div class="confirm-overlay" id="confirmOverlay">
+    <div class="confirm-text" id="confirmText">Leave this team?</div>
+    <div class="confirm-buttons">
+      <button class="confirm-btn cancel" id="confirmCancel">Cancel</button>
+      <button class="confirm-btn danger" id="confirmOk">Leave</button>
+    </div>
+  </div>
+
+  <!-- 1. Header row -->
+  <div class="header-row">
+    <div class="header-label">CLAUDERANK</div>
+    <div class="view-toggle" id="viewToggle">
+      <button class="view-toggle-btn active" id="toggleSolo">SOLO</button>
+      <button class="view-toggle-btn" id="toggleTeam">TEAM</button>
+    </div>
+  </div>
 
   <!-- 2. User row -->
   <div class="user-row">
@@ -489,11 +769,15 @@
       <div class="user-menu" id="userMenu">
         <button class="user-menu-item" id="editDisplayNameBtn">Edit Display Name</button>
         <button class="user-menu-item" id="viewRankingsBtn">View Rankings</button>
+        <button class="user-menu-item danger" id="leaveTeamBtn" style="display:none" onclick="confirmLeaveTeam()">Leave Team</button>
         <button class="user-menu-item danger" onclick="doLogout()">Sign Out</button>
       </div>
     </div>
     <div class="rank-pill" id="rankPill" style="cursor:pointer" title="View profile">RANK #&mdash;</div>
   </div>
+
+  <!-- Solo view (default) -->
+  <div class="solo-view" id="soloView">
 
   <!-- 3. Date nav -->
   <div class="date-nav-row">
@@ -563,6 +847,16 @@
     <button class="copy-btn" id="copyBtn" title="Copy card to clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
   </div>
   <div class="copy-feedback" id="copyFeedback">Copied!</div>
+
+  </div><!-- /solo-view -->
+
+  <!-- Team view (hidden by default) -->
+  <div class="team-view" id="teamView">
+    <div id="teamContent">
+      <div class="loading">Loading team...</div>
+    </div>
+  </div>
+
 </div>
 
 <script type="module">
@@ -1047,6 +1341,11 @@ async function loadProfile() {
       rankPill.textContent = '#' + rank + ' GLOBALLY' + (pct != null ? ' \u00b7 TOP ' + pct + '%' : '');
     }
 
+    // Track team membership
+    currentTeamHash = data.team_hash || null;
+    const leaveBtn = document.getElementById('leaveTeamBtn');
+    if (leaveBtn) leaveBtn.style.display = currentTeamHash ? '' : 'none';
+
     const m = data.metrics || {};
     totalTokens = m.total_tokens || 0;
     totalCost = m.estimated_spend || 0;
@@ -1106,6 +1405,297 @@ async function doLogout() {
     postToParent({ type: 'force-sync' });
   }
 }
+
+// ── Solo / Team toggle ──
+let currentTeamHash = null;
+const toggleSolo = document.getElementById('toggleSolo');
+const toggleTeam = document.getElementById('toggleTeam');
+const soloView = document.getElementById('soloView');
+const teamView = document.getElementById('teamView');
+
+function switchToSolo() {
+  toggleSolo.classList.add('active');
+  toggleTeam.classList.remove('active');
+  soloView.classList.remove('hidden');
+  teamView.classList.remove('active');
+  notifyHeight();
+}
+
+function switchToTeam() {
+  toggleTeam.classList.add('active');
+  toggleSolo.classList.remove('active');
+  soloView.classList.add('hidden');
+  teamView.classList.add('active');
+  loadTeamView();
+  notifyHeight();
+}
+
+toggleSolo.addEventListener('click', switchToSolo);
+toggleTeam.addEventListener('click', switchToTeam);
+
+// ── Team view ──
+let teamPeriod = '1d';
+let cachedTeamInfo = null;
+let cachedTeamMembers = null;
+
+async function loadTeamView() {
+  const container = document.getElementById('teamContent');
+  if (!currentTeamHash) {
+    renderNoTeam(container);
+    notifyHeight();
+    return;
+  }
+  // Only fetch team info once, then re-render member data on period change
+  if (!cachedTeamInfo || cachedTeamInfo.team_hash !== currentTeamHash) {
+    container.innerHTML = '<div class="loading">Loading team...</div>';
+    try {
+      cachedTeamInfo = await fetch(`/api/teams/${currentTeamHash}`).then(r => r.json());
+      cachedTeamMembers = cachedTeamInfo.members || [];
+    } catch (e) {
+      container.innerHTML = `<div class="loading" style="color:#ef4444">Failed to load team</div>`;
+      notifyHeight();
+      return;
+    }
+  }
+  renderTeamShell(container, cachedTeamInfo, cachedTeamMembers);
+  await loadTeamPeriodData();
+}
+
+function renderTeamShell(container, team, members) {
+  container.innerHTML = `
+    <div style="margin-top:12px"></div>
+    <div class="team-header-info">
+      <div class="team-name">${escHtml(team.team_name)}</div>
+      <div class="team-meta">${members.length} MEMBER${members.length !== 1 ? 'S' : ''}</div>
+    </div>
+    <div class="team-period-bar">
+      <div class="team-period-toggle">
+        <button class="team-period-btn${teamPeriod === 'lifetime' ? ' active' : ''}" data-period="lifetime">ALL</button>
+        <button class="team-period-btn${teamPeriod === '1m' ? ' active' : ''}" data-period="1m">1M</button>
+        <button class="team-period-btn${teamPeriod === '1w' ? ' active' : ''}" data-period="1w">1W</button>
+        <button class="team-period-btn${teamPeriod === '1d' ? ' active' : ''}" data-period="1d">1D</button>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="team-member-list" id="teamMemberList">
+      <div class="loading">Loading...</div>
+    </div>
+    <div class="divider" style="margin-top:8px"></div>
+    <button class="team-invite-btn" id="teamInviteBtn" title="Copy invite code">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      INVITE CODE: ${escHtml(currentTeamHash)}
+    </button>
+    <div class="team-invite-feedback" id="teamInviteFeedback">Copied!</div>
+    <div class="team-footer">
+      <a href="#" id="teamFullLink">VIEW FULL TEAM PAGE &rarr;</a>
+    </div>`;
+  notifyHeight();
+
+  // Period toggle
+  container.querySelectorAll('.team-period-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      teamPeriod = btn.dataset.period;
+      container.querySelectorAll('.team-period-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadTeamPeriodData();
+    });
+  });
+
+  // Invite code copy
+  const inviteBtn = document.getElementById('teamInviteBtn');
+  if (inviteBtn) {
+    inviteBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(currentTeamHash);
+        const fb = document.getElementById('teamInviteFeedback');
+        fb.classList.add('show');
+        setTimeout(() => fb.classList.remove('show'), 1500);
+      } catch {}
+    });
+  }
+
+  // Full team page link
+  const fullLink = document.getElementById('teamFullLink');
+  if (fullLink) {
+    fullLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      const url = window.location.origin + '/team.html?hash=' + currentTeamHash;
+      if (window.parent !== window) postToParent({ type: 'open-url', url });
+      else window.open(url, '_blank');
+    });
+  }
+}
+
+async function loadTeamPeriodData() {
+  const listEl = document.getElementById('teamMemberList');
+  if (!listEl) return;
+  listEl.innerHTML = '<div class="loading">Loading...</div>';
+
+  try {
+    let memberData;
+    if (teamPeriod === 'lifetime') {
+      memberData = await Promise.all(cachedTeamMembers.map(async m => {
+        try {
+          const p = await fetch(`/api/users/${m.user_hash}`).then(r => r.json());
+          return { ...m, display_name: p.display_name || m.display_name, tokens: p.metrics?.total_tokens || 0, avatar_url: p.avatar_url };
+        } catch { return { ...m, tokens: 0, avatar_url: null }; }
+      }));
+    } else {
+      const days = { '1d': 1, '1w': 7, '1m': 30 }[teamPeriod];
+      const today = localDateISO(new Date());
+      const burn = await fetch(`/api/teams/${currentTeamHash}/burn?date=${today}&days=${days}`).then(r => r.json());
+      memberData = (burn.members || []).map(m => ({ ...m, tokens: m.daily_tokens || 0 }));
+    }
+    memberData.sort((a, b) => b.tokens - a.tokens);
+
+    let html = '';
+    memberData.forEach((m, i) => {
+      const name = m.display_name || m.username || 'Anonymous';
+      const isYou = m.user_hash === userHash;
+      html += `<div class="team-member-row" data-hash="${m.user_hash}">
+        <span class="team-member-rank">${i + 1}</span>
+        ${m.avatar_url ? `<img class="team-member-avatar" src="${m.avatar_url}" alt="">` : ''}
+        <span class="team-member-name">${escHtml(name)}${isYou ? ' (you)' : ''}</span>
+        <span class="team-member-tokens">${formatNumber(m.tokens)}</span>
+      </div>`;
+    });
+    listEl.innerHTML = html || '<div class="loading">No members</div>';
+    notifyHeight();
+
+    // Click member → open profile
+    listEl.querySelectorAll('.team-member-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const h = row.getAttribute('data-hash');
+        const url = window.location.origin + '/profile.html?hash=' + h;
+        if (window.parent !== window) postToParent({ type: 'open-url', url });
+        else window.open(url, '_blank');
+      });
+    });
+  } catch (e) {
+    listEl.innerHTML = '<div class="loading" style="color:#ef4444">Failed to load</div>';
+    notifyHeight();
+  }
+}
+
+function renderNoTeam(container) {
+  container.innerHTML = `
+    <div class="team-no-team">
+      <div class="team-no-team-label">NO TEAM YET</div>
+
+      <div class="team-input-section" id="createSection">
+        <input class="team-input" id="createNameInput" placeholder="Team name" maxlength="30">
+        <div class="team-error" id="createError"></div>
+      </div>
+      <button class="team-action-btn primary" id="createTeamBtn">Create Team</button>
+
+      <div class="team-input-section" id="joinSection">
+        <input class="team-input" id="joinCodeInput" placeholder="Team invite code">
+        <div class="team-error" id="joinError"></div>
+      </div>
+      <button class="team-action-btn secondary" id="joinTeamBtn">Join Team</button>
+    </div>`;
+
+  let createMode = false;
+  let joinMode = false;
+
+  document.getElementById('createTeamBtn').addEventListener('click', async () => {
+    if (!createMode) {
+      createMode = true;
+      joinMode = false;
+      document.getElementById('createSection').classList.add('show');
+      document.getElementById('joinSection').classList.remove('show');
+      document.getElementById('createNameInput').focus();
+      notifyHeight();
+      return;
+    }
+    const name = document.getElementById('createNameInput').value.trim();
+    if (!name) { document.getElementById('createError').textContent = 'Enter a team name'; return; }
+    if (name.length > 30) { document.getElementById('createError').textContent = 'Max 30 characters'; return; }
+    document.getElementById('createError').textContent = '';
+    try {
+      const hdrs = { 'Content-Type': 'application/json' };
+      if (syncSecret) hdrs['X-Sync-Secret'] = syncSecret;
+      const resp = await fetch('/api/teams', {
+        method: 'POST', credentials: 'include',
+        headers: hdrs,
+        body: JSON.stringify({ user_hash: userHash, team_name: name }),
+      });
+      if (!resp.ok) { const d = await resp.json().catch(() => ({})); throw new Error(d.detail || 'Failed'); }
+      const data = await resp.json();
+      currentTeamHash = data.team_hash;
+      document.getElementById('leaveTeamBtn').style.display = '';
+      loadTeamView();
+    } catch (e) {
+      document.getElementById('createError').textContent = e.message;
+    }
+  });
+
+  document.getElementById('joinTeamBtn').addEventListener('click', async () => {
+    if (!joinMode) {
+      joinMode = true;
+      createMode = false;
+      document.getElementById('joinSection').classList.add('show');
+      document.getElementById('createSection').classList.remove('show');
+      document.getElementById('joinCodeInput').focus();
+      notifyHeight();
+      return;
+    }
+    const code = document.getElementById('joinCodeInput').value.trim();
+    if (!code) { document.getElementById('joinError').textContent = 'Enter an invite code'; return; }
+    document.getElementById('joinError').textContent = '';
+    try {
+      const joinHdrs = { 'Content-Type': 'application/json' };
+      if (syncSecret) joinHdrs['X-Sync-Secret'] = syncSecret;
+      const resp = await fetch(`/api/teams/${encodeURIComponent(code)}/join`, {
+        method: 'POST', credentials: 'include',
+        headers: joinHdrs,
+        body: JSON.stringify({ user_hash: userHash }),
+      });
+      if (!resp.ok) { const d = await resp.json().catch(() => ({})); throw new Error(d.detail || 'Failed'); }
+      const data = await resp.json();
+      currentTeamHash = data.team_hash;
+      document.getElementById('leaveTeamBtn').style.display = '';
+      loadTeamView();
+    } catch (e) {
+      document.getElementById('joinError').textContent = e.message;
+    }
+  });
+  notifyHeight();
+}
+
+// ── Leave team (with confirm) ──
+window.confirmLeaveTeam = confirmLeaveTeam;
+function confirmLeaveTeam() {
+  userMenu.classList.remove('open');
+  const overlay = document.getElementById('confirmOverlay');
+  overlay.classList.add('show');
+}
+
+document.getElementById('confirmCancel').addEventListener('click', () => {
+  document.getElementById('confirmOverlay').classList.remove('show');
+});
+
+document.getElementById('confirmOk').addEventListener('click', async () => {
+  document.getElementById('confirmOverlay').classList.remove('show');
+  try {
+    const leaveHdrs = { 'Content-Type': 'application/json' };
+    if (syncSecret) leaveHdrs['X-Sync-Secret'] = syncSecret;
+    const resp = await fetch('/api/teams/leave', {
+      method: 'POST', credentials: 'include',
+      headers: leaveHdrs,
+      body: JSON.stringify({ user_hash: userHash }),
+    });
+    if (!resp.ok) { const d = await resp.json().catch(() => ({})); throw new Error(d.detail || 'Failed'); }
+    currentTeamHash = null;
+    document.getElementById('leaveTeamBtn').style.display = 'none';
+    // If viewing team, refresh the view
+    if (teamView.classList.contains('active')) {
+      loadTeamView();
+    }
+  } catch (e) {
+    console.error('Leave team failed:', e);
+  }
+});
 
 // ── Copy as full V5 card image ──
 // Renders an exact copy of renderShareableCardV5() from profile.html
