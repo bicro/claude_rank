@@ -90,24 +90,58 @@ function parseConcurrencyResponse(data, localDateStr) {
 
 // ── Render the activity timeline ──
 
+/**
+ * Convert UTC-based daySessions entries to local-minute entries for today,
+ * then render as a block-character timeline.
+ */
 function renderTimeline(sessions) {
   if (!sessions || sessions.length === 0) return null;
 
-  const maxRing = Math.max(...sessions.map(e => e.ring ?? 0));
-  const maxTokens = Math.max(...sessions.map(e => e.tokens || 0), 1);
+  // Convert UTC minutes to local minutes-since-midnight
+  const now = new Date();
+  const y = now.getFullYear(), mo = now.getMonth(), d = now.getDate();
+  const localDayStart = new Date(y, mo, d, 0, 0, 0).getTime();
+  const localDayEnd = new Date(y, mo, d, 23, 59, 59, 999).getTime();
 
-  // 48 cols = half-hour resolution over 24 hours
+  const localEntries = [];
+  for (const e of sessions) {
+    const utcDate = e.utcDate;
+    if (!utcDate) continue;
+    const [uy, um, ud] = utcDate.split("-").map(Number);
+    const startMs = Date.UTC(uy, um - 1, ud, 0, e.start);
+    const endMs = Date.UTC(uy, um - 1, ud, 0, e.end);
+
+    const clampStart = Math.max(startMs, localDayStart);
+    const clampEnd = Math.min(endMs, localDayEnd);
+    if (clampStart > clampEnd) continue;
+
+    const localStartMin = Math.floor((clampStart - localDayStart) / 60000);
+    const localEndMin = Math.floor((clampEnd - localDayStart) / 60000);
+
+    localEntries.push({
+      ring: e.ring ?? 0,
+      start: localStartMin,
+      end: localEndMin,
+      tokens: e.tokens || 0,
+    });
+  }
+
+  if (localEntries.length === 0) return null;
+
+  const maxRing = Math.max(...localEntries.map(e => e.ring));
+  const maxTokens = Math.max(...localEntries.map(e => e.tokens), 1);
+
   const WIDTH = 48;
   const lines = [];
 
   for (let ring = maxRing; ring >= 0; ring--) {
-    const ringEntries = sessions.filter(e => (e.ring ?? 0) === ring);
+    const ringEntries = localEntries.filter(e => e.ring === ring);
     const timeline = new Array(WIDTH).fill(" ");
 
     for (const entry of ringEntries) {
       const startCol = Math.floor((entry.start / 1440) * WIDTH);
       const endCol = Math.min(Math.floor((entry.end / 1440) * WIDTH), WIDTH - 1);
-      const block = intensityBlock(entry.tokens || 0, maxTokens);
+      const block = intensityBlock(entry.tokens, maxTokens);
       for (let c = startCol; c <= endCol; c++) {
         if (BLOCKS.indexOf(block) > BLOCKS.indexOf(timeline[c])) {
           timeline[c] = block;
@@ -119,7 +153,6 @@ function renderTimeline(sessions) {
     lines.push(`  ${label.padStart(2)} |${timeline.join("")}|`);
   }
 
-  // Time axis
   const axis = "0h".padEnd(12) + "6h".padEnd(12) + "12h".padEnd(12) + "18h".padEnd(12);
   lines.push(`      ${axis}`);
 
@@ -175,8 +208,21 @@ async function main() {
   const ranks = profile.ranks || {};
   const weightedRank = ranks.weighted;
 
-  // Parse concurrency
+  // Parse concurrency (API) for histogram stats only
   const cStats = parseConcurrencyResponse(concurrency, null);
+
+  // Use local daySessions for the timeline (always fresh)
+  const daySessions = stats?.daySessions || {};
+  const now2 = new Date();
+  const utcDatesLocal = utcDatesForLocalDay(now2);
+  const localSessions = [];
+  for (const utcDate of utcDatesLocal) {
+    if (daySessions[utcDate]) {
+      for (const s of daySessions[utcDate]) {
+        localSessions.push({ ...s, utcDate });
+      }
+    }
+  }
 
   // ── Build output ──
   const out = [];
@@ -193,11 +239,11 @@ async function main() {
   out.push(`${fmtTokens(tokens)} tokens burned · ~${cost} est. cost`);
   out.push("");
 
-  // Activity timeline
-  if (cStats.sessions.length > 0) {
+  // Activity timeline (from local stats, not API)
+  if (localSessions.length > 0) {
     out.push("### Agent Activity");
     out.push(`\`\`\``);
-    const tLines = renderTimeline(cStats.sessions);
+    const tLines = renderTimeline(localSessions);
     if (tLines) {
       for (const l of tLines) out.push(l);
     }
