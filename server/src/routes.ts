@@ -488,9 +488,18 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
   // Use the session's user ID as auth_id — never trust the client-supplied value
   const authId = session.user.id;
 
-  // Prevent re-linking a user_hash already connected to a different auth user
+  // If this device was previously linked to a different auth user, disconnect it first
   if (user.auth_id && user.auth_id !== authId) {
-    return error("This account is already linked to a different user", 403);
+    const oldPrimary = user.linked_to || user.user_hash;
+    await db.query(
+      "UPDATE users SET auth_id = NULL, auth_provider = NULL, linked_to = NULL, display_name = NULL, avatar_url = NULL, social_url = NULL, updated_at = ? WHERE user_hash = ?"
+    ).run(now, userHash);
+    // Recompute old primary's metrics without this device
+    if (user.linked_to) {
+      await recomputeUserMetrics(oldPrimary);
+    }
+    // Re-fetch user after clearing
+    user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
   }
 
   // Check if this auth_id is already connected to a different user_hash (multi-device linking)
