@@ -34,3 +34,13 @@ export async function postSync(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export async function fetchConcurrency(hash, date) {
+  const params = date ? `?date=${date}` : '';
+  return apiFetch(`/api/users/${hash}/concurrency${params}`);
+}
+
+export async function fetchDailyRanks(hash, date) {
+  const params = date ? `?period=day&date=${date}` : '?period=day';
+  return apiFetch(`/api/users/${hash}/daily-ranks${params}`);
+}

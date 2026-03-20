@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, readdirSync, statSync } from "fs";
+import { readFileSync, writeFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { createHash } from "crypto";
 import { homedir } from "os";
@@ -24,6 +24,8 @@ export function loadStats() {
   return stats;
 }
 
+const IDLE_THRESHOLD_SECS = 300;
+
 function parseAllLogs() {
   const stats = {
     version: 5,
@@ -48,6 +50,7 @@ function parseAllLogs() {
 
   const dailyMap = {};    // date -> { messageCount, sessionCount, toolCallCount }
   const dailyTokens = {}; // date -> { model -> totalTokens }
+  const sessions = [];    // collected session data for concurrency analysis
 
   let jsonlFiles;
   try {
@@ -56,13 +59,18 @@ function parseAllLogs() {
     return finalizeStats(stats, dailyMap, dailyTokens);
   }
 
-  for (const filePath of jsonlFiles) {
+  for (const { path: filePath, isSubagent } of jsonlFiles) {
     try {
-      parseJsonlFile(filePath, stats, dailyMap, dailyTokens);
+      const session = parseJsonlFile(filePath, stats, dailyMap, dailyTokens, isSubagent);
+      if (session) sessions.push(session);
     } catch {
       // Skip malformed files
     }
   }
+
+  // Compute concurrency data from collected sessions
+  stats.concurrencyHistogram = computeConcurrencyHistogram(sessions);
+  stats.daySessions = computeDaySessions(sessions);
 
   return finalizeStats(stats, dailyMap, dailyTokens);
 }
@@ -157,15 +165,20 @@ function computePointsAndLevel(stats) {
   return { points, level };
 }
 
-function findJsonlFiles(dir) {
+/**
+ * Find all .jsonl files. Returns array of { path, isSubagent }.
+ * Files inside a "subagents" directory are marked as subagent sessions.
+ */
+function findJsonlFiles(dir, insideSubagents = false) {
   const files = [];
   try {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const fullPath = join(dir, entry.name);
       if (entry.isDirectory()) {
-        files.push(...findJsonlFiles(fullPath));
+        const isSub = insideSubagents || entry.name === "subagents";
+        files.push(...findJsonlFiles(fullPath, isSub));
       } else if (entry.name.endsWith(".jsonl")) {
-        files.push(fullPath);
+        files.push({ path: fullPath, isSubagent: insideSubagents });
       }
     }
   } catch {
@@ -174,16 +187,18 @@ function findJsonlFiles(dir) {
   return files;
 }
 
-function parseJsonlFile(filePath, stats, dailyMap, dailyTokens) {
+function parseJsonlFile(filePath, stats, dailyMap, dailyTokens, isSubagent = false) {
   const content = readFileSync(filePath, "utf-8");
   const lines = content.split("\n").filter(Boolean);
 
-  if (lines.length === 0) return;
+  if (lines.length === 0) return null;
 
   stats.totalSessions++;
   let sessionMessages = 0;
   let sessionToolCalls = 0;
   let timestamps = [];
+  let userTimestamps = [];
+  let sessionTokens = 0;
   let firstUserMsg = null;
 
   for (const line of lines) {
@@ -204,6 +219,7 @@ function parseJsonlFile(filePath, stats, dailyMap, dailyTokens) {
     if (type === "user") {
       stats.totalMessages++;
       sessionMessages++;
+      if (ts) userTimestamps.push(ts);
 
       // Track first user message for prompt hash
       if (!firstUserMsg && msg?.content) {
@@ -259,6 +275,7 @@ function parseJsonlFile(filePath, stats, dailyMap, dailyTokens) {
         if (date) {
           const totalTok = (msg.usage.input_tokens || 0) + (msg.usage.output_tokens || 0) +
                           (msg.usage.cache_read_input_tokens || 0) + (msg.usage.cache_creation_input_tokens || 0);
+          sessionTokens += totalTok;
           if (!dailyTokens[date]) dailyTokens[date] = {};
           dailyTokens[date][model] = (dailyTokens[date][model] || 0) + totalTok;
 
@@ -303,4 +320,213 @@ function parseJsonlFile(filePath, stats, dailyMap, dailyTokens) {
     stats.totalActiveTimeSecs += activeTime;
     stats.totalIdleTimeSecs += idleTime;
   }
+
+  // Return session data for concurrency analysis
+  return {
+    timestamps,
+    userTimestamps,
+    isMain: !isSubagent,
+    tokens: sessionTokens,
+    messages: sessionMessages,
+  };
+}
+
+/**
+ * Split sorted timestamps into active segments at gaps > IDLE_THRESHOLD_SECS.
+ * Returns array of [segStart, segEnd] Date pairs.
+ */
+function computeActiveSegments(timestamps) {
+  if (timestamps.length === 0) return [];
+
+  const sorted = [...timestamps].sort((a, b) => a.getTime() - b.getTime());
+  const segments = [];
+  let segStart = sorted[0];
+  let segEnd = sorted[0];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = (sorted[i].getTime() - segEnd.getTime()) / 1000;
+    if (gap > IDLE_THRESHOLD_SECS) {
+      segments.push([segStart, segEnd]);
+      segStart = sorted[i];
+    }
+    segEnd = sorted[i];
+  }
+  segments.push([segStart, segEnd]);
+  return segments;
+}
+
+/**
+ * Compute concurrency histogram: for each hour with activity, count how many
+ * main sessions have an active segment overlapping each minute.
+ * Returns { "YYYY-MM-DD:H": { sessionCount: minutes } }
+ */
+function computeConcurrencyHistogram(sessions) {
+  const histogram = {};
+
+  // Only main sessions with >= 2 timestamps
+  const mainSegments = sessions
+    .filter(s => s.isMain && s.timestamps.length >= 2)
+    .map(s => computeActiveSegments(s.timestamps))
+    .filter(segs => segs.length > 0);
+
+  if (mainSegments.length === 0) return histogram;
+
+  // Collect all unique hours with activity
+  const hoursWithActivity = new Set();
+  for (const segments of mainSegments) {
+    for (const [segStart, segEnd] of segments) {
+      // Walk hour by hour from segStart to segEnd
+      const startMs = new Date(segStart);
+      startMs.setUTCMinutes(0, 0, 0);
+      let current = startMs.getTime();
+      const endMs = segEnd.getTime();
+      while (current <= endMs) {
+        const d = new Date(current);
+        const hourKey = `${d.toISOString().slice(0, 10)}:${d.getUTCHours()}`;
+        hoursWithActivity.add(hourKey);
+        current += 3600000; // 1 hour
+      }
+    }
+  }
+
+  // For each hour, check concurrency per minute
+  for (const hourKey of hoursWithActivity) {
+    const lastColon = hourKey.lastIndexOf(":");
+    const dateStr = hourKey.slice(0, lastColon);
+    const hour = parseInt(hourKey.slice(lastColon + 1), 10);
+
+    const hourStartMs = new Date(`${dateStr}T00:00:00Z`).getTime() + hour * 3600000;
+    const minuteCounts = {};
+
+    for (let minute = 0; minute < 60; minute++) {
+      const minStart = hourStartMs + minute * 60000;
+      const minEnd = minStart + 60000;
+
+      let concurrent = 0;
+      for (const segments of mainSegments) {
+        for (const [segStart, segEnd] of segments) {
+          if (segStart.getTime() < minEnd && segEnd.getTime() >= minStart) {
+            concurrent++;
+            break; // count this session once
+          }
+        }
+      }
+
+      if (concurrent > 0) {
+        minuteCounts[concurrent] = (minuteCounts[concurrent] || 0) + 1;
+      }
+    }
+
+    if (Object.keys(minuteCounts).length > 0) {
+      histogram[hourKey] = minuteCounts;
+    }
+  }
+
+  return histogram;
+}
+
+/**
+ * Compute day sessions with greedy ring assignment.
+ * Returns { "YYYY-MM-DD": [{ ring, start, end, tokens, messages }] }
+ */
+function computeDaySessions(sessions) {
+  const daySpans = {}; // date -> [{ start_min, end_min, tokens, messages }]
+
+  for (const session of sessions) {
+    if (!session.isMain || session.timestamps.length < 2 || session.messages === 0) {
+      continue;
+    }
+
+    const segments = computeActiveSegments(session.timestamps);
+    if (segments.length === 0) continue;
+
+    // Group segments by UTC date
+    const dateSegments = {};
+    for (const [segStart, segEnd] of segments) {
+      const startDate = segStart.toISOString().slice(0, 10);
+      const endDate = segEnd.toISOString().slice(0, 10);
+
+      if (startDate === endDate) {
+        const startMin = segStart.getUTCHours() * 60 + segStart.getUTCMinutes();
+        const endMin = segEnd.getUTCHours() * 60 + segEnd.getUTCMinutes();
+        if (!dateSegments[startDate]) dateSegments[startDate] = [];
+        dateSegments[startDate].push([startMin, Math.max(endMin, startMin)]);
+      } else {
+        // Spans midnight: split
+        const startMin = segStart.getUTCHours() * 60 + segStart.getUTCMinutes();
+        if (!dateSegments[startDate]) dateSegments[startDate] = [];
+        dateSegments[startDate].push([startMin, 1439]);
+
+        const endMin = segEnd.getUTCHours() * 60 + segEnd.getUTCMinutes();
+        if (!dateSegments[endDate]) dateSegments[endDate] = [];
+        dateSegments[endDate].push([0, endMin]);
+      }
+    }
+
+    // Compute tokens and messages per date from user timestamps
+    const dateMessages = {};
+    for (const ts of session.userTimestamps) {
+      const date = ts.toISOString().slice(0, 10);
+      dateMessages[date] = (dateMessages[date] || 0) + 1;
+    }
+
+    // Distribute tokens/messages across segments per date
+    for (const [date, segs] of Object.entries(dateSegments)) {
+      const segCount = Math.max(segs.length, 1);
+      const tokPerSeg = Math.floor(session.tokens / segCount);
+      const msgPerSeg = Math.floor((dateMessages[date] || 0) / segCount);
+
+      if (!daySpans[date]) daySpans[date] = [];
+      for (const [startMin, endMin] of segs) {
+        daySpans[date].push({
+          start_min: startMin,
+          end_min: Math.max(endMin, startMin),
+          tokens: tokPerSeg,
+          messages: msgPerSeg,
+        });
+      }
+    }
+  }
+
+  // Greedy ring assignment per date
+  const result = {};
+  for (const [date, spans] of Object.entries(daySpans)) {
+    spans.sort((a, b) => a.start_min - b.start_min);
+
+    const ringEnds = []; // ringEnds[i] = end minute of last span on ring i
+    const entries = [];
+
+    for (const span of spans) {
+      let assignedRing = -1;
+      for (let i = 0; i < ringEnds.length; i++) {
+        if (span.start_min > ringEnds[i]) {
+          assignedRing = i;
+          break;
+        }
+      }
+
+      let ring;
+      if (assignedRing >= 0) {
+        ring = assignedRing;
+        ringEnds[ring] = span.end_min;
+      } else {
+        ring = ringEnds.length;
+        ringEnds.push(span.end_min);
+      }
+
+      entries.push({
+        ring,
+        start: span.start_min,
+        end: span.end_min,
+        tokens: span.tokens,
+        messages: span.messages,
+      });
+    }
+
+    if (entries.length > 0) {
+      result[date] = entries;
+    }
+  }
+
+  return result;
 }

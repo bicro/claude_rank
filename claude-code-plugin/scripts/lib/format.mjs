@@ -60,6 +60,13 @@ export function fmtPercentile(pct) {
   return `top ${pct.toFixed(1)}%`;
 }
 
+/** Format minutes as agent hours (e.g., 270 -> "4.5h", 45 -> "45m") */
+export function fmtAgentHours(minutes) {
+  if (!minutes || minutes === 0) return "0m";
+  if (minutes >= 60) return (minutes / 60).toFixed(1) + "h";
+  return `${Math.round(minutes)}m`;
+}
+
 /** Pricing per million tokens (matches server pricing table) */
 const PRICING = [
   { match: "opus-4-6",  input: 5,    output: 25,   cacheRead: 0.50, cacheWrite: 6.25 },
