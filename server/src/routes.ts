@@ -1572,7 +1572,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
         JOIN users u ON mh.user_hash = u.user_hash
         JOIN user_metrics um ON u.user_hash = um.user_hash
         WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.daily_tokens > 0
-        ORDER BY mh.daily_tokens DESC
+        ORDER BY mh.daily_tokens DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
         LIMIT ? OFFSET ?`
       ).all(dateParam, limit, offset) as any[];
       countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.daily_tokens > 0`;
@@ -1585,7 +1585,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
         JOIN users u ON mh.user_hash = u.user_hash
         JOIN user_metrics um ON u.user_hash = um.user_hash
         WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.peak_concurrency > 0
-        ORDER BY mh.peak_concurrency DESC
+        ORDER BY mh.peak_concurrency DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
         LIMIT ? OFFSET ?`
       ).all(dateParam, limit, offset) as any[];
       countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.peak_concurrency > 0`;
@@ -1598,7 +1598,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
         JOIN users u ON mh.user_hash = u.user_hash
         JOIN user_metrics um ON u.user_hash = um.user_hash
         WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.total_agent_mins > 0
-        ORDER BY mh.total_agent_mins DESC
+        ORDER BY mh.total_agent_mins DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
         LIMIT ? OFFSET ?`
       ).all(dateParam, limit, offset) as any[];
       countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.total_agent_mins > 0`;
@@ -1611,7 +1611,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
         JOIN users u ON mh.user_hash = u.user_hash
         JOIN user_metrics um ON u.user_hash = um.user_hash
         WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.concurrent_mins > 0
-        ORDER BY mh.concurrent_mins DESC
+        ORDER BY mh.concurrent_mins DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
         LIMIT ? OFFSET ?`
       ).all(dateParam, limit, offset) as any[];
       countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.concurrent_mins > 0`;
@@ -1624,7 +1624,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
         JOIN users u ON mh.user_hash = u.user_hash
         JOIN user_metrics um ON u.user_hash = um.user_hash
         WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.daily_messages > 0
-        ORDER BY mh.daily_messages DESC
+        ORDER BY mh.daily_messages DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
         LIMIT ? OFFSET ?`
       ).all(dateParam, limit, offset) as any[];
       countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.daily_messages > 0`;
@@ -1636,7 +1636,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
           um.current_streak as value, um.weighted_score
         FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
         WHERE u.linked_to IS NULL AND um.current_streak > 0
-        ORDER BY um.current_streak DESC
+        ORDER BY um.current_streak DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
         LIMIT ? OFFSET ?`
       ).all(limit, offset) as any[];
       countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL AND um.current_streak > 0`;
@@ -1671,7 +1671,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
         um.total_tokens as value, um.weighted_score, um.estimated_spend as cost
       FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
       WHERE u.linked_to IS NULL
-      ORDER BY um.total_tokens DESC
+      ORDER BY um.total_tokens DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
     countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL`;
@@ -1685,7 +1685,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
       WHERE u.linked_to IS NULL
       GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score
       HAVING MAX(mh.peak_concurrency) > 0
-      ORDER BY value DESC
+      ORDER BY value DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
     countSql = `SELECT COUNT(*) as cnt FROM (
@@ -1704,7 +1704,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
       WHERE u.linked_to IS NULL
       GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score
       HAVING SUM(mh.total_agent_mins) > 0
-      ORDER BY value DESC
+      ORDER BY value DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
     countSql = `SELECT COUNT(*) as cnt FROM (
@@ -1723,7 +1723,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
       WHERE u.linked_to IS NULL
       GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score
       HAVING SUM(mh.concurrent_mins) > 0
-      ORDER BY value DESC
+      ORDER BY value DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
     countSql = `SELECT COUNT(*) as cnt FROM (
@@ -1738,7 +1738,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
         um.total_messages as value, um.weighted_score
       FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
       WHERE u.linked_to IS NULL
-      ORDER BY um.total_messages DESC
+      ORDER BY um.total_messages DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
     countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL`;
@@ -1749,7 +1749,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
         um.current_streak as value, um.weighted_score
       FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
       WHERE u.linked_to IS NULL AND um.current_streak > 0
-      ORDER BY um.current_streak DESC
+      ORDER BY um.current_streak DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
     countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL AND um.current_streak > 0`;
