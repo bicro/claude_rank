@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { loadOrCreateIdentity, getLookupHash } from "./lib/identity.mjs";
 import { fetchLeaderboard } from "./lib/api.mjs";
-import { fmtNum, tierEmoji } from "./lib/format.mjs";
+import { fmtNum } from "./lib/format.mjs";
 
 const category = process.argv[2] || "weighted";
 const limit = parseInt(process.argv[3] || "20", 10);
@@ -23,44 +23,48 @@ async function main() {
   try {
     data = await fetchLeaderboard(category, limit);
   } catch {
-    console.log("## 🏆 Claude Rank Leaderboard\n");
-    console.log("Unable to fetch leaderboard. Check your connection.");
+    console.log("## Leaderboard\n\nUnable to fetch leaderboard. Check your connection.");
     process.exit(0);
   }
 
   const label = CATEGORY_LABELS[category] || category;
   const entries = data.leaderboard || data.entries || data || [];
 
-  const lines = [];
-  lines.push(`## 🏆 Claude Rank Leaderboard — ${label}`);
-  lines.push("");
-  lines.push("| Rank | Username | Score | Tier |");
-  lines.push("|------|----------|-------|------|");
+  const out = [];
+  out.push(`## Leaderboard — ${label}`);
+  out.push("");
 
   let myPosition = null;
 
+  // Find max widths for alignment
+  const maxRankW = String(entries.length > 0 ? entries[entries.length - 1].rank ?? entries.length : 1).length;
+  const maxNameW = Math.max(...entries.map(e => (e.username || "Anonymous").length), 5);
+  const maxScoreW = Math.max(...entries.map(e => fmtNum(e.value ?? e.score ?? 0).length), 5);
+
+  out.push("```");
   for (const entry of entries) {
     const rank = entry.rank ?? "—";
     const name = entry.username || "Anonymous";
     const score = fmtNum(entry.value ?? entry.score ?? 0);
     const level = entry.level ?? 0;
-    const emoji = tierEmoji(level);
     const isMe = entry.user_hash === myHash || entry.primary_hash === myHash;
 
-    if (isMe) {
-      lines.push(`| **►#${rank}** | **${name}** | **${score}** | **${emoji}** |`);
-      myPosition = rank;
-    } else {
-      lines.push(`| #${rank} | ${name} | ${score} | ${emoji} |`);
-    }
+    const prefix = isMe ? ">" : " ";
+    const rankStr = `#${rank}`.padStart(maxRankW + 1);
+    const nameStr = name.padEnd(maxNameW);
+    const scoreStr = score.padStart(maxScoreW);
+
+    out.push(`${prefix}${rankStr}  ${nameStr}  ${scoreStr}  Lv.${level}`);
+    if (isMe) myPosition = rank;
   }
+  out.push("```");
 
   if (myPosition) {
-    lines.push("");
-    lines.push(`**Your position:** #${myPosition}`);
+    out.push("");
+    out.push(`Your position: #${myPosition}`);
   }
 
-  console.log(lines.join("\n"));
+  console.log(out.join("\n"));
 }
 
 main();

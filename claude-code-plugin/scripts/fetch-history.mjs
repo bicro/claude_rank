@@ -13,44 +13,36 @@ async function main() {
   try {
     history = await fetchHistory(hash, days);
   } catch {
-    console.log("## 📈 Claude Usage History\n");
-    console.log("Unable to fetch history. Make sure you've synced at least once.");
+    console.log(`## Usage History — Last ${days} Days\n\nUnable to fetch history. Make sure you've synced at least once.`);
     process.exit(0);
   }
 
   const entries = Array.isArray(history) ? history : history.daily || history.history || [];
 
-  const lines = [];
-  lines.push(`## 📈 Claude Usage History — Last ${days} Days`);
-  lines.push("");
+  const out = [];
+  out.push(`## Usage History — Last ${days} Days`);
+  out.push("");
 
   if (entries.length === 0) {
-    lines.push("No history data available. Sync first by running `/claude-rank:rank`.");
+    out.push("No history data available. Sync first by running `/claude-rank:rank`.");
   } else {
-    lines.push("| Date | Messages | Tokens | Tool Calls | Sessions |");
-    lines.push("|------|----------|--------|------------|----------|");
-
     let totalMsg = 0, totalTok = 0, totalTool = 0, totalSess = 0;
 
     for (const e of entries) {
-      const date = e.date;
       const msg = e.messageCount ?? e.messages ?? 0;
       const tok = e.tokenCount ?? e.tokens ?? 0;
       const tool = e.toolCallCount ?? e.tool_calls ?? 0;
       const sess = e.sessionCount ?? e.sessions ?? 0;
+      totalMsg += msg; totalTok += tok; totalTool += tool; totalSess += sess;
 
-      totalMsg += msg;
-      totalTok += tok;
-      totalTool += tool;
-      totalSess += sess;
-
-      lines.push(`| ${date} | ${fmtNum(msg)} | ${fmtTokens(tok)} | ${fmtNum(tool)} | ${fmtNum(sess)} |`);
+      out.push(`**${e.date}**  ${fmtNum(msg)} msg · ${fmtTokens(tok)} tok · ${fmtNum(tool)} tools · ${fmtNum(sess)} sess`);
     }
 
-    lines.push(`| **Total** | **${fmtNum(totalMsg)}** | **${fmtTokens(totalTok)}** | **${fmtNum(totalTool)}** | **${fmtNum(totalSess)}** |`);
+    out.push("");
+    out.push(`**Total:** ${fmtNum(totalMsg)} msg · ${fmtTokens(totalTok)} tok · ${fmtNum(totalTool)} tools · ${fmtNum(totalSess)} sess`);
   }
 
-  console.log(lines.join("\n"));
+  console.log(out.join("\n"));
 }
 
 main();

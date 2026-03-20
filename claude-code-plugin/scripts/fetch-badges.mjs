@@ -16,34 +16,29 @@ async function main() {
   try {
     badges = await fetchBadges(hash);
   } catch {
-    console.log("## 🏅 Claude Rank Badges\n");
-    console.log("Unable to fetch badges. Check your connection.");
+    console.log("## Badges\n\nUnable to fetch badges. Check your connection.");
     process.exit(0);
   }
 
   const list = Array.isArray(badges) ? badges : badges.badges || [];
 
-  const lines = [];
-  lines.push("## 🏅 Claude Rank Badges");
-  lines.push("");
+  const out = [];
+  out.push(`## Badges — ${list.length} earned`);
+  out.push("");
 
   if (list.length === 0) {
-    lines.push("No badges earned yet! Keep using Claude to unlock achievements.");
-    lines.push("Visit https://clauderank.com to see all available badges.");
+    out.push("No badges earned yet! Keep using Claude to unlock achievements.");
+    out.push("Visit https://clauderank.com to see all available badges.");
   } else {
-    lines.push(`${list.length} badges earned`);
-    lines.push("");
-    lines.push("| Badge | Description | Unlocked |");
-    lines.push("|-------|-------------|----------|");
     for (const b of list) {
       const name = b.name || b.id || "Unknown";
-      const desc = b.description || "";
+      const desc = b.description ? ` — ${b.description}` : "";
       const date = fmtDate(b.unlocked_at);
-      lines.push(`| ${name} | ${desc} | ${date} |`);
+      out.push(`**${name}**${desc} · ${date}`);
     }
   }
 
-  console.log(lines.join("\n"));
+  console.log(out.join("\n"));
 }
 
 main();

@@ -12,8 +12,7 @@ async function main() {
   try {
     profile = await fetchUserProfile(hash);
   } catch {
-    console.log("## Claude Usage Statistics\n");
-    console.log("Unable to fetch stats. Make sure you've synced at least once and check your connection.");
+    console.log("## Usage Statistics\n\nUnable to fetch stats. Make sure you've synced at least once.");
     process.exit(0);
   }
 
@@ -21,70 +20,48 @@ async function main() {
   const localStats = loadStats();
   const modelUsage = localStats.modelUsage || {};
 
-  // Use API totals, fall back to local
   const totalTokens = m.total_tokens ?? 0;
-
-  const lines = [];
-  lines.push("## 📊 Claude Usage Statistics");
-  lines.push("");
-  lines.push("### Overview");
-  lines.push("");
-  lines.push("| Metric | Value |");
-  lines.push("|--------|-------|");
-  lines.push(`| Total Tokens | ${fmtNum(totalTokens)} |`);
-  lines.push(`| Total Messages | ${fmtNum(m.total_messages ?? 0)} |`);
-  lines.push(`| Total Sessions | ${fmtNum(m.total_sessions ?? 0)} |`);
-  lines.push(`| Total Tool Calls | ${fmtNum(m.total_tool_calls ?? 0)} |`);
-
-  // Session times from local stats
   const sessionSecs = localStats.totalSessionTimeSecs || 0;
   const activeSecs = localStats.totalActiveTimeSecs || 0;
   const idleSecs = localStats.totalIdleTimeSecs || 0;
-  if (sessionSecs > 0) {
-    lines.push(`| Session Time | ${fmtDuration(sessionSecs)} |`);
-    lines.push(`| Active Time | ${fmtDuration(activeSecs)} |`);
-    lines.push(`| Idle Time | ${fmtDuration(idleSecs)} |`);
-  }
-
-  // Estimated spend — prefer API value, fall back to local computation
   const spend = m.estimated_spend != null
     ? `$${Number(m.estimated_spend).toFixed(2)}`
     : estimateCost(modelUsage);
-  lines.push(`| Est. Spend | ${spend} |`);
 
-  if (localStats.firstSessionDate) {
-    lines.push(`| Member Since | ${localStats.firstSessionDate} |`);
+  const out = [];
+  out.push("## Usage Statistics");
+  out.push("");
+
+  // Overview
+  out.push("### Overview");
+  out.push(`${fmtNum(totalTokens)} tokens · ${fmtNum(m.total_messages ?? 0)} messages · ${fmtNum(m.total_sessions ?? 0)} sessions · ${fmtNum(m.total_tool_calls ?? 0)} tool calls`);
+  if (sessionSecs > 0) {
+    out.push(`Session: ${fmtDuration(sessionSecs)} total · ${fmtDuration(activeSecs)} active · ${fmtDuration(idleSecs)} idle`);
   }
+  const memberLine = localStats.firstSessionDate ? ` · Member since ${localStats.firstSessionDate}` : "";
+  out.push(`Est. spend: ${spend}${memberLine}`);
 
-  // Token breakdown by model from local stats
+  // Models
   const models = Object.entries(modelUsage);
   if (models.length > 0) {
-    lines.push("");
-    lines.push("### Token Usage by Model");
-    lines.push("");
-    lines.push("| Model | Input | Output | Cache Read | Cache Create | Total |");
-    lines.push("|-------|-------|--------|------------|--------------|-------|");
+    out.push("");
+    out.push("### Models");
     for (const [model, usage] of models) {
       const inp = usage.inputTokens ?? 0;
-      const out = usage.outputTokens ?? 0;
+      const outp = usage.outputTokens ?? 0;
       const cr = usage.cacheReadInputTokens ?? 0;
       const cc = usage.cacheCreationInputTokens ?? 0;
-      const total = inp + out + cr + cc;
-      lines.push(`| ${model} | ${fmtTokens(inp)} | ${fmtTokens(out)} | ${fmtTokens(cr)} | ${fmtTokens(cc)} | ${fmtTokens(total)} |`);
+      const total = inp + outp + cr + cc;
+      out.push(`**${model}:** ${fmtTokens(inp)} in · ${fmtTokens(outp)} out · ${fmtTokens(cr)} cache read · ${fmtTokens(cc)} cache write (${fmtTokens(total)} total)`);
     }
   }
 
-  // Points breakdown
-  lines.push("");
-  lines.push("### Points Breakdown");
-  lines.push("");
-  lines.push("| Category | Value |");
-  lines.push("|----------|-------|");
-  lines.push(`| Level | ${m.level ?? 0} |`);
-  lines.push(`| Total Points | ${fmtNum(m.total_points ?? 0)} |`);
-  lines.push(`| Current Streak | 🔥 ${m.current_streak ?? 0} days |`);
+  // Progress
+  out.push("");
+  out.push("### Progress");
+  out.push(`Lv.${m.level ?? 0} · ${fmtNum(m.total_points ?? 0)} pts · ${m.current_streak ?? 0} day streak`);
 
-  console.log(lines.join("\n"));
+  console.log(out.join("\n"));
 }
 
 main();

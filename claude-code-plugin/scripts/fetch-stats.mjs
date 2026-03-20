@@ -11,8 +11,7 @@ async function main() {
   try {
     profile = await fetchUserProfile(hash);
   } catch {
-    console.log("## Claude Rank Dashboard\n");
-    console.log("Unable to fetch profile. Make sure you've synced at least once and check your connection.");
+    console.log("## Claude Rank\n\nUnable to fetch profile. Make sure you've synced at least once.");
     process.exit(0);
   }
 
@@ -25,18 +24,10 @@ async function main() {
   const username = config.username || profile.username || "Anonymous";
   const badges = profile.badges || [];
 
-  const lines = [];
-  lines.push(`## ${emoji} Claude Rank Dashboard`);
-  lines.push("");
-  lines.push(`**Username:** ${username}`);
-  lines.push(`**Profile:** https://clauderank.com/user/${hash}`);
-  lines.push("");
-  lines.push("| Metric | Value |");
-  lines.push("|--------|-------|");
-  lines.push(`| Level | Lv.${level} |`);
-  lines.push(`| Tier | ${emoji} ${tier} |`);
-  lines.push(`| Points | ${points} |`);
-  lines.push(`| Streak | 🔥 ${streak} days |`);
+  const out = [];
+  out.push(`## Claude Rank  @${username}`);
+  out.push(`Lv.${level} ${emoji} ${tier} · ${points} pts · ${streak} day streak`);
+  out.push(`Profile: https://clauderank.com/user/${hash}`);
 
   // Rankings
   const ranks = profile.ranks || {};
@@ -49,36 +40,31 @@ async function main() {
     ["Spend", "cost"],
   ];
 
-  const hasRanks = categories.some(([, key]) => ranks[key]);
-  if (hasRanks) {
-    lines.push("");
-    lines.push("### Rankings");
-    lines.push("");
-    lines.push("| Category | Rank | Percentile |");
-    lines.push("|----------|------|------------|");
-    for (const [label, key] of categories) {
-      const r = ranks[key];
-      if (r) {
-        lines.push(`| ${label} | ${fmtRank(r.rank)} | ${fmtPercentile(r.percentile)} |`);
-      } else {
-        lines.push(`| ${label} | — | — |`);
-      }
+  const rankParts = [];
+  for (const [label, key] of categories) {
+    const r = ranks[key];
+    if (r) {
+      rankParts.push(`${label} ${fmtRank(r.rank)} (${fmtPercentile(r.percentile)})`);
     }
   }
+  if (rankParts.length > 0) {
+    out.push("");
+    out.push("### Rankings");
+    out.push(rankParts.join(" · "));
+  }
 
-  // Badges summary
-  lines.push("");
+  // Badges
+  out.push("");
   if (badges.length > 0) {
     const badgeNames = badges.slice(0, 5).map(b => b.name).join(", ");
     const more = badges.length > 5 ? ` (+${badges.length - 5} more)` : "";
-    lines.push(`### Badges: ${badges.length} earned`);
-    lines.push("");
-    lines.push(`${badgeNames}${more}`);
+    out.push(`### Badges: ${badges.length} earned`);
+    out.push(`${badgeNames}${more}`);
   } else {
-    lines.push("### Badges: 0 earned");
+    out.push("### Badges: 0 earned");
   }
 
-  console.log(lines.join("\n"));
+  console.log(out.join("\n"));
 }
 
 main();
