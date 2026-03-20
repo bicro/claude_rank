@@ -263,6 +263,10 @@ export async function handleApiRequest(url: URL, request: Request): Promise<Resp
     return handleSync(request);
   }
 
+  if (path === "/api/sync/cursor" && method === "POST") {
+    return handleCursorSync(request);
+  }
+
   // ─── Leaderboard Route ─────────────────────────────────────────────────
 
   const leaderboardMatch = path.match(/^\/api\/leaderboard\/([^/]+)$/);
@@ -645,6 +649,7 @@ async function handleGetUserProfile(userHash: string, request: Request): Promise
     auth_provider: user.auth_provider ?? null,
     social_url: profileUser.social_url ?? null,
     team_hash: profileUser.team_hash,
+    provider: profileUser.provider ?? "claude_code",
     created_at: profileUser.created_at,
     is_owner: isOwner,
     metrics: {
@@ -1531,9 +1536,160 @@ async function handleSync(request: Request): Promise<Response> {
   });
 }
 
+// ─── Cursor Sync Handler ────────────────────────────────────────────────────
+
+/**
+ * POST /api/sync/cursor
+ *
+ * Accepts Cursor usage data fetched client-side from cursor.com APIs.
+ * Maps Cursor metrics into our unified schema so we can optionally
+ * combine leaderboards later.
+ *
+ * Expected payload:
+ * {
+ *   user_hash: string,           // unique id for this cursor user
+ *   sync_secret: string,         // trust-on-first-use secret
+ *   cursor_user: {               // from /api/auth/me
+ *     email?: string,
+ *     name?: string,
+ *     sub?: string,
+ *     picture?: string,
+ *   },
+ *   usage_summary: {             // from /api/usage-summary
+ *     billingCycleStart?: string,
+ *     billingCycleEnd?: string,
+ *     membershipType?: string,
+ *     individualUsage?: {
+ *       plan?: { used?: number, limit?: number },     // cents
+ *       onDemand?: { used?: number, limit?: number }, // cents
+ *     },
+ *   },
+ *   usage_legacy?: {             // from /api/usage?user=ID (optional)
+ *     numRequests?: number,
+ *     numRequestsTotal?: number,
+ *     numTokens?: number,
+ *     maxRequestUsage?: number,
+ *   },
+ * }
+ */
+async function handleCursorSync(request: Request): Promise<Response> {
+  const req = await parseBody(request);
+  if (!req?.user_hash) return error("user_hash is required", 400);
+  if (!req.sync_secret) return error("sync_secret is required", 400);
+
+  const db = getDb();
+  const cursorUser = req.cursor_user ?? {};
+  const summary = req.usage_summary ?? {};
+  const legacy = req.usage_legacy ?? {};
+  const individualUsage = summary.individualUsage ?? {};
+
+  console.log(`[cursor-sync] Received sync for user=${req.user_hash.substring(0, 8)}…`);
+
+  // Ensure user exists with provider=cursor and verify sync_secret (trust-on-first-use)
+  const existingUser = await db.query("SELECT user_hash, sync_secret FROM users WHERE user_hash = ?").get(req.user_hash) as any;
+  if (!existingUser) {
+    const now = new Date().toISOString();
+    await db.query(
+      "INSERT INTO users (user_hash, sync_secret, provider, display_name, avatar_url, created_at, updated_at) VALUES (?, ?, 'cursor', ?, ?, ?, ?)"
+    ).run(req.user_hash, req.sync_secret, cursorUser.name ?? null, cursorUser.picture ?? null, now, now);
+  } else if (!existingUser.sync_secret) {
+    await db.query("UPDATE users SET sync_secret = ?, provider = 'cursor' WHERE user_hash = ?").run(req.sync_secret, req.user_hash);
+  } else if (existingUser.sync_secret !== req.sync_secret) {
+    return error("Forbidden", 403);
+  }
+
+  // Update user profile from Cursor data if available
+  if (cursorUser.name || cursorUser.picture) {
+    await db.query(
+      "UPDATE users SET display_name = COALESCE(?, display_name), avatar_url = COALESCE(?, avatar_url), provider = 'cursor' WHERE user_hash = ?"
+    ).run(cursorUser.name ?? null, cursorUser.picture ?? null, req.user_hash);
+  }
+
+  // Map Cursor metrics to our schema
+  // Cursor gives us: requests (≈ messages), tokens, spend
+  // It does NOT give us: sessions, tool_calls, prompt uniqueness, time tracking
+  const totalTokens = legacy.numTokens ?? 0;
+  const totalMessages = legacy.numRequests ?? legacy.numRequestsTotal ?? 0;
+
+  // Compute spend from Cursor's billing data (values are in cents)
+  const planUsedCents = individualUsage.plan?.used ?? 0;
+  const onDemandUsedCents = individualUsage.onDemand?.used ?? 0;
+  const estimatedSpend = (planUsedCents + onDemandUsedCents) / 100;
+
+  // Compute weighted score — sessions, tool_calls, uniqueness will be 0 for Cursor users
+  const weighted = computeWeightedScore(totalTokens, totalMessages, 0, 0, 0);
+
+  const now = new Date().toISOString();
+  const today = toDateStr(now);
+
+  // Upsert device_metrics with provider=cursor
+  await db.query(
+    `INSERT INTO device_metrics (
+      device_hash, total_tokens, total_messages, total_sessions, total_tool_calls,
+      prompt_uniqueness_score, weighted_score, estimated_spend,
+      current_streak, total_points, level, total_output_tokens, last_synced,
+      total_session_time_secs, total_active_time_secs, total_idle_time_secs, provider
+    ) VALUES (?, ?, ?, 0, 0, 0, ?, ?, 0, 0, 0, 0, ?, 0, 0, 0, 'cursor')
+    ON CONFLICT (device_hash) DO UPDATE SET
+      total_tokens = EXCLUDED.total_tokens, total_messages = EXCLUDED.total_messages,
+      weighted_score = EXCLUDED.weighted_score,
+      estimated_spend = EXCLUDED.estimated_spend, last_synced = EXCLUDED.last_synced,
+      provider = 'cursor'`
+  ).run(req.user_hash, totalTokens, totalMessages, weighted, estimatedSpend, now);
+
+  // Recompute aggregated user_metrics
+  const syncUser = await db.query("SELECT linked_to FROM users WHERE user_hash = ?").get(req.user_hash) as any;
+  const primaryHash = syncUser?.linked_to || req.user_hash;
+  await recomputeUserMetrics(primaryHash);
+
+  // Ensure provider is set on user_metrics
+  await db.query("UPDATE user_metrics SET provider = 'cursor' WHERE user_hash = ?").run(primaryHash);
+
+  // Upsert daily snapshot
+  await db.query(
+    `INSERT INTO metrics_history (
+      user_hash, snapshot_date, total_tokens, total_messages, total_sessions, total_tool_calls,
+      prompt_uniqueness_score, weighted_score
+    ) VALUES (?, ?, ?, ?, 0, 0, 0, ?)
+    ON CONFLICT (user_hash, snapshot_date) DO UPDATE SET
+      total_tokens = EXCLUDED.total_tokens, total_messages = EXCLUDED.total_messages,
+      weighted_score = EXCLUDED.weighted_score`
+  ).run(req.user_hash, today, totalTokens, totalMessages, weighted);
+
+  // Evaluate badges
+  const metrics = await db.query("SELECT * FROM user_metrics WHERE user_hash = ?").get(primaryHash) as any;
+  const newBadges: string[] = [];
+  newBadges.push(...await evaluateMilestoneBadges(db, primaryHash, metrics));
+  newBadges.push(...await evaluateRankingBadges(db, primaryHash));
+
+  const serverStreak = metrics?.current_streak ?? 0;
+  const { all: achievements, newly_unlocked: newAchievements } =
+    await evaluateAchievements(db, primaryHash, metrics, serverStreak);
+
+  console.log(`[cursor-sync] Completed for user=${req.user_hash.substring(0, 8)}… tokens=${totalTokens} messages=${totalMessages} spend=$${estimatedSpend.toFixed(2)}`);
+
+  return json({
+    status: "ok",
+    provider: "cursor",
+    weighted_score: metrics?.weighted_score ?? weighted,
+    estimated_spend: estimatedSpend,
+    new_badges: newBadges,
+    primary_hash: primaryHash !== req.user_hash ? primaryHash : undefined,
+    total_points: metrics?.total_points ?? 0,
+    level: metrics?.level ?? 0,
+    current_streak: serverStreak,
+    achievements,
+    new_achievements: newAchievements,
+    // Cursor-specific: echo back the membership info
+    cursor_membership: summary.membershipType ?? null,
+    cursor_billing_cycle_end: summary.billingCycleEnd ?? null,
+  });
+}
+
 // ─── Leaderboard Handler ───────────────────────────────────────────────────
 
-const VALID_CATEGORIES = ["tokens", "concurrent_agents", "agent_hours", "concurrency_time", "consistency", "messages"];
+const VALID_CATEGORIES = ["tokens", "concurrent_agents", "agent_hours", "concurrency_time", "consistency", "messages", "spend"];
+const VALID_PROVIDERS = ["claude_code", "cursor", "all"];
 
 async function handleGetLeaderboard(category: string, url: URL): Promise<Response> {
   if (!VALID_CATEGORIES.includes(category)) {
@@ -1544,6 +1700,15 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
   if (period !== "daily" && period !== "alltime") {
     return error("period must be 'daily' or 'alltime'", 400);
   }
+
+  // Provider filter: "all" (default) shows everyone, or filter to a specific provider
+  const providerParam = url.searchParams.get("provider") ?? "all";
+  if (!VALID_PROVIDERS.includes(providerParam)) {
+    return error(`Invalid provider. Must be one of: ${VALID_PROVIDERS.join(", ")}`, 400);
+  }
+  const providerFilter = providerParam === "all"
+    ? ""
+    : ` AND COALESCE(um.provider, 'claude_code') = '${providerParam}'`;
 
   const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50", 10)));
   const offset = Math.max(0, parseInt(url.searchParams.get("offset") ?? "0", 10));
@@ -1561,85 +1726,108 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
     let countSql: string;
     let countParams: any[];
 
-    if (category === "tokens") {
+    if (category === "spend") {
+      rows = await db.query(
+        `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+          CASE WHEN um.total_tokens > 0
+            THEN um.estimated_spend * (CAST(mh.daily_tokens AS FLOAT) / um.total_tokens)
+            ELSE 0 END as value,
+          um.weighted_score,
+          COALESCE(um.provider, 'claude_code') as provider
+        FROM metrics_history mh
+        JOIN users u ON mh.user_hash = u.user_hash
+        JOIN user_metrics um ON u.user_hash = um.user_hash
+        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.daily_tokens > 0${providerFilter}
+        ORDER BY value DESC
+        LIMIT ? OFFSET ?`
+      ).all(dateParam, limit, offset) as any[];
+      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash JOIN user_metrics um ON u.user_hash = um.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.daily_tokens > 0${providerFilter}`;
+      countParams = [dateParam];
+    } else if (category === "tokens") {
       rows = await db.query(
         `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
           mh.daily_tokens as value, um.weighted_score,
           CASE WHEN um.total_tokens > 0
             THEN um.estimated_spend * (CAST(mh.daily_tokens AS FLOAT) / um.total_tokens)
-            ELSE 0 END as cost
+            ELSE 0 END as cost,
+          COALESCE(um.provider, 'claude_code') as provider
         FROM metrics_history mh
         JOIN users u ON mh.user_hash = u.user_hash
         JOIN user_metrics um ON u.user_hash = um.user_hash
-        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.daily_tokens > 0
+        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.daily_tokens > 0${providerFilter}
         ORDER BY mh.daily_tokens DESC
         LIMIT ? OFFSET ?`
       ).all(dateParam, limit, offset) as any[];
-      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.daily_tokens > 0`;
+      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash JOIN user_metrics um ON u.user_hash = um.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.daily_tokens > 0${providerFilter}`;
       countParams = [dateParam];
     } else if (category === "concurrent_agents") {
       rows = await db.query(
         `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
-          mh.peak_concurrency as value, um.weighted_score
+          mh.peak_concurrency as value, um.weighted_score,
+          COALESCE(um.provider, 'claude_code') as provider
         FROM metrics_history mh
         JOIN users u ON mh.user_hash = u.user_hash
         JOIN user_metrics um ON u.user_hash = um.user_hash
-        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.peak_concurrency > 0
+        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.peak_concurrency > 0${providerFilter}
         ORDER BY mh.peak_concurrency DESC
         LIMIT ? OFFSET ?`
       ).all(dateParam, limit, offset) as any[];
-      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.peak_concurrency > 0`;
+      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash JOIN user_metrics um ON u.user_hash = um.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.peak_concurrency > 0${providerFilter}`;
       countParams = [dateParam];
     } else if (category === "agent_hours") {
       rows = await db.query(
         `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
-          mh.total_agent_mins as value, um.weighted_score
+          mh.total_agent_mins as value, um.weighted_score,
+          COALESCE(um.provider, 'claude_code') as provider
         FROM metrics_history mh
         JOIN users u ON mh.user_hash = u.user_hash
         JOIN user_metrics um ON u.user_hash = um.user_hash
-        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.total_agent_mins > 0
+        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.total_agent_mins > 0${providerFilter}
         ORDER BY mh.total_agent_mins DESC
         LIMIT ? OFFSET ?`
       ).all(dateParam, limit, offset) as any[];
-      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.total_agent_mins > 0`;
+      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash JOIN user_metrics um ON u.user_hash = um.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.total_agent_mins > 0${providerFilter}`;
       countParams = [dateParam];
     } else if (category === "concurrency_time") {
       rows = await db.query(
         `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
-          mh.concurrent_mins as value, um.weighted_score
+          mh.concurrent_mins as value, um.weighted_score,
+          COALESCE(um.provider, 'claude_code') as provider
         FROM metrics_history mh
         JOIN users u ON mh.user_hash = u.user_hash
         JOIN user_metrics um ON u.user_hash = um.user_hash
-        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.concurrent_mins > 0
+        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.concurrent_mins > 0${providerFilter}
         ORDER BY mh.concurrent_mins DESC
         LIMIT ? OFFSET ?`
       ).all(dateParam, limit, offset) as any[];
-      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.concurrent_mins > 0`;
+      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash JOIN user_metrics um ON u.user_hash = um.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.concurrent_mins > 0${providerFilter}`;
       countParams = [dateParam];
     } else if (category === "messages") {
       rows = await db.query(
         `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
-          mh.daily_messages as value, um.weighted_score
+          mh.daily_messages as value, um.weighted_score,
+          COALESCE(um.provider, 'claude_code') as provider
         FROM metrics_history mh
         JOIN users u ON mh.user_hash = u.user_hash
         JOIN user_metrics um ON u.user_hash = um.user_hash
-        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.daily_messages > 0
+        WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.daily_messages > 0${providerFilter}
         ORDER BY mh.daily_messages DESC
         LIMIT ? OFFSET ?`
       ).all(dateParam, limit, offset) as any[];
-      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.daily_messages > 0`;
+      countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash JOIN user_metrics um ON u.user_hash = um.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.daily_messages > 0${providerFilter}`;
       countParams = [dateParam];
     } else {
       // consistency — same for daily and alltime
       rows = await db.query(
         `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
-          um.current_streak as value, um.weighted_score
+          um.current_streak as value, um.weighted_score,
+          COALESCE(um.provider, 'claude_code') as provider
         FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
-        WHERE u.linked_to IS NULL AND um.current_streak > 0
+        WHERE u.linked_to IS NULL AND um.current_streak > 0${providerFilter}
         ORDER BY um.current_streak DESC
         LIMIT ? OFFSET ?`
       ).all(limit, offset) as any[];
-      countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL AND um.current_streak > 0`;
+      countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL AND um.current_streak > 0${providerFilter}`;
       countParams = [];
     }
 
@@ -1653,106 +1841,127 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
       cost: row.cost != null ? Number(row.cost) : undefined,
       weighted_score: row.weighted_score,
       tier: computeTier(row.weighted_score).tier,
+      provider: row.provider ?? "claude_code",
     }));
 
     const { rows: countRows } = await pool.query(countSql, countParams);
     const total = (countRows[0] as any)?.cnt ?? 0;
 
-    return json({ category, period: "daily", date: dateParam, entries, total_count: total });
+    return json({ category, period: "daily", date: dateParam, provider: providerParam, entries, total_count: total });
   }
 
   // All-time period
   let rows: any[];
   let countSql: string;
 
-  if (category === "tokens") {
+  if (category === "spend") {
     rows = await db.query(
       `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
-        um.total_tokens as value, um.weighted_score, um.estimated_spend as cost
+        um.estimated_spend as value, um.weighted_score, um.estimated_spend as cost,
+        COALESCE(um.provider, 'claude_code') as provider
       FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
-      WHERE u.linked_to IS NULL
+      WHERE u.linked_to IS NULL AND um.estimated_spend > 0${providerFilter}
+      ORDER BY um.estimated_spend DESC
+      LIMIT ? OFFSET ?`
+    ).all(limit, offset) as any[];
+    countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL AND um.estimated_spend > 0${providerFilter}`;
+  } else if (category === "tokens") {
+    rows = await db.query(
+      `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+        um.total_tokens as value, um.weighted_score, um.estimated_spend as cost,
+        COALESCE(um.provider, 'claude_code') as provider
+      FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
+      WHERE u.linked_to IS NULL${providerFilter}
       ORDER BY um.total_tokens DESC
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
-    countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL`;
+    countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL${providerFilter}`;
   } else if (category === "concurrent_agents") {
     rows = await db.query(
       `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
-        MAX(mh.peak_concurrency) as value, um.weighted_score
+        MAX(mh.peak_concurrency) as value, um.weighted_score,
+        COALESCE(um.provider, 'claude_code') as provider
       FROM users u
       JOIN user_metrics um ON u.user_hash = um.user_hash
       JOIN metrics_history mh ON u.user_hash = mh.user_hash
-      WHERE u.linked_to IS NULL
-      GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score
+      WHERE u.linked_to IS NULL${providerFilter}
+      GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score, um.provider
       HAVING MAX(mh.peak_concurrency) > 0
       ORDER BY value DESC
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
     countSql = `SELECT COUNT(*) as cnt FROM (
       SELECT u.user_hash FROM users u
+      JOIN user_metrics um ON u.user_hash = um.user_hash
       JOIN metrics_history mh ON u.user_hash = mh.user_hash
-      WHERE u.linked_to IS NULL
+      WHERE u.linked_to IS NULL${providerFilter}
       GROUP BY u.user_hash HAVING MAX(mh.peak_concurrency) > 0
     ) sub`;
   } else if (category === "agent_hours") {
     rows = await db.query(
       `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
-        SUM(mh.total_agent_mins) as value, um.weighted_score
+        SUM(mh.total_agent_mins) as value, um.weighted_score,
+        COALESCE(um.provider, 'claude_code') as provider
       FROM users u
       JOIN user_metrics um ON u.user_hash = um.user_hash
       JOIN metrics_history mh ON u.user_hash = mh.user_hash
-      WHERE u.linked_to IS NULL
-      GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score
+      WHERE u.linked_to IS NULL${providerFilter}
+      GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score, um.provider
       HAVING SUM(mh.total_agent_mins) > 0
       ORDER BY value DESC
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
     countSql = `SELECT COUNT(*) as cnt FROM (
       SELECT u.user_hash FROM users u
+      JOIN user_metrics um ON u.user_hash = um.user_hash
       JOIN metrics_history mh ON u.user_hash = mh.user_hash
-      WHERE u.linked_to IS NULL
+      WHERE u.linked_to IS NULL${providerFilter}
       GROUP BY u.user_hash HAVING SUM(mh.total_agent_mins) > 0
     ) sub`;
   } else if (category === "concurrency_time") {
     rows = await db.query(
       `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
-        SUM(mh.concurrent_mins) as value, um.weighted_score
+        SUM(mh.concurrent_mins) as value, um.weighted_score,
+        COALESCE(um.provider, 'claude_code') as provider
       FROM users u
       JOIN user_metrics um ON u.user_hash = um.user_hash
       JOIN metrics_history mh ON u.user_hash = mh.user_hash
-      WHERE u.linked_to IS NULL
-      GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score
+      WHERE u.linked_to IS NULL${providerFilter}
+      GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score, um.provider
       HAVING SUM(mh.concurrent_mins) > 0
       ORDER BY value DESC
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
     countSql = `SELECT COUNT(*) as cnt FROM (
       SELECT u.user_hash FROM users u
+      JOIN user_metrics um ON u.user_hash = um.user_hash
       JOIN metrics_history mh ON u.user_hash = mh.user_hash
-      WHERE u.linked_to IS NULL
+      WHERE u.linked_to IS NULL${providerFilter}
       GROUP BY u.user_hash HAVING SUM(mh.concurrent_mins) > 0
     ) sub`;
   } else if (category === "messages") {
     rows = await db.query(
       `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
-        um.total_messages as value, um.weighted_score
+        um.total_messages as value, um.weighted_score,
+        COALESCE(um.provider, 'claude_code') as provider
       FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
-      WHERE u.linked_to IS NULL
+      WHERE u.linked_to IS NULL${providerFilter}
       ORDER BY um.total_messages DESC
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
-    countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL`;
+    countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL${providerFilter}`;
   } else {
     // consistency
     rows = await db.query(
       `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
-        um.current_streak as value, um.weighted_score
+        um.current_streak as value, um.weighted_score,
+        COALESCE(um.provider, 'claude_code') as provider
       FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
-      WHERE u.linked_to IS NULL AND um.current_streak > 0
+      WHERE u.linked_to IS NULL AND um.current_streak > 0${providerFilter}
       ORDER BY um.current_streak DESC
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
-    countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL AND um.current_streak > 0`;
+    countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL AND um.current_streak > 0${providerFilter}`;
   }
 
   const entries = rows.map((row, i) => ({
@@ -1765,12 +1974,13 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
     cost: row.cost != null ? Number(row.cost) : undefined,
     weighted_score: row.weighted_score,
     tier: computeTier(row.weighted_score).tier,
+    provider: row.provider ?? "claude_code",
   }));
 
   const { rows: countRows } = await pool.query(countSql);
   const total = (countRows[0] as any)?.cnt ?? 0;
 
-  return json({ category, period: "alltime", entries, total_count: total });
+  return json({ category, period: "alltime", provider: providerParam, entries, total_count: total });
 }
 
 // ─── Badges Handler ─────────────────────────────────────────────────────────

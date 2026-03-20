@@ -43,7 +43,8 @@ export async function recomputeUserMetrics(primaryHash: string): Promise<void> {
       SUM(total_session_time_secs) as total_session_time_secs,
       SUM(total_active_time_secs) as total_active_time_secs,
       SUM(total_idle_time_secs) as total_idle_time_secs,
-      MAX(last_synced) as last_synced
+      MAX(last_synced) as last_synced,
+      MAX(provider) as provider
     FROM device_metrics
     WHERE device_hash IN (${placeholders})`,
     hashes,
@@ -89,8 +90,8 @@ export async function recomputeUserMetrics(primaryHash: string): Promise<void> {
       user_hash, total_tokens, total_messages, total_sessions, total_tool_calls,
       prompt_uniqueness_score, weighted_score, estimated_spend,
       current_streak, total_points, level, total_output_tokens, last_synced,
-      total_session_time_secs, total_active_time_secs, total_idle_time_secs
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      total_session_time_secs, total_active_time_secs, total_idle_time_secs, provider
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (user_hash) DO UPDATE SET
       total_tokens = EXCLUDED.total_tokens, total_messages = EXCLUDED.total_messages,
       total_sessions = EXCLUDED.total_sessions, total_tool_calls = EXCLUDED.total_tool_calls,
@@ -100,7 +101,8 @@ export async function recomputeUserMetrics(primaryHash: string): Promise<void> {
       total_output_tokens = EXCLUDED.total_output_tokens, last_synced = EXCLUDED.last_synced,
       total_session_time_secs = EXCLUDED.total_session_time_secs,
       total_active_time_secs = EXCLUDED.total_active_time_secs,
-      total_idle_time_secs = EXCLUDED.total_idle_time_secs`
+      total_idle_time_secs = EXCLUDED.total_idle_time_secs,
+      provider = EXCLUDED.provider`
   ).run(
     primaryHash,
     agg.total_tokens ?? 0, agg.total_messages ?? 0,
@@ -111,5 +113,6 @@ export async function recomputeUserMetrics(primaryHash: string): Promise<void> {
     agg.last_synced ?? now,
     agg.total_session_time_secs ?? 0, agg.total_active_time_secs ?? 0,
     agg.total_idle_time_secs ?? 0,
+    agg.provider ?? "claude_code",
   );
 }

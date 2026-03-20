@@ -158,5 +158,8 @@ impl FileWatcher {
             info!("[stats-watcher] calling try_sync (sessions={}, messages={})", stats.total_sessions, stats.total_messages);
             super::ranking::try_sync(ranking, stats, points, app);
         }
+
+        // Trigger Cursor sync alongside Claude Code sync (uses its own throttling via ranking sync cycle)
+        super::cursor::try_cursor_sync(ranking, app);
     }
 }

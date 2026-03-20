@@ -651,6 +651,7 @@ function startLogin(provider) {
         // Signal desktop to force re-sync so server has data
         if (window.parent !== window) {
           postToParent({ type: 'force-sync' });
+          postToParent({ type: 'user-login' });
         }
         // Poll until metrics appear (sync may take a moment)
         let retries = 0;
@@ -1104,6 +1105,7 @@ async function doLogout() {
   // Signal desktop app to force re-sync local data back to server
   if (window.parent !== window) {
     postToParent({ type: 'force-sync' });
+    postToParent({ type: 'user-logout' });
   }
 }
 

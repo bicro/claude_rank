@@ -1215,6 +1215,12 @@ fn main() {
             stats::ranking::get_my_ranking,
             stats::ranking::open_ranking_website,
             stats::ranking::force_sync,
+            stats::cursor::get_cursor_config,
+            stats::cursor::set_cursor_cookie,
+            stats::cursor::set_cursor_enabled,
+            stats::cursor::enable_cursor_auto,
+            stats::cursor::disconnect_cursor,
+            stats::cursor::force_cursor_sync,
             get_widget_base,
         ])
         .build(tauri::generate_context!())

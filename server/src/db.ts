@@ -95,6 +95,7 @@ export async function initDb(): Promise<void> {
       social_url TEXT,
       sync_secret TEXT,
       linked_to TEXT REFERENCES users(user_hash),
+      provider TEXT DEFAULT 'claude_code',
       created_at TEXT,
       updated_at TEXT
     );
@@ -114,7 +115,8 @@ export async function initDb(): Promise<void> {
       last_synced TEXT,
       total_session_time_secs BIGINT DEFAULT 0,
       total_active_time_secs BIGINT DEFAULT 0,
-      total_idle_time_secs BIGINT DEFAULT 0
+      total_idle_time_secs BIGINT DEFAULT 0,
+      provider TEXT DEFAULT 'claude_code'
     );
 
     CREATE TABLE IF NOT EXISTS metrics_history (
@@ -195,7 +197,8 @@ export async function initDb(): Promise<void> {
       last_synced TEXT,
       total_session_time_secs BIGINT DEFAULT 0,
       total_active_time_secs BIGINT DEFAULT 0,
-      total_idle_time_secs BIGINT DEFAULT 0
+      total_idle_time_secs BIGINT DEFAULT 0,
+      provider TEXT DEFAULT 'claude_code'
     );
 
     CREATE TABLE IF NOT EXISTS merge_log (
@@ -240,6 +243,17 @@ export async function initDb(): Promise<void> {
   } catch { /* already exists */ }
   try {
     await pool.query(`ALTER TABLE user_metrics ADD COLUMN IF NOT EXISTS total_output_tokens BIGINT DEFAULT 0`);
+  } catch { /* already exists */ }
+
+  // Add provider column
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS provider TEXT DEFAULT 'claude_code'`);
+  } catch { /* already exists */ }
+  try {
+    await pool.query(`ALTER TABLE device_metrics ADD COLUMN IF NOT EXISTS provider TEXT DEFAULT 'claude_code'`);
+  } catch { /* already exists */ }
+  try {
+    await pool.query(`ALTER TABLE user_metrics ADD COLUMN IF NOT EXISTS provider TEXT DEFAULT 'claude_code'`);
   } catch { /* already exists */ }
 
   // Backfill device_metrics from user_metrics for existing solo users

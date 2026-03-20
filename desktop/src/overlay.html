@@ -45,6 +45,51 @@
   }
   .btn-close:hover { background: rgba(0,0,0,0.06); color: #333; }
 
+  .status-leds {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-left: auto;
+    margin-right: 12px;
+  }
+  .led {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 6px;
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+  .led:hover { background: rgba(0,0,0,0.06); }
+  .led-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  .led-dot.on {
+    background: #34c759;
+    box-shadow: 0 0 4px rgba(52, 199, 89, 0.6);
+  }
+  .led-dot.off {
+    background: #86868b;
+    box-shadow: none;
+  }
+  .led-dot.error {
+    background: #ff3b30;
+    box-shadow: 0 0 4px rgba(255, 59, 48, 0.5);
+  }
+  .led-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: #86868b;
+    text-transform: uppercase;
+  }
+
   .drag-region { cursor: grab; }
   .drag-region:active { cursor: grabbing; }
   .no-drag { -webkit-app-region: no-drag; app-region: no-drag; }
@@ -61,6 +106,16 @@
 <body>
 <div class="panel">
   <div class="drag-strip drag-region">
+    <div class="status-leds">
+      <div class="led" id="ledClaude" title="Claude Code sync">
+        <div class="led-dot on" id="ledClaudeDot"></div>
+        <span class="led-label">Claude</span>
+      </div>
+      <div class="led" id="ledCursor" title="Cursor sync">
+        <div class="led-dot on" id="ledCursorDot"></div>
+        <span class="led-label">Cursor</span>
+      </div>
+    </div>
     <button class="btn-close no-drag" id="btnHide" title="Hide (Alt+Space)">&#x2715;</button>
   </div>
   <iframe id="widgetFrame" class="widget-iframe no-drag"></iframe>
@@ -102,6 +157,8 @@ loadWidget();
 listen('sync-complete', () => {
   console.log('[overlay] sync-complete event received, forwarding to iframe, widgetLoaded=', widgetLoaded);
   frame.contentWindow?.postMessage({ type: 'sync-complete' }, '*');
+  // Also refresh LED status
+  if (typeof updateCursorLed === 'function') updateCursorLed();
 });
 
 // ── Animate in/out ──
@@ -113,6 +170,16 @@ listen('overlay-visibility-changed', (event) => {
       frame.src = widgetUrl + '&_t=' + Date.now();
     }
     requestAnimationFrame(() => panel.classList.add('visible'));
+
+    // Re-check Cursor status when overlay shows (e.g. user just logged in on browser)
+    updateCursorLed();
+    invoke('get_cursor_config').then(status => {
+      if (status.enabled && !status.has_cookie) {
+        // Try importing fresh cookies — user may have just logged in
+        invoke('force_cursor_sync').catch(() => {});
+        setTimeout(updateCursorLed, 3000);
+      }
+    }).catch(() => {});
   } else {
     panel.classList.remove('visible');
     setTimeout(() => invoke('complete_hide'), 200);
@@ -121,6 +188,102 @@ listen('overlay-visibility-changed', (event) => {
 
 // ── Hide button ──
 document.getElementById('btnHide').addEventListener('click', () => invoke('hide_overlay'));
+
+// ── LED status indicators ──
+const ledClaudeDot = document.getElementById('ledClaudeDot');
+const ledCursorDot = document.getElementById('ledCursorDot');
+
+// Claude Code is always "on" if the app is running (it monitors ~/.claude by default).
+// We toggle a local flag that the UI shows — actual sync enable/disable could be added later.
+let claudeEnabled = true;
+
+async function updateCursorLed() {
+  try {
+    const status = await invoke('get_cursor_config');
+    const dot = ledCursorDot;
+    if (status.enabled && status.has_cookie) {
+      dot.className = 'led-dot on';
+      document.getElementById('ledCursor').title = 'Cursor sync: active' + (status.account_email ? ' (' + status.account_email + ')' : '');
+    } else if (status.enabled && !status.has_cookie) {
+      dot.className = 'led-dot error';
+      document.getElementById('ledCursor').title = 'Cursor sync: no cookie found';
+    } else {
+      dot.className = 'led-dot off';
+      document.getElementById('ledCursor').title = 'Cursor sync: off (click to enable)';
+    }
+  } catch (e) {
+    ledCursorDot.className = 'led-dot off';
+  }
+}
+
+function updateClaudeLed() {
+  ledClaudeDot.className = claudeEnabled ? 'led-dot on' : 'led-dot off';
+  document.getElementById('ledClaude').title = claudeEnabled ? 'Claude Code sync: active' : 'Claude Code sync: off';
+}
+
+// Toggle Cursor on click — if red (no cookie), open cursor.com to log in
+document.getElementById('ledCursor').addEventListener('click', async () => {
+  try {
+    const status = await invoke('get_cursor_config');
+    if (status.enabled && !status.has_cookie) {
+      // Red state — open cursor.com so user can log in and get cookies
+      await invoke('open_url', { url: 'https://cursor.com/settings' });
+    } else if (status.enabled) {
+      await invoke('set_cursor_enabled', { enabled: false });
+    } else {
+      await invoke('enable_cursor_auto');
+      // Immediately try syncing after enabling
+      await invoke('force_cursor_sync').catch(() => {});
+      setTimeout(updateCursorLed, 3000);
+    }
+    await updateCursorLed();
+  } catch (e) {
+    console.error('Failed to toggle Cursor:', e);
+  }
+});
+
+// Toggle Claude on click (controls sync, not the file watcher)
+document.getElementById('ledClaude').addEventListener('click', async () => {
+  // Claude Code sync is managed by the existing sync_settings — toggle tokens/messages/etc all at once
+  try {
+    const settings = await invoke('get_sync_settings');
+    claudeEnabled = !claudeEnabled;
+    // When "off", disable all sync categories; when "on", re-enable defaults
+    await invoke('update_sync_settings', {
+      settings: {
+        tokens: claudeEnabled,
+        messages: claudeEnabled,
+        sessions: claudeEnabled,
+        tool_calls: claudeEnabled,
+        prompts: false,
+        prompt_hashes: claudeEnabled,
+        daily_breakdown: claudeEnabled,
+        model_names: claudeEnabled,
+        hour_activity: claudeEnabled,
+        concurrency_activity: claudeEnabled,
+      }
+    });
+    updateClaudeLed();
+  } catch (e) {
+    console.error('Failed to toggle Claude:', e);
+  }
+});
+
+// Initial LED state
+(async () => {
+  try {
+    const settings = await invoke('get_sync_settings');
+    claudeEnabled = settings.tokens !== false;
+  } catch {}
+  updateClaudeLed();
+  updateCursorLed();
+})();
+
+// Live update Cursor LED on sync status events
+listen('cursor-sync-status', (event) => {
+  updateCursorLed();
+});
+
 
 // ── Bridge: receive messages from widget iframe ──
 const DRAG_STRIP_HEIGHT = 32;
@@ -135,6 +298,35 @@ window.addEventListener('message', async (e) => {
   }
   if (e.data.type === 'force-sync') {
     invoke('force_sync').catch(err => console.error('Failed to force sync:', err));
+  }
+  if (e.data.type === 'user-logout') {
+    // Disable both syncs on logout
+    claudeEnabled = false;
+    invoke('update_sync_settings', {
+      settings: {
+        tokens: false, messages: false, sessions: false, tool_calls: false,
+        prompts: false, prompt_hashes: false, daily_breakdown: false,
+        model_names: false, hour_activity: false, concurrency_activity: false,
+      }
+    }).catch(() => {});
+    invoke('set_cursor_enabled', { enabled: false }).catch(() => {});
+    updateClaudeLed();
+    updateCursorLed();
+  }
+  if (e.data.type === 'user-login') {
+    // Enable both syncs on login
+    claudeEnabled = true;
+    invoke('update_sync_settings', {
+      settings: {
+        tokens: true, messages: true, sessions: true, tool_calls: true,
+        prompts: false, prompt_hashes: true, daily_breakdown: true,
+        model_names: true, hour_activity: true, concurrency_activity: true,
+      }
+    }).catch(() => {});
+    invoke('enable_cursor_auto').catch(() => {});
+    invoke('force_cursor_sync').catch(() => {});
+    updateClaudeLed();
+    setTimeout(updateCursorLed, 3000);
   }
   if (e.data.type === 'open-url' && e.data.url) {
     invoke('open_url', { url: e.data.url }).catch(err => console.error('Failed to open URL:', err));

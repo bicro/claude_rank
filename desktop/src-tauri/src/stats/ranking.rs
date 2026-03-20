@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::Emitter;
 
+use super::cursor::CursorConfig;
 use super::metrics::MetricsEngine;
 use super::parser::{DaySessionEntry, StatsCache};
 use super::points::{PointsEngine, PointsState};
@@ -41,6 +42,9 @@ pub struct RankingConfig {
     /// used for profile/leaderboard links. The device keeps its own user_hash for syncing.
     #[serde(default)]
     pub primary_hash: Option<String>,
+    /// Cursor integration settings.
+    #[serde(default)]
+    pub cursor: CursorConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -379,6 +383,7 @@ fn load_or_create_config() -> RankingConfig {
         sync_settings: default_sync_settings(),
         last_synced: None,
         primary_hash: None,
+        cursor: CursorConfig::default(),
     };
     save_config(&config);
     info!("[ranking] Created new identity: {}", config.user_hash);
