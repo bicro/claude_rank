@@ -143,6 +143,12 @@ jobs:
         run: bun run build:windows
         working-directory: desktop
 
+      - name: List Windows bundle output
+        run: |
+          echo "=== Bundle directory contents ==="
+          dir /s desktop\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\ || echo "No bundle dir"
+        shell: cmd
+
       - name: Upload Windows MSI
         uses: actions/upload-artifact@v4
         with:
@@ -155,10 +161,8 @@ jobs:
         with:
           name: clauderank-windows-updater
           path: |
-            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi.zip
-            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi.zip.sig
-            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.nsis.zip
-            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.nsis.zip.sig
+            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.zip
+            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.zip.sig
           if-no-files-found: warn
 
   build-linux:
@@ -192,6 +196,9 @@ jobs:
         run: bun run build:linux
         working-directory: desktop
 
+      - name: List Linux bundle output
+        run: ls -R desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/ || echo "No bundle dir"
+
       - name: Upload Linux AppImage
         uses: actions/upload-artifact@v4
         with:
@@ -199,11 +206,11 @@ jobs:
           path: desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
           if-no-files-found: warn
 
-      - name: Upload Linux AppImage sig
+      - name: Upload Linux updater artifact
         uses: actions/upload-artifact@v4
         with:
           name: clauderank-linux-updater
-          path: desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage.sig
+          path: desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/**/*.sig
           if-no-files-found: warn
 
       - name: Upload Linux deb
