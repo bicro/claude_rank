@@ -594,11 +594,11 @@ pub async fn force_sync(
     points: tauri::State<'_, Arc<Mutex<PointsEngine>>>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    info!("[ranking] Force sync triggered");
-    // Refresh metrics first so we sync fresh JSONL data (not stale/empty cache)
+    info!("[ranking] Force sync triggered — full reparse");
+    // Force full reparse so we sync fresh JSONL data (not stale cache)
     {
         let mut m = metrics.lock().map_err(|e| e.to_string())?;
-        m.refresh();
+        m.force_reparse();
     }
     {
         let mut engine = ranking.lock().map_err(|e| e.to_string())?;

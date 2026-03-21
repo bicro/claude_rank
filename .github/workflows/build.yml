@@ -6,6 +6,35 @@ on:
   workflow_dispatch: # Allow manual trigger
 
 jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      should_release: ${{ steps.check_tag.outputs.should_release }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tauri.conf.json
+        id: get_version
+        run: |
+          VERSION=$(jq -r .version desktop/src-tauri/tauri.conf.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ steps.get_version.outputs.version }}" >/dev/null 2>&1; then
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "Tag v${{ steps.get_version.outputs.version }} already exists, skipping release"
+          else
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "Tag v${{ steps.get_version.outputs.version }} does not exist, will create release"
+          fi
+
   build-macos:
     runs-on: macos-latest
 
@@ -67,6 +96,8 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: bun run build:mac
         working-directory: desktop
 
@@ -76,6 +107,15 @@ jobs:
           name: clauderank-macos-dmg
           path: desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: error
+
+      - name: Upload macOS updater artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clauderank-macos-updater
+          path: |
+            desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.tar.gz
+            desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.tar.gz.sig
+          if-no-files-found: warn
 
   build-windows:
     runs-on: windows-latest
@@ -97,14 +137,33 @@ jobs:
         working-directory: desktop
 
       - name: Build Tauri app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: bun run build:windows
         working-directory: desktop
+
+      - name: List Windows bundle output
+        run: |
+          echo "=== Bundle directory contents ==="
+          dir /s desktop\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\ || echo "No bundle dir"
+        shell: cmd
 
       - name: Upload Windows MSI
         uses: actions/upload-artifact@v4
         with:
           name: clauderank-windows-msi
           path: desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+          if-no-files-found: warn
+
+      - name: Upload Windows updater artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clauderank-windows-updater
+          path: |
+            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe.sig
+            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi.sig
           if-no-files-found: warn
 
   build-linux:
@@ -132,14 +191,27 @@ jobs:
         working-directory: desktop
 
       - name: Build Tauri app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: bun run build:linux
         working-directory: desktop
+
+      - name: List Linux bundle output
+        run: ls -R desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/ || echo "No bundle dir"
 
       - name: Upload Linux AppImage
         uses: actions/upload-artifact@v4
         with:
           name: clauderank-linux-appimage
           path: desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+          if-no-files-found: warn
+
+      - name: Upload Linux updater artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clauderank-linux-updater
+          path: desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/**/*.sig
           if-no-files-found: warn
 
       - name: Upload Linux deb
@@ -150,9 +222,9 @@ jobs:
           if-no-files-found: warn
 
   release:
-    needs: [build-macos, build-windows, build-linux]
+    needs: [check-version, build-macos, build-windows, build-linux]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && needs.check-version.outputs.should_release == 'true'
     permissions:
       contents: write
     steps:
@@ -180,6 +252,27 @@ jobs:
           name: clauderank-linux-deb
           path: ./artifacts
 
+      - name: Download macOS updater artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: clauderank-macos-updater
+          path: ./updater
+        continue-on-error: true
+
+      - name: Download Windows updater artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: clauderank-windows-updater
+          path: ./updater
+        continue-on-error: true
+
+      - name: Download Linux updater artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: clauderank-linux-updater
+          path: ./updater
+        continue-on-error: true
+
       - name: Rename artifacts for release
         run: |
           mv ./artifacts/*.dmg ./artifacts/ClaudeRank-macOS.dmg
@@ -187,19 +280,70 @@ jobs:
           mv ./artifacts/*.AppImage ./artifacts/ClaudeRank-Linux.AppImage
           mv ./artifacts/*.deb ./artifacts/ClaudeRank-Linux.deb
 
-      - name: Create or Update Release
+      - name: Generate latest.json for updater
+        env:
+          VERSION: ${{ needs.check-version.outputs.version }}
+        run: |
+          BASE_URL="https://github.com/bicro/claude_rank/releases/download/v${VERSION}"
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          # Read signatures
+          MAC_SIG=""; for f in ./updater/*.tar.gz.sig; do [ -f "$f" ] && MAC_SIG=$(cat "$f") && break; done
+          WIN_EXE_SIG=""; for f in ./updater/*.exe.sig; do [ -f "$f" ] && WIN_EXE_SIG=$(cat "$f") && break; done
+          LINUX_SIG=""; for f in ./updater/*.AppImage.sig; do [ -f "$f" ] && LINUX_SIG=$(cat "$f") && break; done
+
+          # Find updater filenames
+          MAC_TAR=$(basename "$(ls ./updater/*.tar.gz 2>/dev/null | head -1)" 2>/dev/null || echo "")
+          WIN_EXE=$(basename "$(ls ./updater/*.exe 2>/dev/null | head -1)" 2>/dev/null || echo "")
+          LINUX_APPIMAGE=$(basename "$(ls ./updater/*.AppImage 2>/dev/null | head -1)" 2>/dev/null || echo "")
+
+          echo "MAC_TAR=$MAC_TAR WIN_EXE=$WIN_EXE LINUX_APPIMAGE=$LINUX_APPIMAGE"
+          echo "MAC_SIG length=$(echo -n "$MAC_SIG" | wc -c) WIN_EXE_SIG length=$(echo -n "$WIN_EXE_SIG" | wc -c) LINUX_SIG length=$(echo -n "$LINUX_SIG" | wc -c)"
+
+          # Build latest.json using jq
+          PLATFORMS='{}'
+
+          if [ -n "$MAC_SIG" ] && [ -n "$MAC_TAR" ]; then
+            MAC_ENTRY=$(jq -n --arg sig "$MAC_SIG" --arg url "$BASE_URL/$MAC_TAR" '{signature: $sig, url: $url}')
+            PLATFORMS=$(echo "$PLATFORMS" | jq --argjson e "$MAC_ENTRY" '. + {"darwin-universal": $e, "darwin-aarch64": $e, "darwin-x86_64": $e}')
+          fi
+
+          if [ -n "$WIN_EXE_SIG" ] && [ -n "$WIN_EXE" ]; then
+            WIN_ENTRY=$(jq -n --arg sig "$WIN_EXE_SIG" --arg url "$BASE_URL/$WIN_EXE" '{signature: $sig, url: $url}')
+            PLATFORMS=$(echo "$PLATFORMS" | jq --argjson e "$WIN_ENTRY" '. + {"windows-x86_64": $e}')
+          fi
+
+          if [ -n "$LINUX_SIG" ] && [ -n "$LINUX_APPIMAGE" ]; then
+            LINUX_ENTRY=$(jq -n --arg sig "$LINUX_SIG" --arg url "$BASE_URL/$LINUX_APPIMAGE" '{signature: $sig, url: $url}')
+            PLATFORMS=$(echo "$PLATFORMS" | jq --argjson e "$LINUX_ENTRY" '. + {"linux-x86_64": $e}')
+          fi
+
+          jq -n \
+            --arg version "$VERSION" \
+            --arg notes "ClaudeRank v$VERSION" \
+            --arg pub_date "$PUB_DATE" \
+            --argjson platforms "$PLATFORMS" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: $platforms}' \
+            > ./artifacts/latest.json
+
+          echo "Generated latest.json:"
+          cat ./artifacts/latest.json
+
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: Latest Build
+          tag_name: v${{ needs.check-version.outputs.version }}
+          name: v${{ needs.check-version.outputs.version }}
           body: |
-            Automated build from main branch.
+            ClaudeRank v${{ needs.check-version.outputs.version }}
             Commit: ${{ github.sha }}
           files: |
             ./artifacts/ClaudeRank-macOS.dmg
             ./artifacts/ClaudeRank-Windows.msi
             ./artifacts/ClaudeRank-Linux.AppImage
             ./artifacts/ClaudeRank-Linux.deb
+            ./artifacts/latest.json
+            ./updater/*
           draft: false
           prerelease: false
           make_latest: true

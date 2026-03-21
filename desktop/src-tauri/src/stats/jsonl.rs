@@ -9,7 +9,7 @@ use std::time::SystemTime;
 
 /// Idle threshold: gaps longer than 5 minutes between messages are considered idle time
 const IDLE_THRESHOLD_SECS: i64 = 300;
-const CACHE_VERSION: u32 = 5;
+const CACHE_VERSION: u32 = 7;
 
 // ── Cache persistence structs ──
 
@@ -308,6 +308,17 @@ impl JsonlTracker {
         }
 
         self.cached_stats.clone()
+    }
+
+    /// Force full re-parse of all JSONL files, ignoring mtime/size cache.
+    pub fn force_reparse(&mut self) -> StatsCache {
+        info!("[jsonl] force_reparse: clearing all caches");
+        self.file_states.clear();
+        self.session_cache.clear();
+        if let Some(path) = claude_rank_cache_path() {
+            let _ = std::fs::remove_file(&path);
+        }
+        self.refresh()
     }
 }
 

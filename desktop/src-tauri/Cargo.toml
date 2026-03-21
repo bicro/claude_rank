@@ -1,6 +1,6 @@
 [package]
 name = "clauderank-desktop"
-version = "0.1.0"
+version = "0.2.3"
 description = "ClaudeRank Desktop - Claude Code ranking widget"
 authors = ["Frisson Labs"]
 edition = "2021"
@@ -21,6 +21,8 @@ tauri-plugin-log = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 log = "0.4"
 notify = "7"
 uuid = { version = "1", features = ["v4"] }

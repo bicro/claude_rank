@@ -445,7 +445,7 @@ async function handleGetUserByUsername(username: string): Promise<Response> {
 }
 
 async function handleClearCache(userHash: string, request: Request): Promise<Response> {
-  const authErr = await requireOwner(request, userHash);
+  const authErr = await requireOwnerDual(request, userHash);
   if (authErr) return authErr;
 
   const db = getDb();
