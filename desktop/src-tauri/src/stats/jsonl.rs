@@ -1,5 +1,5 @@
 use super::parser::*;
-use chrono::{DateTime, Timelike, Utc};
+use chrono::{DateTime, Local, Timelike, Utc};
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -793,6 +793,9 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
     let mut first_date: Option<String> = None;
     let mut longest = LongestSession::default();
 
+    // Global requestId dedup: skip entries already counted from another session
+    let mut seen_request_ids: HashSet<String> = HashSet::new();
+
     // Idle/active time totals (main sessions only)
     let mut total_session_time_secs: u64 = 0;
     let mut total_active_time_secs: u64 = 0;
@@ -809,7 +812,7 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
 
         // ── User messages ──
         for ts in &session.user_timestamps {
-            let date = ts.format("%Y-%m-%d").to_string();
+            let date = ts.with_timezone(&Local).format("%Y-%m-%d").to_string();
             *daily_messages.entry(date.clone()).or_default() += 1;
 
             if session.is_main {
@@ -844,12 +847,12 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
             if entry.tool_use_count > 0 {
                 let date = entry
                     .timestamp
-                    .map(|ts| ts.format("%Y-%m-%d").to_string())
+                    .map(|ts| ts.with_timezone(&Local).format("%Y-%m-%d").to_string())
                     .or_else(|| {
                         session
                             .user_timestamps
                             .first()
-                            .map(|ts| ts.format("%Y-%m-%d").to_string())
+                            .map(|ts| ts.with_timezone(&Local).format("%Y-%m-%d").to_string())
                     })
                     .unwrap_or_default();
                 if !date.is_empty() {
@@ -858,8 +861,11 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
             }
         }
 
-        // ── Token usage (last entry per requestId) ──
-        for (_rid, entry) in &request_last {
+        // ── Token usage (last entry per requestId, globally deduplicated) ──
+        for (rid, entry) in &request_last {
+            if !seen_request_ids.insert(rid.clone()) {
+                continue; // already counted from another session
+            }
             if let Some(ref usage) = entry.usage {
                 if !entry.model.is_empty() {
                     let mu = model_usage_map
@@ -870,15 +876,15 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
                     mu.cache_read_input_tokens += usage.cache_read_input_tokens;
                     mu.cache_creation_input_tokens += usage.cache_creation_input_tokens;
 
-                    // Daily tokens
+                    // Daily tokens (use local time for date assignment)
                     let date = entry
                         .timestamp
-                        .map(|ts| ts.format("%Y-%m-%d").to_string())
+                        .map(|ts| ts.with_timezone(&Local).format("%Y-%m-%d").to_string())
                         .or_else(|| {
                             session
                                 .user_timestamps
                                 .first()
-                                .map(|ts| ts.format("%Y-%m-%d").to_string())
+                                .map(|ts| ts.with_timezone(&Local).format("%Y-%m-%d").to_string())
                         })
                         .unwrap_or_default();
                     let total = usage.input_tokens + usage.output_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens;
