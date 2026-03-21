@@ -27,5 +27,9 @@
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/cli": "^2.10.0",
     "acorn": "^8.15.0"
+  },
+  "dependencies": {
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.0"
   }
 }

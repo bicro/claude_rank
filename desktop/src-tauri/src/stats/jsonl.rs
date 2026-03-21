@@ -9,7 +9,7 @@ use std::time::SystemTime;
 
 /// Idle threshold: gaps longer than 5 minutes between messages are considered idle time
 const IDLE_THRESHOLD_SECS: i64 = 300;
-const CACHE_VERSION: u32 = 5;
+const CACHE_VERSION: u32 = 6;
 
 // ── Cache persistence structs ──
 
