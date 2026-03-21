@@ -111,6 +111,9 @@ pub struct JsonlTracker {
     file_states: HashMap<PathBuf, (SystemTime, u64)>,
     session_cache: HashMap<PathBuf, SessionStats>,
     cached_stats: StatsCache,
+    /// Set when cache was discarded (version mismatch or force_reparse).
+    /// The next sync should send full_reparse=true to clear stale server data.
+    pub needs_full_sync: bool,
 }
 
 fn claude_rank_cache_path() -> Option<PathBuf> {
@@ -123,6 +126,7 @@ impl JsonlTracker {
             file_states: HashMap::new(),
             session_cache: HashMap::new(),
             cached_stats: StatsCache::default(),
+            needs_full_sync: false,
         }
     }
 
@@ -138,6 +142,7 @@ impl JsonlTracker {
                 "[jsonl] cache version mismatch (found {:?}, expected {}), discarding stale cache",
                 persisted.cache_version, CACHE_VERSION
             );
+            self.needs_full_sync = true;
             return None;
         }
 
@@ -315,6 +320,7 @@ impl JsonlTracker {
         info!("[jsonl] force_reparse: clearing all caches");
         self.file_states.clear();
         self.session_cache.clear();
+        self.needs_full_sync = true;
         if let Some(path) = claude_rank_cache_path() {
             let _ = std::fs::remove_file(&path);
         }
