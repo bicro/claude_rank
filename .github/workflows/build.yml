@@ -275,65 +275,53 @@ jobs:
       - name: Generate latest.json for updater
         env:
           VERSION: ${{ needs.check-version.outputs.version }}
-          REPO: bicro/claude_rank
         run: |
-          BASE_URL="https://github.com/${REPO}/releases/download/v${VERSION}"
+          BASE_URL="https://github.com/bicro/claude_rank/releases/download/v${VERSION}"
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-          # Read signatures (empty string if not found)
-          MAC_SIG=""
-          WIN_MSI_SIG=""
-          WIN_NSIS_SIG=""
-          LINUX_SIG=""
+          # Read signatures
+          MAC_SIG=""; for f in ./updater/*.tar.gz.sig; do [ -f "$f" ] && MAC_SIG=$(cat "$f") && break; done
+          WIN_MSI_SIG=""; for f in ./updater/*.msi.zip.sig; do [ -f "$f" ] && WIN_MSI_SIG=$(cat "$f") && break; done
+          WIN_NSIS_SIG=""; for f in ./updater/*.nsis.zip.sig; do [ -f "$f" ] && WIN_NSIS_SIG=$(cat "$f") && break; done
+          LINUX_SIG=""; for f in ./updater/*.AppImage.sig; do [ -f "$f" ] && LINUX_SIG=$(cat "$f") && break; done
 
-          for f in ./updater/*.tar.gz.sig; do [ -f "$f" ] && MAC_SIG=$(cat "$f") && break; done
-          for f in ./updater/*.msi.zip.sig; do [ -f "$f" ] && WIN_MSI_SIG=$(cat "$f") && break; done
-          for f in ./updater/*.nsis.zip.sig; do [ -f "$f" ] && WIN_NSIS_SIG=$(cat "$f") && break; done
-          for f in ./updater/*.AppImage.sig; do [ -f "$f" ] && LINUX_SIG=$(cat "$f") && break; done
+          # Find updater filenames
+          MAC_TAR=$(basename "$(ls ./updater/*.tar.gz 2>/dev/null | head -1)" 2>/dev/null || echo "")
+          WIN_MSI_ZIP=$(basename "$(ls ./updater/*.msi.zip 2>/dev/null | head -1)" 2>/dev/null || echo "")
+          WIN_NSIS_ZIP=$(basename "$(ls ./updater/*.nsis.zip 2>/dev/null | head -1)" 2>/dev/null || echo "")
+          LINUX_APPIMAGE=$(basename "$(ls ./updater/*.AppImage 2>/dev/null | head -1)" 2>/dev/null || echo "")
 
-          # Find actual updater filenames
-          MAC_TAR=$(ls ./updater/*.tar.gz 2>/dev/null | head -1 | xargs -I{} basename {} || echo "")
-          WIN_MSI_ZIP=$(ls ./updater/*.msi.zip 2>/dev/null | head -1 | xargs -I{} basename {} || echo "")
-          WIN_NSIS_ZIP=$(ls ./updater/*.nsis.zip 2>/dev/null | head -1 | xargs -I{} basename {} || echo "")
-          LINUX_APPIMAGE=$(ls ./updater/*.AppImage 2>/dev/null | head -1 | xargs -I{} basename {} || echo "")
+          # Build latest.json using jq
+          PLATFORMS='{}'
 
-          # Build latest.json
-          python3 -c "
-          import json, os
-          version = os.environ['VERSION']
-          base = os.environ['BASE_URL']
-          platforms = {}
+          if [ -n "$MAC_SIG" ] && [ -n "$MAC_TAR" ]; then
+            MAC_ENTRY=$(jq -n --arg sig "$MAC_SIG" --arg url "$BASE_URL/$MAC_TAR" '{signature: $sig, url: $url}')
+            PLATFORMS=$(echo "$PLATFORMS" | jq --argjson e "$MAC_ENTRY" '. + {"darwin-universal": $e, "darwin-aarch64": $e, "darwin-x86_64": $e}')
+          fi
 
-          mac_sig = '''${MAC_SIG}'''
-          mac_tar = '${MAC_TAR}'
-          if mac_sig and mac_tar:
-              platforms['darwin-universal'] = {'signature': mac_sig, 'url': f'{base}/{mac_tar}'}
-              platforms['darwin-aarch64'] = platforms['darwin-universal']
-              platforms['darwin-x86_64'] = platforms['darwin-universal']
+          if [ -n "$WIN_NSIS_SIG" ] && [ -n "$WIN_NSIS_ZIP" ]; then
+            WIN_ENTRY=$(jq -n --arg sig "$WIN_NSIS_SIG" --arg url "$BASE_URL/$WIN_NSIS_ZIP" '{signature: $sig, url: $url}')
+            PLATFORMS=$(echo "$PLATFORMS" | jq --argjson e "$WIN_ENTRY" '. + {"windows-x86_64": $e}')
+          elif [ -n "$WIN_MSI_SIG" ] && [ -n "$WIN_MSI_ZIP" ]; then
+            WIN_ENTRY=$(jq -n --arg sig "$WIN_MSI_SIG" --arg url "$BASE_URL/$WIN_MSI_ZIP" '{signature: $sig, url: $url}')
+            PLATFORMS=$(echo "$PLATFORMS" | jq --argjson e "$WIN_ENTRY" '. + {"windows-x86_64": $e}')
+          fi
 
-          win_nsis_sig = '''${WIN_NSIS_SIG}'''
-          win_nsis_zip = '${WIN_NSIS_ZIP}'
-          win_msi_sig = '''${WIN_MSI_SIG}'''
-          win_msi_zip = '${WIN_MSI_ZIP}'
-          if win_nsis_sig and win_nsis_zip:
-              platforms['windows-x86_64'] = {'signature': win_nsis_sig, 'url': f'{base}/{win_nsis_zip}'}
-          elif win_msi_sig and win_msi_zip:
-              platforms['windows-x86_64'] = {'signature': win_msi_sig, 'url': f'{base}/{win_msi_zip}'}
+          if [ -n "$LINUX_SIG" ] && [ -n "$LINUX_APPIMAGE" ]; then
+            LINUX_ENTRY=$(jq -n --arg sig "$LINUX_SIG" --arg url "$BASE_URL/$LINUX_APPIMAGE" '{signature: $sig, url: $url}')
+            PLATFORMS=$(echo "$PLATFORMS" | jq --argjson e "$LINUX_ENTRY" '. + {"linux-x86_64": $e}')
+          fi
 
-          linux_sig = '''${LINUX_SIG}'''
-          linux_ai = '${LINUX_APPIMAGE}'
-          if linux_sig and linux_ai:
-              platforms['linux-x86_64'] = {'signature': linux_sig, 'url': f'{base}/{linux_ai}'}
+          jq -n \
+            --arg version "$VERSION" \
+            --arg notes "ClaudeRank v$VERSION" \
+            --arg pub_date "$PUB_DATE" \
+            --argjson platforms "$PLATFORMS" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: $platforms}' \
+            > ./artifacts/latest.json
 
-          manifest = {
-              'version': version,
-              'notes': f'ClaudeRank v{version}',
-              'pub_date': '$(date -u +%Y-%m-%dT%H:%M:%SZ)',
-              'platforms': platforms,
-          }
-          with open('./artifacts/latest.json', 'w') as f:
-              json.dump(manifest, f, indent=2)
-          print(json.dumps(manifest, indent=2))
-          "
+          echo "Generated latest.json:"
+          cat ./artifacts/latest.json
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
