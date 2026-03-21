@@ -280,6 +280,12 @@ jobs:
           mv ./artifacts/*.AppImage ./artifacts/ClaudeRank-Linux.AppImage
           mv ./artifacts/*.deb ./artifacts/ClaudeRank-Linux.deb
 
+          # Rename updater files: replace spaces with dots to match GitHub asset naming
+          cd ./updater 2>/dev/null && for f in *; do
+            newname=$(echo "$f" | tr ' ' '.')
+            [ "$f" != "$newname" ] && mv "$f" "$newname"
+          done; cd .. || true
+
       - name: Generate latest.json for updater
         env:
           VERSION: ${{ needs.check-version.outputs.version }}
