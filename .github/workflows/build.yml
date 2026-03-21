@@ -161,8 +161,9 @@ jobs:
         with:
           name: clauderank-windows-updater
           path: |
-            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.zip
-            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.zip.sig
+            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe.sig
+            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi.sig
           if-no-files-found: warn
 
   build-linux:
@@ -288,15 +289,16 @@ jobs:
 
           # Read signatures
           MAC_SIG=""; for f in ./updater/*.tar.gz.sig; do [ -f "$f" ] && MAC_SIG=$(cat "$f") && break; done
-          WIN_MSI_SIG=""; for f in ./updater/*.msi.zip.sig; do [ -f "$f" ] && WIN_MSI_SIG=$(cat "$f") && break; done
-          WIN_NSIS_SIG=""; for f in ./updater/*.nsis.zip.sig; do [ -f "$f" ] && WIN_NSIS_SIG=$(cat "$f") && break; done
+          WIN_EXE_SIG=""; for f in ./updater/*.exe.sig; do [ -f "$f" ] && WIN_EXE_SIG=$(cat "$f") && break; done
           LINUX_SIG=""; for f in ./updater/*.AppImage.sig; do [ -f "$f" ] && LINUX_SIG=$(cat "$f") && break; done
 
           # Find updater filenames
           MAC_TAR=$(basename "$(ls ./updater/*.tar.gz 2>/dev/null | head -1)" 2>/dev/null || echo "")
-          WIN_MSI_ZIP=$(basename "$(ls ./updater/*.msi.zip 2>/dev/null | head -1)" 2>/dev/null || echo "")
-          WIN_NSIS_ZIP=$(basename "$(ls ./updater/*.nsis.zip 2>/dev/null | head -1)" 2>/dev/null || echo "")
+          WIN_EXE=$(basename "$(ls ./updater/*.exe 2>/dev/null | head -1)" 2>/dev/null || echo "")
           LINUX_APPIMAGE=$(basename "$(ls ./updater/*.AppImage 2>/dev/null | head -1)" 2>/dev/null || echo "")
+
+          echo "MAC_TAR=$MAC_TAR WIN_EXE=$WIN_EXE LINUX_APPIMAGE=$LINUX_APPIMAGE"
+          echo "MAC_SIG length=$(echo -n "$MAC_SIG" | wc -c) WIN_EXE_SIG length=$(echo -n "$WIN_EXE_SIG" | wc -c) LINUX_SIG length=$(echo -n "$LINUX_SIG" | wc -c)"
 
           # Build latest.json using jq
           PLATFORMS='{}'
@@ -306,11 +308,8 @@ jobs:
             PLATFORMS=$(echo "$PLATFORMS" | jq --argjson e "$MAC_ENTRY" '. + {"darwin-universal": $e, "darwin-aarch64": $e, "darwin-x86_64": $e}')
           fi
 
-          if [ -n "$WIN_NSIS_SIG" ] && [ -n "$WIN_NSIS_ZIP" ]; then
-            WIN_ENTRY=$(jq -n --arg sig "$WIN_NSIS_SIG" --arg url "$BASE_URL/$WIN_NSIS_ZIP" '{signature: $sig, url: $url}')
-            PLATFORMS=$(echo "$PLATFORMS" | jq --argjson e "$WIN_ENTRY" '. + {"windows-x86_64": $e}')
-          elif [ -n "$WIN_MSI_SIG" ] && [ -n "$WIN_MSI_ZIP" ]; then
-            WIN_ENTRY=$(jq -n --arg sig "$WIN_MSI_SIG" --arg url "$BASE_URL/$WIN_MSI_ZIP" '{signature: $sig, url: $url}')
+          if [ -n "$WIN_EXE_SIG" ] && [ -n "$WIN_EXE" ]; then
+            WIN_ENTRY=$(jq -n --arg sig "$WIN_EXE_SIG" --arg url "$BASE_URL/$WIN_EXE" '{signature: $sig, url: $url}')
             PLATFORMS=$(echo "$PLATFORMS" | jq --argjson e "$WIN_ENTRY" '. + {"windows-x86_64": $e}')
           fi
 
