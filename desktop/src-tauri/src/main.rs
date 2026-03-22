@@ -3,6 +3,7 @@
 
 mod stats;
 mod tray_render;
+mod updater;
 
 use serde::Serialize;
 use serde_json::json;
@@ -14,6 +15,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder};
 use tauri::{command, AppHandle, Emitter, Listener, Manager};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_updater::UpdaterExt;
 use log::{error, info, warn};
 use serde::Deserialize;
 
@@ -235,6 +237,7 @@ pub struct AppState {
     pub last_programmatic_position: Mutex<std::time::Instant>,
     pub last_drag_start: Mutex<std::time::Instant>,
     pub toggle_menu_item: Mutex<Option<MenuItem<tauri::Wry>>>,
+    pub update_menu_item: Mutex<Option<MenuItem<tauri::Wry>>>,
     pub tray_icon: Mutex<Option<TrayIcon<tauri::Wry>>>,
     pub tray_icon_base: Mutex<image::RgbaImage>,
 }
@@ -247,6 +250,7 @@ impl Default for AppState {
             last_programmatic_position: Mutex::new(std::time::Instant::now()),
             last_drag_start: Mutex::new(std::time::Instant::now() - std::time::Duration::from_secs(60)),
             toggle_menu_item: Mutex::new(None),
+            update_menu_item: Mutex::new(None),
             tray_icon: Mutex::new(None),
             tray_icon_base: Mutex::new(image::RgbaImage::new(1, 1)),
         }
@@ -1003,12 +1007,15 @@ fn main() {
                 MenuItem::with_id(app, "toggle", "Show Widget", true, None::<&str>)?;
             let reset_item =
                 MenuItem::with_id(app, "reset_window", "Reset Window", true, None::<&str>)?;
+            let update_item =
+                MenuItem::with_id(app, "check_update", "Check for Updates", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
             let state = app.state::<AppState>();
             *state.toggle_menu_item.lock().unwrap() = Some(toggle_item.clone());
+            *state.update_menu_item.lock().unwrap() = Some(update_item.clone());
 
-            let menu = Menu::with_items(app, &[&toggle_item, &reset_item, &quit_item])?;
+            let menu = Menu::with_items(app, &[&toggle_item, &reset_item, &update_item, &quit_item])?;
 
             let tray_png = image::load_from_memory(include_bytes!("../icons/tray-icon.png"))
                 .expect("failed to decode tray icon PNG");
@@ -1046,6 +1053,27 @@ fn main() {
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             }
+                        }
+                        "check_update" => {
+                            let handle = _app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let updater = match handle.updater() {
+                                    Ok(u) => u,
+                                    Err(e) => { warn!("[updater] Init failed: {}", e); return; }
+                                };
+                                match updater.check().await {
+                                    Ok(Some(update)) => {
+                                        info!("[updater] Installing v{}...", update.version);
+                                        if let Err(e) = update.download_and_install(|_, _| {}, || {}).await {
+                                            warn!("[updater] Install failed: {}", e);
+                                        } else {
+                                            handle.restart();
+                                        }
+                                    }
+                                    Ok(None) => info!("[updater] Already up to date"),
+                                    Err(e) => warn!("[updater] Check failed: {}", e),
+                                }
+                            });
                         }
                         "quit" => {
                             quit_app();
@@ -1111,6 +1139,9 @@ fn main() {
                 Arc::clone(&stats_ranking_setup),
             );
 
+            // Start periodic update checker
+            updater::start_periodic_check(app.handle().clone());
+
             // Handle deep-link URLs (Tauri v2 plugin API)
             let handle = app.handle().clone();
             app.listen("deep-link://new-url", move |event| {
@@ -1147,6 +1178,8 @@ fn main() {
                 }
             }
         }))
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
@@ -1215,6 +1248,8 @@ fn main() {
             stats::ranking::get_my_ranking,
             stats::ranking::open_ranking_website,
             stats::ranking::force_sync,
+            updater::check_update,
+            updater::install_update,
             get_widget_base,
         ])
         .build(tauri::generate_context!())

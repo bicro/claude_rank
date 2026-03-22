@@ -1,5 +1,5 @@
 use super::parser::*;
-use chrono::{DateTime, Timelike, Utc};
+use chrono::{DateTime, Local, Timelike, Utc};
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -9,7 +9,7 @@ use std::time::SystemTime;
 
 /// Idle threshold: gaps longer than 5 minutes between messages are considered idle time
 const IDLE_THRESHOLD_SECS: i64 = 300;
-const CACHE_VERSION: u32 = 5;
+const CACHE_VERSION: u32 = 7;
 
 // ── Cache persistence structs ──
 
@@ -111,6 +111,9 @@ pub struct JsonlTracker {
     file_states: HashMap<PathBuf, (SystemTime, u64)>,
     session_cache: HashMap<PathBuf, SessionStats>,
     cached_stats: StatsCache,
+    /// Set when cache was discarded (version mismatch or force_reparse).
+    /// The next sync should send full_reparse=true to clear stale server data.
+    pub needs_full_sync: bool,
 }
 
 fn claude_rank_cache_path() -> Option<PathBuf> {
@@ -123,6 +126,7 @@ impl JsonlTracker {
             file_states: HashMap::new(),
             session_cache: HashMap::new(),
             cached_stats: StatsCache::default(),
+            needs_full_sync: false,
         }
     }
 
@@ -138,6 +142,7 @@ impl JsonlTracker {
                 "[jsonl] cache version mismatch (found {:?}, expected {}), discarding stale cache",
                 persisted.cache_version, CACHE_VERSION
             );
+            self.needs_full_sync = true;
             return None;
         }
 
@@ -308,6 +313,18 @@ impl JsonlTracker {
         }
 
         self.cached_stats.clone()
+    }
+
+    /// Force full re-parse of all JSONL files, ignoring mtime/size cache.
+    pub fn force_reparse(&mut self) -> StatsCache {
+        info!("[jsonl] force_reparse: clearing all caches");
+        self.file_states.clear();
+        self.session_cache.clear();
+        self.needs_full_sync = true;
+        if let Some(path) = claude_rank_cache_path() {
+            let _ = std::fs::remove_file(&path);
+        }
+        self.refresh()
     }
 }
 
@@ -793,6 +810,9 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
     let mut first_date: Option<String> = None;
     let mut longest = LongestSession::default();
 
+    // Global requestId dedup: skip entries already counted from another session
+    let mut seen_request_ids: HashSet<String> = HashSet::new();
+
     // Idle/active time totals (main sessions only)
     let mut total_session_time_secs: u64 = 0;
     let mut total_active_time_secs: u64 = 0;
@@ -809,7 +829,7 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
 
         // ── User messages ──
         for ts in &session.user_timestamps {
-            let date = ts.format("%Y-%m-%d").to_string();
+            let date = ts.with_timezone(&Local).format("%Y-%m-%d").to_string();
             *daily_messages.entry(date.clone()).or_default() += 1;
 
             if session.is_main {
@@ -844,12 +864,12 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
             if entry.tool_use_count > 0 {
                 let date = entry
                     .timestamp
-                    .map(|ts| ts.format("%Y-%m-%d").to_string())
+                    .map(|ts| ts.with_timezone(&Local).format("%Y-%m-%d").to_string())
                     .or_else(|| {
                         session
                             .user_timestamps
                             .first()
-                            .map(|ts| ts.format("%Y-%m-%d").to_string())
+                            .map(|ts| ts.with_timezone(&Local).format("%Y-%m-%d").to_string())
                     })
                     .unwrap_or_default();
                 if !date.is_empty() {
@@ -858,8 +878,11 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
             }
         }
 
-        // ── Token usage (last entry per requestId) ──
-        for (_rid, entry) in &request_last {
+        // ── Token usage (last entry per requestId, globally deduplicated) ──
+        for (rid, entry) in &request_last {
+            if !seen_request_ids.insert(rid.clone()) {
+                continue; // already counted from another session
+            }
             if let Some(ref usage) = entry.usage {
                 if !entry.model.is_empty() {
                     let mu = model_usage_map
@@ -870,15 +893,15 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
                     mu.cache_read_input_tokens += usage.cache_read_input_tokens;
                     mu.cache_creation_input_tokens += usage.cache_creation_input_tokens;
 
-                    // Daily tokens
+                    // Daily tokens (use local time for date assignment)
                     let date = entry
                         .timestamp
-                        .map(|ts| ts.format("%Y-%m-%d").to_string())
+                        .map(|ts| ts.with_timezone(&Local).format("%Y-%m-%d").to_string())
                         .or_else(|| {
                             session
                                 .user_timestamps
                                 .first()
-                                .map(|ts| ts.format("%Y-%m-%d").to_string())
+                                .map(|ts| ts.with_timezone(&Local).format("%Y-%m-%d").to_string())
                         })
                         .unwrap_or_default();
                     let total = usage.input_tokens + usage.output_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens;

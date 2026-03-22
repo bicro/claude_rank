@@ -769,6 +769,7 @@
       <div class="user-menu" id="userMenu">
         <button class="user-menu-item" id="editDisplayNameBtn">Edit Display Name</button>
         <button class="user-menu-item" id="viewRankingsBtn">View Rankings</button>
+        <button class="user-menu-item" id="refreshMetricsBtn">Refresh Metrics</button>
         <button class="user-menu-item danger" id="leaveTeamBtn" style="display:none" onclick="confirmLeaveTeam()">Leave Team</button>
         <button class="user-menu-item danger" onclick="doLogout()">Sign Out</button>
       </div>
@@ -1940,6 +1941,25 @@ document.getElementById('editDisplayNameBtn').addEventListener('click', (e) => {
     if (ev.key === 'Escape') cancel();
   });
   input.addEventListener('blur', () => save());
+});
+
+// ── Refresh Metrics ──
+document.getElementById('refreshMetricsBtn').addEventListener('click', async (e) => {
+  e.preventDefault();
+  userMenu.classList.remove('open');
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (syncSecret) headers['X-Sync-Secret'] = syncSecret;
+    const resp = await fetch(`/api/users/${userHash}/clear-cache`, {
+      method: 'POST',
+      credentials: 'include',
+      headers,
+    });
+    if (!resp.ok) throw new Error(`API error ${resp.status}`);
+    postToParent({ type: 'force-sync' });
+  } catch (err) {
+    alert('Failed to refresh metrics: ' + err.message);
+  }
 });
 
 // ── View Rankings → open profile page externally ──

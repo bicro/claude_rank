@@ -155,8 +155,16 @@ impl FileWatcher {
 
         // Trigger ranking sync (throttled internally)
         if let Some(ref stats) = stats {
-            info!("[stats-watcher] calling try_sync (sessions={}, messages={})", stats.total_sessions, stats.total_messages);
-            super::ranking::try_sync(ranking, stats, points, app);
+            // Check if a full reparse happened (cache version bump or force_reparse)
+            let full_reparse = if let Ok(mut m) = metrics.lock() {
+                let flag = m.needs_full_sync();
+                if flag { m.clear_full_sync_flag(); }
+                flag
+            } else {
+                false
+            };
+            info!("[stats-watcher] calling try_sync (sessions={}, messages={}, full_reparse={})", stats.total_sessions, stats.total_messages, full_reparse);
+            super::ranking::try_sync(ranking, stats, points, app, full_reparse);
         }
     }
 }

@@ -112,6 +112,8 @@ pub(crate) struct SyncPayload {
     prompts: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_names: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    full_reparse: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -225,7 +227,7 @@ impl RankingEngine {
         }
     }
 
-    pub fn build_sync_payload(&self, stats: &StatsCache, points_state: &PointsState) -> SyncPayload {
+    pub fn build_sync_payload(&self, stats: &StatsCache, points_state: &PointsState, full_reparse: bool) -> SyncPayload {
         let settings = &self.config.sync_settings;
 
         // Compute totals
@@ -347,6 +349,7 @@ impl RankingEngine {
             prompt_hashes: None, // Populated from sessions if enabled
             prompts: None,       // Populated from sessions if enabled
             tool_names: None,    // Could be populated from stats
+            full_reparse,
         }
     }
 }
@@ -594,11 +597,11 @@ pub async fn force_sync(
     points: tauri::State<'_, Arc<Mutex<PointsEngine>>>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    info!("[ranking] Force sync triggered");
-    // Refresh metrics first so we sync fresh JSONL data (not stale/empty cache)
+    info!("[ranking] Force sync triggered — full reparse");
+    // Force full reparse so we sync fresh JSONL data (not stale cache)
     {
         let mut m = metrics.lock().map_err(|e| e.to_string())?;
-        m.refresh();
+        m.force_reparse();
     }
     {
         let mut engine = ranking.lock().map_err(|e| e.to_string())?;
@@ -608,7 +611,9 @@ pub async fn force_sync(
         let m = metrics.lock().map_err(|e| e.to_string())?;
         m.data.stats.clone()
     };
-    try_sync(&ranking.inner().clone(), &stats, &points.inner().clone(), &app);
+    // force_reparse sets needs_full_sync=true on the tracker,
+    // but force_sync bypasses the watcher, so pass it explicitly
+    try_sync_inner(&ranking.inner().clone(), &stats, &points.inner().clone(), &app, true);
     Ok(())
 }
 
@@ -619,6 +624,17 @@ pub fn try_sync(
     stats: &StatsCache,
     points: &Arc<Mutex<super::points::PointsEngine>>,
     app: &tauri::AppHandle,
+    full_reparse: bool,
+) {
+    try_sync_inner(ranking, stats, points, app, full_reparse);
+}
+
+fn try_sync_inner(
+    ranking: &Arc<Mutex<RankingEngine>>,
+    stats: &StatsCache,
+    points: &Arc<Mutex<super::points::PointsEngine>>,
+    app: &tauri::AppHandle,
+    full_reparse: bool,
 ) {
     let points_state = match points.lock() {
         Ok(p) => p.points_state().clone(),
@@ -636,7 +652,7 @@ pub fn try_sync(
             return;
         }
         engine.ensure_sync_secret();
-        let payload = engine.build_sync_payload(stats, &points_state);
+        let payload = engine.build_sync_payload(stats, &points_state, full_reparse);
         let json = match serde_json::to_string(&payload) {
             Ok(j) => j,
             Err(e) => {

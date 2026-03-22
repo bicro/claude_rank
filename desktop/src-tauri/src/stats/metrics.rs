@@ -32,6 +32,19 @@ impl MetricsEngine {
         self.data.recent_sessions = self.tracker.recent_sessions(50);
     }
 
+    pub fn force_reparse(&mut self) {
+        self.data.stats = self.tracker.force_reparse();
+        self.data.recent_sessions = self.tracker.recent_sessions(50);
+    }
+
+    pub fn needs_full_sync(&self) -> bool {
+        self.tracker.needs_full_sync
+    }
+
+    pub fn clear_full_sync_flag(&mut self) {
+        self.tracker.needs_full_sync = false;
+    }
+
     pub fn dashboard_data(&self) -> &DashboardData {
         &self.data
     }

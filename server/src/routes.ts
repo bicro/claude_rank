@@ -445,7 +445,7 @@ async function handleGetUserByUsername(username: string): Promise<Response> {
 }
 
 async function handleClearCache(userHash: string, request: Request): Promise<Response> {
-  const authErr = await requireOwner(request, userHash);
+  const authErr = await requireOwnerDual(request, userHash);
   if (authErr) return authErr;
 
   const db = getDb();
@@ -1550,7 +1550,8 @@ async function handleSync(request: Request): Promise<Response> {
     }
   }
 
-  // Persist hour_tokens — batched
+  // Persist hour_tokens — batched upsert
+  // If full_reparse flag is set, clear stale hourly data first
   if (req.hour_tokens && typeof req.hour_tokens === "object") {
     const rows: [string, string, number][] = [];
     for (const [hourStr, tokenCount] of Object.entries(req.hour_tokens)) {
@@ -1568,6 +1569,12 @@ async function handleSync(request: Request): Promise<Response> {
       rows.push([req.user_hash, snapshotHour, tokenCount]);
     }
     if (rows.length > 0) {
+      if (req.full_reparse) {
+        await pool.query(
+          `UPDATE metrics_hourly SET total_tokens = 0 WHERE user_hash = $1`,
+          [req.user_hash],
+        );
+      }
       const values = rows.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(", ");
       await pool.query(
         `INSERT INTO metrics_hourly (user_hash, snapshot_hour, total_tokens) VALUES ${values}
