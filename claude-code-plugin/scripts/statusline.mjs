@@ -225,13 +225,13 @@ function renderTimeline(daySessions) {
   }
 
   // Current time label positioned under the marker
-  // Prefix "  A1  " = 6 chars. On Windows terminal emojis are ~1 col each.
-  // Marker is after dot[currentHour], so col = 6 + currentHour + 1
+  // Prefix "  A1  " = 6 chars. Emojis are typically 2 columns wide.
+  // Marker is after dot[currentHour], so col = 6 + (currentHour + 1) * 2
   const timeLabel = fmtHour(currentHour);
-  const markerCol = 6 + currentHour + 1;
+  const markerCol = 6 + (currentHour + 1) * 2;
   // Center the label under the marker
   const labelStart = Math.max(0, markerCol - Math.floor(timeLabel.length / 2));
-  lines.push(`${" ".repeat(labelStart)}${DIM}${timeLabel}${RESET}`);
+  lines.push(`${DIM}${" ".repeat(labelStart)}${timeLabel}${RESET}`);
 
   return lines;
 }
