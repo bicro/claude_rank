@@ -29,7 +29,10 @@
     transform: none;
   }
   .drag-strip {
-    position: relative;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
     height: 32px;
     z-index: 10;
     display: flex;
@@ -37,7 +40,6 @@
     align-items: center;
     padding-right: 12px;
     border-radius: 16px 16px 0 0;
-    flex-shrink: 0;
   }
   .btn-close {
     background: none; border: none; color: #999; cursor: pointer;
@@ -123,7 +125,7 @@ listen('overlay-visibility-changed', (event) => {
 document.getElementById('btnHide').addEventListener('click', () => invoke('hide_overlay'));
 
 // ── Bridge: receive messages from widget iframe ──
-const DRAG_STRIP_HEIGHT = 32;
+const DRAG_STRIP_HEIGHT = 0;
 window.addEventListener('message', async (e) => {
   if (!e.data) return;
   if (e.data.type === 'copy-image' && e.data.base64) {
