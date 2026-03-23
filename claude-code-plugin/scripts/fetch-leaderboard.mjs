@@ -5,15 +5,15 @@ import { fetchLeaderboard } from "./lib/api.mjs";
 import { fmtNum } from "./lib/format.mjs";
 
 const CATEGORY_LABELS = {
-  weighted: "Weighted",
   tokens: "Tokens",
-  activity: "Activity",
-  tool_calls: "Tool Calls",
-  uniqueness: "Uniqueness",
-  cost: "Spend",
+  concurrent_agents: "Concurrent Agents",
+  agent_hours: "Agent Hours",
+  concurrency_time: "Concurrency Time",
+  consistency: "Consistency",
+  messages: "Messages",
 };
 
-export async function renderLeaderboard(category = "weighted", limit = 20) {
+export async function renderLeaderboard(category = "tokens", limit = 20) {
   const config = loadOrCreateIdentity();
   const myHash = getLookupHash(config);
 
@@ -60,7 +60,7 @@ export async function renderLeaderboard(category = "weighted", limit = 20) {
 }
 
 async function main() {
-  const category = process.argv[2] || "weighted";
+  const category = process.argv[2] || "tokens";
   const limit = parseInt(process.argv[3] || "20", 10);
   try {
     console.log(await renderLeaderboard(category, limit));

@@ -65,7 +65,7 @@ server.tool(
   "get_leaderboard",
   "Show the Claude Rank global leaderboard",
   {
-    category: z.enum(["weighted", "tokens", "activity", "tool_calls", "uniqueness", "cost"]).optional().describe("Leaderboard category (default: weighted)"),
+    category: z.enum(["tokens", "concurrent_agents", "agent_hours", "concurrency_time", "consistency", "messages"]).optional().describe("Leaderboard category (default: tokens)"),
     limit: z.number().int().min(1).max(100).optional().describe("Number of entries to show (default: 20)"),
   },
   async ({ category, limit }) => {
