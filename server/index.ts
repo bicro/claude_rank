@@ -18,7 +18,7 @@ const SECURITY_HEADERS: Record<string, string> = {
     "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://us-assets.i.posthog.com",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://pbs.twimg.com https://avatars.githubusercontent.com https://*.licdn.com https://*.googleusercontent.com https://cdn.discordapp.com https://api.dicebear.com https://randomuser.me",
-    "connect-src 'self' https://us.i.posthog.com https://pbs.twimg.com https://avatars.githubusercontent.com https://*.licdn.com https://*.googleusercontent.com https://cdn.discordapp.com https://api.dicebear.com https://randomuser.me",
+    "connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://pbs.twimg.com https://avatars.githubusercontent.com https://*.licdn.com https://*.googleusercontent.com https://cdn.discordapp.com https://api.dicebear.com https://randomuser.me",
     "font-src 'self'",
     "frame-ancestors * tauri://localhost http://tauri.localhost https://tauri.localhost",
   ].join("; "),
