@@ -27,6 +27,7 @@ export async function renderTeam() {
   // Header
   out.push(`## 🏢 ${team.team_name}`);
   out.push(`\`invite: ${team.team_hash}\` · ${team.member_count} member${team.member_count !== 1 ? "s" : ""}`);
+  out.push(`Team: https://www.clauderank.com/team.html?hash=${encodeURIComponent(teamHash)}`);
   out.push("");
 
   // Team totals
