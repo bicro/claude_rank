@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/sync.mjs\" 2>/dev/null"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/sync.mjs\""
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/sync-throttled.mjs\" 2>/dev/null"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/sync-throttled.mjs\""
           }
         ]
       }

@@ -117,9 +117,8 @@ async function main() {
         new_achievements: response.new_achievements || [],
       }));
     }
-  } catch (err) {
-    // Silent failure for hook usage — just log to stderr
-    console.error(`[claude-rank] Sync failed: ${err.message}`);
+  } catch {
+    // Silent failure for hook usage
   }
 }
 

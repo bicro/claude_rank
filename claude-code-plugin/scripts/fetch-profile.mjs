@@ -31,27 +31,60 @@ function todayTokensFromStats(stats) {
 function todayCostFromStats(stats) {
   const dailyModelTokens = stats?.dailyModelTokens || [];
   const modelUsage = stats?.modelUsage || {};
+  const hourTokens = stats?.hourTokens || {};
+
   const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const todayEntry = dailyModelTokens.find(d => d.date === todayStr);
-  if (!todayEntry) return "$0.00";
-  const todayUsage = {};
-  for (const [model, tokens] of Object.entries(todayEntry.tokensByModel || {})) {
-    const total = modelUsage[model];
-    if (total) {
-      const allTok = (total.inputTokens || 0) + (total.outputTokens || 0) +
-                     (total.cacheReadInputTokens || 0) + (total.cacheCreationInputTokens || 0);
-      if (allTok > 0) {
-        const ratio = tokens / allTok;
-        todayUsage[model] = {
-          inputTokens: (total.inputTokens || 0) * ratio,
-          outputTokens: (total.outputTokens || 0) * ratio,
-          cacheReadInputTokens: (total.cacheReadInputTokens || 0) * ratio,
-          cacheCreationInputTokens: (total.cacheCreationInputTokens || 0) * ratio,
-        };
-      }
+  const y = now.getFullYear(), mo = now.getMonth(), d = now.getDate();
+
+  // Map local hours to UTC dates and sum hourTokens per UTC date
+  const utcDateLocalSum = {};
+  for (let h = 0; h < 24; h++) {
+    const localHour = new Date(y, mo, d, h, 0, 0);
+    const utcDate = localHour.toISOString().slice(0, 10);
+    const utcHour = localHour.getUTCHours();
+    const key = `${utcDate}:${utcHour}`;
+    utcDateLocalSum[utcDate] = (utcDateLocalSum[utcDate] || 0) + (hourTokens[key] || 0);
+  }
+
+  // Compute total tokens per overlapping UTC date
+  const utcDateTotalSum = {};
+  for (const [key, val] of Object.entries(hourTokens)) {
+    const utcDate = key.slice(0, 10);
+    if (utcDate in utcDateLocalSum) {
+      utcDateTotalSum[utcDate] = (utcDateTotalSum[utcDate] || 0) + val;
     }
   }
+
+  // Build per-model usage scaled by local-day fraction
+  const todayUsage = {};
+  for (const [utcDate, localSum] of Object.entries(utcDateLocalSum)) {
+    if (localSum <= 0) continue;
+    const totalSum = utcDateTotalSum[utcDate] || 0;
+    if (totalSum <= 0) continue;
+    const dayFraction = localSum / totalSum;
+
+    const entry = dailyModelTokens.find(dm => dm.date === utcDate);
+    if (!entry) continue;
+
+    for (const [model, tokens] of Object.entries(entry.tokensByModel || {})) {
+      const scaledTokens = tokens * dayFraction;
+      const total = modelUsage[model];
+      if (!total) continue;
+      const allTok = (total.inputTokens || 0) + (total.outputTokens || 0) +
+                     (total.cacheReadInputTokens || 0) + (total.cacheCreationInputTokens || 0);
+      if (allTok <= 0) continue;
+      const modelRatio = scaledTokens / allTok;
+
+      if (!todayUsage[model]) {
+        todayUsage[model] = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
+      }
+      todayUsage[model].inputTokens += (total.inputTokens || 0) * modelRatio;
+      todayUsage[model].outputTokens += (total.outputTokens || 0) * modelRatio;
+      todayUsage[model].cacheReadInputTokens += (total.cacheReadInputTokens || 0) * modelRatio;
+      todayUsage[model].cacheCreationInputTokens += (total.cacheCreationInputTokens || 0) * modelRatio;
+    }
+  }
+
   return estimateCost(todayUsage);
 }
 
