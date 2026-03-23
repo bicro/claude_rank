@@ -21,7 +21,14 @@
     color: var(--text-primary);
     overflow-x: hidden;
     user-select: none;
+    cursor: grab;
   }
+  body:active { cursor: grabbing; }
+  button, a, input, select, textarea,
+  .view-toggle-btn, .team-member-row, .rank-pill, .user-identity,
+  .copy-btn, .team-action-btn, .team-invite-btn, .confirm-btn,
+  .date-nav-btn, .team-period-btn, .footer-link, .user-menu-item,
+  .spinner-cancel { cursor: pointer; }
 
   /* ── Panel ── */
   html, body { height: auto; }
@@ -877,6 +884,14 @@ function postToParent(data) {
   if (window.parent === window) return;
   window.parent.postMessage(data, '*');
 }
+
+// ── Drag: mousedown on non-interactive areas starts window drag ──
+const INTERACTIVE = 'button, a, input, select, textarea, [onclick], .view-toggle-btn, .team-member-row, .rank-pill, .user-identity, .copy-btn, .team-action-btn, .team-invite-btn, .confirm-btn, .date-nav-btn, .team-period-btn, .footer-link, .user-menu-item, .spinner-cancel';
+document.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  if (e.target.closest(INTERACTIVE)) return;
+  postToParent({ type: 'start-drag' });
+});
 
 const params = new URLSearchParams(window.location.search);
 const userHash = params.get('h');

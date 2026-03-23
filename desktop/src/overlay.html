@@ -49,8 +49,6 @@
   }
   .btn-close:hover { background: rgba(0,0,0,0.06); color: #333; }
 
-  .drag-region { cursor: grab; }
-  .drag-region:active { cursor: grabbing; }
   .no-drag { -webkit-app-region: no-drag; app-region: no-drag; }
 
   .widget-iframe {
@@ -130,6 +128,11 @@ document.getElementById('btnHide').addEventListener('click', () => invoke('hide_
 const DRAG_STRIP_HEIGHT = 0;
 window.addEventListener('message', async (e) => {
   if (!e.data) return;
+  if (e.data.type === 'start-drag') {
+    invoke('notify_drag_start');
+    getCurrentWindow().startDragging();
+    return;
+  }
   if (e.data.type === 'copy-image' && e.data.base64) {
     try {
       await invoke('copy_image_to_clipboard', { imageBase64: e.data.base64 });

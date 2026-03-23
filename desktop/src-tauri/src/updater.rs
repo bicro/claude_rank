@@ -1,7 +1,7 @@
 use log::{info, warn};
 use serde::Serialize;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 use crate::AppState;
@@ -34,22 +34,23 @@ pub fn start_periodic_check(app: AppHandle) {
             match updater.check().await {
                 Ok(Some(update)) => {
                     let version = update.version.clone();
-                    info!("[updater] Update available: {}", version);
+                    info!("[updater] Update available: {}, installing...", version);
 
                     // Update tray menu item text
                     let state = app.state::<AppState>();
                     if let Some(ref item) = *state.update_menu_item.lock().unwrap() {
-                        let _ = item.set_text(format!("Update to v{}", version));
+                        let _ = item.set_text(format!("Updating to v{}...", version));
                     }
 
-                    // Emit event for frontend
-                    let _ = app.emit(
-                        "update-available",
-                        UpdateInfo {
-                            current_version: update.current_version.clone(),
-                            latest_version: version,
-                        },
-                    );
+                    match update.download_and_install(|_, _| {}, || {}).await {
+                        Ok(()) => {
+                            info!("[updater] Update installed, restarting...");
+                            app.restart();
+                        }
+                        Err(e) => {
+                            warn!("[updater] Auto-install failed: {}", e);
+                        }
+                    }
                 }
                 Ok(None) => {
                     info!("[updater] App is up to date");
