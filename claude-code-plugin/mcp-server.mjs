@@ -4,8 +4,6 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 // Import render functions from fetch scripts
-import { renderStats } from "./scripts/fetch-stats.mjs";
-import { renderDetailedStats } from "./scripts/fetch-detailed-stats.mjs";
 import { renderLeaderboard } from "./scripts/fetch-leaderboard.mjs";
 import { renderBadges } from "./scripts/fetch-badges.mjs";
 import { renderHistory } from "./scripts/fetch-history.mjs";
@@ -32,35 +30,6 @@ async function silentSync() {
 }
 
 // ── Tools ──
-
-server.tool(
-  "get_rank",
-  "Show your Claude Rank dashboard with level, tier, rankings, and badges",
-  {},
-  async () => {
-    try {
-      await silentSync();
-      const text = await renderStats();
-      return { content: [{ type: "text", text }] };
-    } catch (err) {
-      return { content: [{ type: "text", text: `## Claude Rank\n\nUnable to fetch profile. Make sure you've synced at least once.\n\nError: ${err.message}` }] };
-    }
-  }
-);
-
-server.tool(
-  "get_stats",
-  "Show detailed Claude usage statistics with model breakdown",
-  {},
-  async () => {
-    try {
-      const text = await renderDetailedStats();
-      return { content: [{ type: "text", text }] };
-    } catch (err) {
-      return { content: [{ type: "text", text: `## Usage Statistics\n\nUnable to fetch stats. Make sure you've synced at least once.\n\nError: ${err.message}` }] };
-    }
-  }
-);
 
 server.tool(
   "get_leaderboard",
