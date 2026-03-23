@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fileURLToPath } from "node:url";
 import { loadOrCreateIdentity, getLookupHash } from "./lib/identity.mjs";
 import { loadStats } from "./lib/log-parser.mjs";
 import { fetchUserProfile, fetchConcurrency, fetchDailyRanks } from "./lib/api.mjs";
@@ -159,9 +160,19 @@ function renderTimeline(sessions) {
   return lines;
 }
 
-// ── Main ──
+/** Return the UTC YYYY-MM-DD date(s) that cover the given local day */
+function utcDatesForLocalDay(localDate) {
+  const y = localDate.getFullYear(), mo = localDate.getMonth(), d = localDate.getDate();
+  const startUTC = new Date(y, mo, d, 0, 0, 0).toISOString().slice(0, 10);
+  const endUTC = new Date(y, mo, d, 23, 59, 59).toISOString().slice(0, 10);
+  const dates = [startUTC];
+  if (endUTC !== startUTC) dates.push(endUTC);
+  return dates;
+}
 
-async function main() {
+// ── Render function (exported for MCP server) ──
+
+export async function renderProfile() {
   const config = loadOrCreateIdentity();
   const hash = getLookupHash(config);
 
@@ -173,35 +184,25 @@ async function main() {
   const cost = todayCostFromStats(stats);
 
   // Fetch remote data
-  let profile, concurrency, dailyRanks;
-  try {
-    // Get today in local YYYY-MM-DD for the date param
-    const now = new Date();
-    const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const now = new Date();
+  const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const utcDates = utcDatesForLocalDay(now);
 
-    // We need UTC date(s) that cover the local day for the concurrency endpoint
-    const utcDates = utcDatesForLocalDay(now);
+  const [profile, dailyRanks] = await Promise.all([
+    fetchUserProfile(hash),
+    fetchDailyRanks(hash, localDate).catch(() => ({})),
+  ]);
 
-    [profile, dailyRanks] = await Promise.all([
-      fetchUserProfile(hash),
-      fetchDailyRanks(hash, localDate).catch(() => ({})),
-    ]);
-
-    // Fetch concurrency for each UTC date that overlaps the local day, then merge
-    const concResults = await Promise.all(
-      utcDates.map(d => fetchConcurrency(hash, d).catch(() => ({})))
-    );
-    concurrency = Object.assign({}, ...concResults);
-    // Merge sessions arrays
-    const allSessions = [];
-    for (const r of concResults) {
-      if (Array.isArray(r?.sessions)) allSessions.push(...r.sessions);
-    }
-    concurrency.sessions = allSessions;
-  } catch {
-    console.log("## Claude Rank Profile\n\nUnable to fetch profile. Make sure you've synced at least once.");
-    process.exit(0);
+  // Fetch concurrency for each UTC date that overlaps the local day, then merge
+  const concResults = await Promise.all(
+    utcDates.map(d => fetchConcurrency(hash, d).catch(() => ({})))
+  );
+  let concurrency = Object.assign({}, ...concResults);
+  const allSessions = [];
+  for (const r of concResults) {
+    if (Array.isArray(r?.sessions)) allSessions.push(...r.sessions);
   }
+  concurrency.sessions = allSessions;
 
   const m = profile.metrics || profile;
   const username = config.username || profile.username || "Anonymous";
@@ -271,17 +272,17 @@ async function main() {
     out.push(`Daily: ${parts.join(" · ")}`);
   }
 
-  console.log(out.join("\n"));
+  return out.join("\n");
 }
 
-/** Return the UTC YYYY-MM-DD date(s) that cover the given local day */
-function utcDatesForLocalDay(localDate) {
-  const y = localDate.getFullYear(), mo = localDate.getMonth(), d = localDate.getDate();
-  const startUTC = new Date(y, mo, d, 0, 0, 0).toISOString().slice(0, 10);
-  const endUTC = new Date(y, mo, d, 23, 59, 59).toISOString().slice(0, 10);
-  const dates = [startUTC];
-  if (endUTC !== startUTC) dates.push(endUTC);
-  return dates;
+// ── Main (backward compat for direct node execution) ──
+
+async function main() {
+  try {
+    console.log(await renderProfile());
+  } catch {
+    console.log("## Claude Rank Profile\n\nUnable to fetch profile. Make sure you've synced at least once.");
+  }
 }
 
-main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

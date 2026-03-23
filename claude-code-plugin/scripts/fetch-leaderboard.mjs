@@ -1,10 +1,8 @@
 #!/usr/bin/env node
+import { fileURLToPath } from "node:url";
 import { loadOrCreateIdentity, getLookupHash } from "./lib/identity.mjs";
 import { fetchLeaderboard } from "./lib/api.mjs";
 import { fmtNum } from "./lib/format.mjs";
-
-const category = process.argv[2] || "weighted";
-const limit = parseInt(process.argv[3] || "20", 10);
 
 const CATEGORY_LABELS = {
   weighted: "Weighted",
@@ -15,17 +13,11 @@ const CATEGORY_LABELS = {
   cost: "Spend",
 };
 
-async function main() {
+export async function renderLeaderboard(category = "weighted", limit = 20) {
   const config = loadOrCreateIdentity();
   const myHash = getLookupHash(config);
 
-  let data;
-  try {
-    data = await fetchLeaderboard(category, limit);
-  } catch {
-    console.log("## Leaderboard\n\nUnable to fetch leaderboard. Check your connection.");
-    process.exit(0);
-  }
+  const data = await fetchLeaderboard(category, limit);
 
   const label = CATEGORY_LABELS[category] || category;
   const entries = data.leaderboard || data.entries || data || [];
@@ -64,7 +56,17 @@ async function main() {
     out.push(`Your position: #${myPosition}`);
   }
 
-  console.log(out.join("\n"));
+  return out.join("\n");
 }
 
-main();
+async function main() {
+  const category = process.argv[2] || "weighted";
+  const limit = parseInt(process.argv[3] || "20", 10);
+  try {
+    console.log(await renderLeaderboard(category, limit));
+  } catch {
+    console.log("## Leaderboard\n\nUnable to fetch leaderboard. Check your connection.");
+  }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

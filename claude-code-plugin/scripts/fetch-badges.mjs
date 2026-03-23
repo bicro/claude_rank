@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fileURLToPath } from "node:url";
 import { loadOrCreateIdentity, getLookupHash } from "./lib/identity.mjs";
 import { fetchBadges } from "./lib/api.mjs";
 
@@ -8,17 +9,11 @@ function fmtDate(iso) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-async function main() {
+export async function renderBadges() {
   const config = loadOrCreateIdentity();
   const hash = getLookupHash(config);
 
-  let badges;
-  try {
-    badges = await fetchBadges(hash);
-  } catch {
-    console.log("## Badges\n\nUnable to fetch badges. Check your connection.");
-    process.exit(0);
-  }
+  const badges = await fetchBadges(hash);
 
   const list = Array.isArray(badges) ? badges : badges.badges || [];
 
@@ -38,7 +33,15 @@ async function main() {
     }
   }
 
-  console.log(out.join("\n"));
+  return out.join("\n");
 }
 
-main();
+async function main() {
+  try {
+    console.log(await renderBadges());
+  } catch {
+    console.log("## Badges\n\nUnable to fetch badges. Check your connection.");
+  }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

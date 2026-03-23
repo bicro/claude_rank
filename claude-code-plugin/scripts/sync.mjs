@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { writeFileSync } from "fs";
-import { join } from "path";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadOrCreateIdentity, saveIdentity, getLookupHash, CLAUDE_RANK_DIR } from "./lib/identity.mjs";
 import { loadStats } from "./lib/log-parser.mjs";
 import { postSync, fetchUserProfile } from "./lib/api.mjs";
@@ -122,4 +123,4 @@ async function main() {
   }
 }
 
-main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

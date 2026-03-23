@@ -1,19 +1,14 @@
 #!/usr/bin/env node
+import { fileURLToPath } from "node:url";
 import { loadOrCreateIdentity, getLookupHash } from "./lib/identity.mjs";
 import { fetchUserProfile } from "./lib/api.mjs";
 import { fmtNum, fmtRank, fmtPercentile, getTier, tierEmoji } from "./lib/format.mjs";
 
-async function main() {
+export async function renderStats() {
   const config = loadOrCreateIdentity();
   const hash = getLookupHash(config);
 
-  let profile;
-  try {
-    profile = await fetchUserProfile(hash);
-  } catch {
-    console.log("## Claude Rank\n\nUnable to fetch profile. Make sure you've synced at least once.");
-    process.exit(0);
-  }
+  const profile = await fetchUserProfile(hash);
 
   const m = profile.metrics || profile;
   const level = m.level ?? 0;
@@ -64,7 +59,15 @@ async function main() {
     out.push("### Badges: 0 earned");
   }
 
-  console.log(out.join("\n"));
+  return out.join("\n");
 }
 
-main();
+async function main() {
+  try {
+    console.log(await renderStats());
+  } catch {
+    console.log("## Claude Rank\n\nUnable to fetch profile. Make sure you've synced at least once.");
+  }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

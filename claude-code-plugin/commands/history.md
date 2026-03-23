@@ -1,11 +1,6 @@
 ---
 description: Show your Claude usage history and daily trends
 args: "[days]"
+allowed-tools: mcp__plugin_claude-rank_claude-rank__get_history
 ---
-Run the command below and display the output exactly as-is. Do not reformat, summarize, or add commentary.
-
-The user may provide an optional `days` argument (default: 7).
-
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch-history.mjs" {days}
-```
+Use the `get_history` tool from the claude-rank MCP server. Pass the optional `days` argument if the user provided one (default: 7). Display the output exactly as-is. Do not reformat, summarize, or add commentary.

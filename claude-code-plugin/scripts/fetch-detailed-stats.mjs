@@ -1,20 +1,15 @@
 #!/usr/bin/env node
+import { fileURLToPath } from "node:url";
 import { loadOrCreateIdentity, getLookupHash } from "./lib/identity.mjs";
 import { fetchUserProfile } from "./lib/api.mjs";
 import { loadStats } from "./lib/log-parser.mjs";
 import { fmtNum, fmtTokens, fmtDuration, estimateCost } from "./lib/format.mjs";
 
-async function main() {
+export async function renderDetailedStats() {
   const config = loadOrCreateIdentity();
   const hash = getLookupHash(config);
 
-  let profile;
-  try {
-    profile = await fetchUserProfile(hash);
-  } catch {
-    console.log("## Usage Statistics\n\nUnable to fetch stats. Make sure you've synced at least once.");
-    process.exit(0);
-  }
+  const profile = await fetchUserProfile(hash);
 
   const m = profile.metrics || profile;
   const localStats = loadStats();
@@ -61,7 +56,15 @@ async function main() {
   out.push("### Progress");
   out.push(`Lv.${m.level ?? 0} · ${fmtNum(m.total_points ?? 0)} pts · ${m.current_streak ?? 0} day streak`);
 
-  console.log(out.join("\n"));
+  return out.join("\n");
 }
 
-main();
+async function main() {
+  try {
+    console.log(await renderDetailedStats());
+  } catch {
+    console.log("## Usage Statistics\n\nUnable to fetch stats. Make sure you've synced at least once.");
+  }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

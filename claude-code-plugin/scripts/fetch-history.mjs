@@ -1,21 +1,14 @@
 #!/usr/bin/env node
+import { fileURLToPath } from "node:url";
 import { loadOrCreateIdentity, getLookupHash } from "./lib/identity.mjs";
 import { fetchHistory } from "./lib/api.mjs";
 import { fmtNum, fmtTokens } from "./lib/format.mjs";
 
-const days = parseInt(process.argv[2] || "7", 10);
-
-async function main() {
+export async function renderHistory(days = 7) {
   const config = loadOrCreateIdentity();
   const hash = getLookupHash(config);
 
-  let history;
-  try {
-    history = await fetchHistory(hash, days);
-  } catch {
-    console.log(`## Usage History — Last ${days} Days\n\nUnable to fetch history. Make sure you've synced at least once.`);
-    process.exit(0);
-  }
+  const history = await fetchHistory(hash, days);
 
   const entries = Array.isArray(history) ? history : history.daily || history.history || [];
 
@@ -42,7 +35,16 @@ async function main() {
     out.push(`**Total:** ${fmtNum(totalMsg)} msg · ${fmtTokens(totalTok)} tok · ${fmtNum(totalTool)} tools · ${fmtNum(totalSess)} sess`);
   }
 
-  console.log(out.join("\n"));
+  return out.join("\n");
 }
 
-main();
+async function main() {
+  const days = parseInt(process.argv[2] || "7", 10);
+  try {
+    console.log(await renderHistory(days));
+  } catch {
+    console.log(`## Usage History — Last ${days} Days\n\nUnable to fetch history. Make sure you've synced at least once.`);
+  }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();
