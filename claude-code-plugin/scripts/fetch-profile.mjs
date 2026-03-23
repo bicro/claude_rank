@@ -190,7 +190,7 @@ export async function renderProfile() {
 
   const [profile, dailyRanks] = await Promise.all([
     fetchUserProfile(hash),
-    fetchDailyRanks(hash, localDate).catch(() => ({})),
+    fetchDailyRanks(hash, utcDates[0]).catch(() => ({})),
   ]);
 
   // Fetch concurrency for each UTC date that overlaps the local day, then merge
@@ -266,9 +266,11 @@ export async function renderProfile() {
       daily_tokens: "Tokens", daily_spend: "Spend", peak_concurrency: "Concurrency",
       active_mins: "Active Time", concurrent_mins: "Overlap Time",
     };
-    const parts = drEntries.map(([key, r]) =>
-      `${fmtRank(r.rank)} ${labels[key] || key} (top ${r.percentile.toFixed(1)}%)`
-    );
+    const parts = drEntries
+      .filter(([, r]) => r != null)
+      .map(([key, r]) =>
+        `${fmtRank(r.rank)} ${labels[key] || key} (top ${r.percentile.toFixed(1)}%)`
+      );
     out.push(`Daily: ${parts.join(" · ")}`);
   }
 
