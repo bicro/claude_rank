@@ -11,7 +11,8 @@
   <a href="https://clauderank.com">Website</a> &middot;
   <a href="#features">Features</a> &middot;
   <a href="#development">Development</a> &middot;
-  <a href="#api">API</a>
+  <a href="#api">API</a> &middot;
+  <a href="https://discord.gg/mCkyz9UCCd">Discord</a>
 </p>
 
 ---
