@@ -233,7 +233,7 @@ export async function renderProfile() {
     ? `  ${fmtRank(weightedRank.rank)} globally · top ${weightedRank.percentile.toFixed(1)}%`
     : "";
   out.push(`## Claude Rank  @${username}${rankBit}`);
-  out.push(`Profile: https://clauderank.com/user/${hash}`);
+  out.push(`Profile: https://www.clauderank.com/profile.html?username=${encodeURIComponent(username)}`);
   out.push("");
 
   // Today summary
