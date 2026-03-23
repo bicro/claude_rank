@@ -1,12 +1,29 @@
-# Claude Rank
+<p align="center">
+  <img src="assets/banner.png" alt="Claude Rank" width="600" />
+</p>
 
-A global leaderboard system for tracking Claude Code usage. Compete with other Claude users, earn badges, join teams, and climb the ranks.
+<p align="center">
+  <strong>A global leaderboard for tracking Claude Code usage.</strong><br/>
+  Compete with other Claude users, earn badges, join teams, and climb the ranks.
+</p>
 
-**Website**: [clauderank.com](https://clauderank.com)
+<p align="center">
+  <a href="https://clauderank.com">Website</a> &middot;
+  <a href="#features">Features</a> &middot;
+  <a href="#development">Development</a> &middot;
+  <a href="#api">API</a> &middot;
+  <a href="https://discord.gg/mCkyz9UCCd">Discord</a>
+</p>
+
+---
+
+## Demo
+
+![Demo](assets/demo.gif)
 
 ## Features
 
-- **Global Leaderboards**: Compete across 6 ranking categories
+- **Global Leaderboards** — Compete across 6 ranking categories
   - Token Usage
   - Messages & Sessions
   - Tool Calls
@@ -14,18 +31,18 @@ A global leaderboard system for tracking Claude Code usage. Compete with other C
   - Weighted Score (composite)
   - Estimated Spend
 
-- **User Profiles**: View detailed stats including usage heatmaps, badges, and tier progression
+- **User Profiles** — View detailed stats including usage heatmaps, badges, and tier progression
 
-- **Badge System**: Earn achievements for milestones and ranking positions
+- **Badge System** — Earn achievements for milestones and ranking positions
   - Milestone badges (Token Millionaire, Tool Master, etc.)
   - Ranking badges (Top 100, Top 10, #1)
   - Team badges
 
-- **Team Competition**: Create or join teams to compete with aggregated metrics
+- **Team Competition** — Create or join teams to compete with aggregated metrics
 
-- **Tier Progression**: Advance through Bronze, Silver, Gold, Platinum, and Diamond tiers
+- **Tier Progression** — Advance through Bronze, Silver, Gold, Platinum, and Diamond tiers
 
-- **Desktop App**: Tauri-based app that monitors your Claude Code logs in real-time, syncs metrics, and displays a tray widget with your stats
+- **Desktop App** — Tauri-based app that monitors your Claude Code logs in real-time, syncs metrics, and displays a tray widget with your stats
 
 ## Project Structure
 
