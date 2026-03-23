@@ -18,9 +18,7 @@
 
 ## Demo
 
-https://github.com/user-attachments/assets/demo.mp4
-
-<video src="assets/demo.mp4" width="100%" controls></video>
+![Demo](assets/demo.gif)
 
 ## Features
 
