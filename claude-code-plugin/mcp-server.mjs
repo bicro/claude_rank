@@ -10,6 +10,7 @@ import { renderLeaderboard } from "./scripts/fetch-leaderboard.mjs";
 import { renderBadges } from "./scripts/fetch-badges.mjs";
 import { renderHistory } from "./scripts/fetch-history.mjs";
 import { renderProfile } from "./scripts/fetch-profile.mjs";
+import { renderTeam } from "./scripts/fetch-team.mjs";
 
 // Import sync utilities
 import { loadOrCreateIdentity } from "./scripts/lib/identity.mjs";
@@ -119,6 +120,21 @@ server.tool(
       return { content: [{ type: "text", text }] };
     } catch (err) {
       return { content: [{ type: "text", text: `## Claude Rank Profile\n\nUnable to fetch profile. Make sure you've synced at least once.\n\nError: ${err.message}` }] };
+    }
+  }
+);
+
+server.tool(
+  "get_team",
+  "Show your team dashboard with member burn breakdown",
+  {},
+  async () => {
+    try {
+      await silentSync();
+      const text = await renderTeam();
+      return { content: [{ type: "text", text }] };
+    } catch (err) {
+      return { content: [{ type: "text", text: `## Team\n\nUnable to fetch team data.\n\nError: ${err.message}` }] };
     }
   }
 );

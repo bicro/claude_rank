@@ -44,3 +44,11 @@ export async function fetchDailyRanks(hash, date) {
   const params = date ? `?period=day&date=${date}` : '?period=day';
   return apiFetch(`/api/users/${hash}/daily-ranks${params}`);
 }
+
+export async function fetchTeam(teamHash) {
+  return apiFetch(`/api/teams/${teamHash}`);
+}
+
+export async function fetchTeamBurn(teamHash) {
+  return apiFetch(`/api/teams/${teamHash}/burn`);
+}
