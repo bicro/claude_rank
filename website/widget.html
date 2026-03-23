@@ -1517,16 +1517,41 @@ function renderTeamShell(container, team, members) {
     });
   });
 
+  // Clipboard helper (fallback for Tauri/WebView)
+  function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+    }
+    return fallbackCopy(text);
+  }
+  function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); }
+    catch { return Promise.reject(); }
+    finally { document.body.removeChild(ta); }
+    return Promise.resolve();
+  }
+
   // Invite code copy
   const inviteBtn = document.getElementById('teamInviteBtn');
   if (inviteBtn) {
     inviteBtn.addEventListener('click', async () => {
       try {
-        await navigator.clipboard.writeText(currentTeamHash);
+        await copyToClipboard(currentTeamHash);
         const fb = document.getElementById('teamInviteFeedback');
         fb.classList.add('show');
         setTimeout(() => fb.classList.remove('show'), 1500);
-      } catch {}
+      } catch {
+        const fb = document.getElementById('teamInviteFeedback');
+        fb.textContent = 'Failed to copy';
+        fb.classList.add('show');
+        setTimeout(() => { fb.classList.remove('show'); fb.textContent = 'Copied!'; }, 1500);
+      }
     });
   }
 
