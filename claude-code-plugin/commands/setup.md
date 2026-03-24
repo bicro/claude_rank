@@ -1,5 +1,6 @@
 ---
 description: Set up Claude Rank statusline HUD
+allowed-tools: mcp__plugin_claude-rank_claude-rank__authenticate
 ---
 
 Configure the Claude Rank statusline by adding it to the user's Claude Code settings.
@@ -87,3 +88,11 @@ Write the merged settings back to the file. Preserve all existing keys.
 ## Step 4: Verify
 
 Tell the user: "Claude Rank statusline configured! Restart Claude Code to see it. The HUD shows your level, rank, streak, and today's token usage."
+
+## Step 5: Authenticate
+
+Now use the `authenticate` tool from the claude-rank MCP server to connect the user's social account. Display the output exactly as-is. Do not reformat, summarize, or add commentary.
+
+The tool handles both cases automatically:
+- If already authenticated, it confirms the connection
+- If not yet authenticated, it provides a URL to connect an account
