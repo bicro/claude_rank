@@ -5,14 +5,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "test -d \"${CLAUDE_PLUGIN_ROOT}/node_modules\" || (cd \"${CLAUDE_PLUGIN_ROOT}\" && npm install --production)"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/sync.mjs\""
           }
         ]
