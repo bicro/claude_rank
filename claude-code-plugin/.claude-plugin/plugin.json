@@ -1,0 +1,10 @@
+{
+  "name": "claude-rank",
+  "description": "View your Claude Rank stats, leaderboard position, badges, and usage history. Syncs Claude Code usage to clauderank.com.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Frisson Labs"
+  },
+  "homepage": "https://clauderank.com",
+  "repository": "https://github.com/bicro/claude_rank"
+}

@@ -1,0 +1,11 @@
+{
+  "name": "claude-rank",
+  "description": "Claude Rank - Track your Claude Code usage, compete on leaderboards, earn badges, and view detailed stats.",
+  "plugins": [
+    {
+      "name": "claude-rank",
+      "description": "View your Claude Rank stats, leaderboard position, badges, and usage history. Syncs Claude Code usage to clauderank.com.",
+      "directory": "claude-code-plugin"
+    }
+  ]
+}
