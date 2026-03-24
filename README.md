@@ -9,6 +9,7 @@
 
 <p align="center">
   <a href="https://clauderank.com">Website</a> &middot;
+  <a href="#claude-code-plugin">Plugin</a> &middot;
   <a href="#features">Features</a> &middot;
   <a href="#development">Development</a> &middot;
   <a href="#api">API</a> &middot;
@@ -20,6 +21,7 @@
 ## Demo
 
 ![Demo](assets/demo.gif)
+
 
 ## Features
 
@@ -44,16 +46,44 @@
 
 - **Desktop App** — Tauri-based app that monitors your Claude Code logs in real-time, syncs metrics, and displays a tray widget with your stats
 
+- **Claude Code Plugin** — [Install directly in Claude Code](#claude-code-plugin) to sync usage, view leaderboards, check badges, and track stats without leaving your terminal
+
+## Claude Code Plugin
+
+A way to use Claude Rank directly in Claude Code. It syncs your usage automatically in the background and gives you access to leaderboards, badges, and stats directly in your terminal.
+
+### Install
+
+```
+/plugin marketplace add bicro/claude_rank
+/plugin install claude-rank
+```
+
+Then run `/claude-rank:setup` to configure the statusline HUD.
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `/claude-rank:leaderboard [category]` | View the global leaderboard |
+| `/claude-rank:profile` | View your profile card with stats and activity |
+| `/claude-rank:badges` | See your earned badges and achievements |
+| `/claude-rank:history` | View your usage history and daily trends |
+| `/claude-rank:team` | View your team dashboard |
+| `/claude-rank:authenticate` | Connect a social account (Google/GitHub/Discord) |
+| `/claude-rank:setup` | Configure the statusline HUD |
+| `/claude-rank:uninstall` | Remove the plugin |
+
 ## Project Structure
 
 ```
 claude_rank/
-├── server/           # Bun.js backend (TypeScript)
-├── desktop/          # Tauri 2.x desktop app (Rust + TypeScript)
-├── website/          # Static website (HTML/JS/CSS)
-├── lib/              # Shared utilities
-├── dev.ts            # Dev script (starts server + desktop)
-└── Dockerfile        # Production container
+├── claude-code-plugin/  # Claude Code plugin (MCP server + commands)
+├── server/              # Bun.js backend (TypeScript)
+├── desktop/             # Tauri 2.x desktop app (Rust + TypeScript)
+├── website/             # Static website (HTML/JS/CSS)
+├── dev.ts               # Dev script (starts server + desktop)
+└── Dockerfile           # Production container
 ```
 
 ## Tech Stack
@@ -62,6 +92,7 @@ claude_rank/
 |-----------|------------|
 | Backend | Bun, TypeScript, PostgreSQL |
 | Auth | Better Auth (Google, GitHub, Discord, Twitter, LinkedIn) |
+| Plugin | Node.js, MCP SDK |
 | Desktop | Tauri 2.x, Rust |
 | Website | Vanilla HTML/JS/CSS |
 
