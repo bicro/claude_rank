@@ -88,7 +88,9 @@
   }
 
   async function connect(provider) {
-    const callbackURL = window.location.origin + '/auth-connected.html?user_hash=' + encodeURIComponent(userHash) + '&provider=' + provider;
+    const source = params.get('source');
+    let callbackURL = window.location.origin + '/auth-connected.html?user_hash=' + encodeURIComponent(userHash) + '&provider=' + provider;
+    if (source) callbackURL += '&source=' + encodeURIComponent(source);
     const res = await fetch('/api/auth/sign-in/social', {
       method: 'POST',
       credentials: 'include',

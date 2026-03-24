@@ -267,6 +267,12 @@ export async function renderProfile() {
     : "";
   out.push(`## Claude Rank  @${username}${rankBit}`);
   out.push(`Profile: https://www.clauderank.com/profile.html?username=${encodeURIComponent(username)}`);
+  if (profile.auth_provider) {
+    const provider = profile.auth_provider.charAt(0).toUpperCase() + profile.auth_provider.slice(1);
+    out.push(`Connected: ${provider}${profile.display_name ? ` (${profile.display_name})` : ""}`);
+  } else {
+    out.push(`Not connected — run /claude-rank:authenticate to link your account`);
+  }
   out.push("");
 
   // Today summary

@@ -11,9 +11,10 @@ import { renderProfile } from "./scripts/fetch-profile.mjs";
 import { renderTeam } from "./scripts/fetch-team.mjs";
 
 // Import sync utilities
-import { loadOrCreateIdentity } from "./scripts/lib/identity.mjs";
+import { loadOrCreateIdentity, getLookupHash, saveIdentity } from "./scripts/lib/identity.mjs";
 import { loadStats } from "./scripts/lib/log-parser.mjs";
 import { buildAndSync } from "./scripts/sync.mjs";
+import { fetchUserProfile } from "./scripts/lib/api.mjs";
 
 const server = new McpServer({
   name: "claude-rank",
@@ -104,6 +105,40 @@ server.tool(
       return { content: [{ type: "text", text }] };
     } catch (err) {
       return { content: [{ type: "text", text: `## Team\n\nUnable to fetch team data.\n\nError: ${err.message}` }] };
+    }
+  }
+);
+
+server.tool(
+  "authenticate",
+  "Connect your social account (Google, GitHub, Discord, etc.) to your Claude Rank profile",
+  {},
+  async () => {
+    try {
+      const config = loadOrCreateIdentity();
+      const hash = getLookupHash(config);
+      const BASE_URL = process.env.RANKING_API_BASE || "https://clauderank.com";
+
+      // Check if already authenticated
+      try {
+        const profile = await fetchUserProfile(hash);
+        if (profile.auth_provider) {
+          // Update local identity with latest info
+          if (profile.display_name && profile.display_name !== config.display_name) {
+            config.display_name = profile.display_name;
+            saveIdentity(config);
+          }
+          const provider = profile.auth_provider.charAt(0).toUpperCase() + profile.auth_provider.slice(1);
+          return { content: [{ type: "text", text: `## Claude Rank — Connected\n\nYour account is already connected via **${provider}**${profile.display_name ? ` as **${profile.display_name}**` : ""}.\n\nProfile: ${BASE_URL}/profile.html?username=${encodeURIComponent(profile.username || hash)}` }] };
+        }
+      } catch {
+        // Profile fetch failed — continue with auth URL
+      }
+
+      const authUrl = `${BASE_URL}/auth-connect.html?user_hash=${encodeURIComponent(config.user_hash)}&source=plugin`;
+      return { content: [{ type: "text", text: `## Claude Rank — Connect Your Account\n\nTo link a social account to your Claude Rank profile, open this URL in your browser:\n\n${authUrl}\n\nAfter signing in, run \`/claude-rank:profile\` to see your connected account.` }] };
+    } catch (err) {
+      return { content: [{ type: "text", text: `## Authentication\n\nUnable to generate auth link.\n\nError: ${err.message}` }] };
     }
   }
 );

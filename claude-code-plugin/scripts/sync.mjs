@@ -93,6 +93,18 @@ export async function buildAndSync(config, stats) {
       const hash = getLookupHash(config);
       const profile = await fetchUserProfile(hash);
       writeFileSync(PROFILE_CACHE, JSON.stringify({ ...profile, _ts: Date.now() }));
+
+      // Auto-update local identity with auth info from server
+      let updated = false;
+      if (profile.display_name && profile.display_name !== config.display_name) {
+        config.display_name = profile.display_name;
+        updated = true;
+      }
+      if (profile.username && profile.username !== config.username) {
+        config.username = profile.username;
+        updated = true;
+      }
+      if (updated) saveIdentity(config);
     } catch {}
   }
 
