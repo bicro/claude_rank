@@ -1909,18 +1909,9 @@ async function copyCardAsImage() {
   // Time axis
   const xAxisY = gridTopY + gridHeight + 22;
   const expFmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
-  const expIsToday = lastLocalDateStr === localDateISO(new Date());
-  let expStartHour, expMidHour, expEndHour;
-  if (expIsToday) {
-    const expNowHour = new Date().getHours();
-    expStartHour = (expNowHour + 1) % 24;
-    expMidHour = (expNowHour + 13) % 24;
-    expEndHour = expNowHour;
-  } else {
-    expStartHour = 0;
-    expMidHour = 12;
-    expEndHour = 23;
-  }
+  const expStartHour = 0;
+  const expMidHour = 12;
+  const expEndHour = 23;
   s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="16">${expFmtHr(expStartHour)}</text>`;
   s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="16">${expFmtHr(expMidHour)}</text>`;
   s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="16" text-anchor="end">${expFmtHr(expEndHour)}</text>`;
