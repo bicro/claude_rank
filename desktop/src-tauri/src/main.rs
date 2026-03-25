@@ -873,27 +873,6 @@ fn show_overlay_sync(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn hide_overlay_sync(app: &AppHandle) {
-    let state = app.state::<AppState>();
-    *state.overlay_pinned.lock().unwrap() = false;
-    *state.overlay_visible.lock().unwrap() = false;
-
-    if let Some(menu_item) = state.toggle_menu_item.lock().unwrap().as_ref() {
-        let _ = menu_item.set_text("Show Widget");
-    }
-
-    let _ = app.emit("overlay-visibility-changed", json!({ "visible": false }));
-
-    // Safety: force-hide after 300ms
-    let app_clone = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        if let Some(window) = app_clone.get_webview_window("overlay") {
-            let _ = window.hide();
-        }
-    });
-}
-
 #[command]
 async fn get_overlay_visible(state: tauri::State<'_, AppState>) -> Result<bool, String> {
     Ok(*state.overlay_visible.lock().unwrap())
@@ -1183,7 +1162,6 @@ fn main() {
                 .level(log::LevelFilter::Info)
                 .build(),
         )
-        .plugin(tauri_plugin_global_shortcut::init())
         .invoke_handler(tauri::generate_handler![
             show_overlay,
             hide_overlay,
