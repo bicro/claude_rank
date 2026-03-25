@@ -705,6 +705,18 @@ a.top-entry:hover { text-decoration: none; background: var(--bg-hover); }
 .stat-card .value { font-size: 24px; font-weight: 700; font-family: monospace; }
 .stat-card .rank { color: #444; font-size: 13px; margin-top: 4px; }
 
+.reward-pills { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+.reward-pill {
+    font-size: 9px; font-weight: 600; padding: 2px 6px;
+    border-radius: 4px; letter-spacing: 0.3px;
+}
+.reward-pill.personal { background: #fef3c7; color: #92400e; }
+.reward-pill.team     { background: #dbeafe; color: #1e40af; }
+.reward-pill.top1     { background: #ffe4e6; color: #9f1239; }
+.reward-pill.top10    { background: #ffedd5; color: #9a3412; }
+.reward-pill.top25    { background: #f3e8ff; color: #6b21a8; }
+.reward-pill.top50    { background: #cffafe; color: #155e75; }
+
 .profile-badges {
     padding: 0 24px 0;
     max-width: 900px;

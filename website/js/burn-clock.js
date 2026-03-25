@@ -196,9 +196,9 @@ export function renderShareableCardV5(svg, hourlyData, sessions, cardData) {
     const estSpend = cardData.estimatedSpend || 0;
     const spendDisplay = estSpend >= 1000 ? '$' + (estSpend / 1000).toFixed(1) + 'K' : '$' + estSpend.toFixed(2);
     const colW = (cardW - 60) / 3;
-    const statsLabels = ['CONCURRENT AGENTS', 'CURRENT STREAK', 'EST. SPEND'];
+    const statsLabels = ['CURRENT STREAK', 'CONCURRENT AGENTS', 'EST. SPEND'];
     const hourlyStreakVal = cardData.hourlyStreak != null ? cardData.hourlyStreak : 0;
-    const statsValues = [maxSessions + '\u00d7', hourlyStreakVal + 'h', spendDisplay];
+    const statsValues = [hourlyStreakVal + 'h', maxSessions + '\u00d7', spendDisplay];
     const statsColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
 
     for (let i = 0; i < 3; i++) {
@@ -312,9 +312,9 @@ export function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
     const estSpend = cardData.estimatedSpend || 0;
     const spendDisplay = estSpend >= 1000 ? '$' + (estSpend / 1000).toFixed(1) + 'K' : '$' + estSpend.toFixed(2);
     const colW = (cardW - 60) / 3;
-    const statsLabels = ['CONCURRENT AGENTS', 'CURRENT STREAK', 'EST. SPEND'];
+    const statsLabels = ['CURRENT STREAK', 'CONCURRENT AGENTS', 'EST. SPEND'];
     const hourlyStreakVal = cardData.hourlyStreak != null ? cardData.hourlyStreak : 0;
-    const statsValues = [maxSessions + '\u00d7', hourlyStreakVal + 'h', spendDisplay];
+    const statsValues = [hourlyStreakVal + 'h', maxSessions + '\u00d7', spendDisplay];
     const statsColors = ['#E8692D', '#ececec', '#ececec'];
 
     for (let i = 0; i < 3; i++) {

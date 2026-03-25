@@ -33,7 +33,7 @@
     <div id="profileContent"><div class="loading">Loading profile</div></div>
 
     <script type="module">
-        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserConcurrency, getUserConcurrencyByDate, getUserDailyRanks, formatNumber, formatCost, formatPercentile, getCategoryLabel, getTier, animateValue } from './js/api.js?v=2';
+        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserConcurrency, getUserConcurrencyByDate, getUserDailyRanks, getUserRewards, formatNumber, formatCost, formatPercentile, getCategoryLabel, getTier, animateValue } from './js/api.js?v=2';
         import { getCachedAvatar } from './js/avatar.js';
 
         function escHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
@@ -84,6 +84,43 @@
             }
             const el = document.getElementById('dailySummaryMain');
             if (el) el.textContent = text;
+        }
+
+        function renderProfileRewards(rewards) {
+            if (!rewards) return;
+            const mappings = [
+                { key: 'daily_spend', el: 'rewardPillsSpend' },
+                { key: 'peak_concurrency', el: 'rewardPillsConcurrency' },
+            ];
+            for (const m of mappings) {
+                const container = document.getElementById(m.el);
+                if (!container) continue;
+                container.innerHTML = '';
+
+                const pb = rewards.personal_bests?.[m.key];
+                const tr = rewards.team_ranks?.[m.key];
+                const gt = rewards.global_tiers?.[m.key];
+
+                if (pb?.is_new_record) {
+                    const pill = document.createElement('span');
+                    pill.className = 'reward-pill personal';
+                    pill.textContent = pb.best === 0 ? 'First Record!' : 'Personal Best';
+                    container.appendChild(pill);
+                }
+                if (tr?.rank === 1 && tr.total > 1) {
+                    const pill = document.createElement('span');
+                    pill.className = 'reward-pill team';
+                    pill.textContent = 'Team #1';
+                    container.appendChild(pill);
+                }
+                if (gt?.tier) {
+                    const pill = document.createElement('span');
+                    pill.className = `reward-pill ${gt.tier}`;
+                    const pctText = gt.tier === 'top1' ? '1%' : gt.tier === 'top10' ? '10%' : gt.tier === 'top25' ? '25%' : '50%';
+                    pill.textContent = `Top ${pctText}`;
+                    container.appendChild(pill);
+                }
+            }
         }
 
         async function loadProfile(hash) {
@@ -169,6 +206,7 @@
                             <div class="stat-category-header">
                                 <div class="stat-category-value" data-raw-cost="${m.estimated_spend || 0}">0</div>
                                 <div class="stat-category-label">Total Estimated Spend</div>
+                                <div class="reward-pills" id="rewardPillsSpend"></div>
                             </div>
                             <div class="stat-category-items">
                                 <div class="stat-card" data-tooltip="Total input + output tokens consumed across all Claude models.">
@@ -187,6 +225,7 @@
                             <div class="stat-category-header">
                                 <div class="stat-category-value" data-raw="${m.max_concurrent || 0}">${m.max_concurrent ? '0' : '\u2014'}</div>
                                 <div class="stat-category-label">Max Concurrent Agents</div>
+                                <div class="reward-pills" id="rewardPillsConcurrency"></div>
                             </div>
                             <div class="stat-category-items">
                                 <div class="stat-card" data-tooltip="Total number of Claude Code sessions started.">
@@ -326,6 +365,11 @@
                         const yesterdayStr = localDateISO(yesterdayDate);
                         const yesterdayConcurrency = await fetchDayConcurrency(yesterdayStr);
                         renderBurnClockV2(dayConcurrency, profile.username, localDateStr, yesterdayConcurrency, yesterdayStr, offset === 0);
+
+                        // Fetch rewards and render pills
+                        getUserRewards(hash, localDateStr).then(rewards => {
+                            renderProfileRewards(rewards);
+                        }).catch(() => {});
 
                         // Fetch daily ranks and update summary with percentile
                         getUserDailyRanks(hash, localDateStr, 'day').then(resp => {
@@ -731,9 +775,9 @@
                     const estSpend = cardData.estimatedSpend || 0;
                     const spendDisplay = estSpend >= 1000 ? '$' + (estSpend / 1000).toFixed(1) + 'K' : '$' + estSpend.toFixed(2);
                     const colW = (cardW - 60) / 3;
-                    const statsLabels = ['CONCURRENT AGENTS', 'CURRENT STREAK', 'EST. SPEND'];
+                    const statsLabels = ['CURRENT STREAK', 'CONCURRENT AGENTS', 'EST. SPEND'];
                     const hourlyStreakVal = cardData.hourlyStreak != null ? cardData.hourlyStreak : 0;
-                    const statsValues = [maxSessions + '×', hourlyStreakVal + 'h', spendDisplay];
+                    const statsValues = [hourlyStreakVal + 'h', maxSessions + '×', spendDisplay];
                     const statsColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
 
                     for (let i = 0; i < 3; i++) {
@@ -901,9 +945,9 @@
                     const estSpend = cardData.estimatedSpend || 0;
                     const spendDisplay = estSpend >= 1000 ? '$' + (estSpend / 1000).toFixed(1) + 'K' : '$' + estSpend.toFixed(2);
                     const colW = (cardW - 60) / 3;
-                    const statsLabels = ['CONCURRENT AGENTS', 'CURRENT STREAK', 'EST. SPEND'];
+                    const statsLabels = ['CURRENT STREAK', 'CONCURRENT AGENTS', 'EST. SPEND'];
                     const hourlyStreakVal = cardData.hourlyStreak != null ? cardData.hourlyStreak : 0;
-                    const statsValues = [maxSessions + '×', hourlyStreakVal + 'h', spendDisplay];
+                    const statsValues = [hourlyStreakVal + 'h', maxSessions + '×', spendDisplay];
                     const statsColors = ['#E8692D', '#ececec', '#ececec'];
 
                     for (let i = 0; i < 3; i++) {
@@ -1079,8 +1123,8 @@
                     const colW = (cardW - 60) / 3;
                     const estSpendCopy = window._profileEstSpend || 0;
                     const spendDisplayCopy = estSpendCopy >= 1000 ? '$' + (estSpendCopy / 1000).toFixed(1) + 'K' : '$' + estSpendCopy.toFixed(2);
-                    const sLabels = ['CONCURRENT AGENTS', 'CURRENT STREAK', 'EST. SPEND'];
-                    const sValues = [maxSessions + '\u00d7', (window._profileHourlyStreak || 0) + 'h', spendDisplayCopy];
+                    const sLabels = ['CURRENT STREAK', 'CONCURRENT AGENTS', 'EST. SPEND'];
+                    const sValues = [(window._profileHourlyStreak || 0) + 'h', maxSessions + '\u00d7', spendDisplayCopy];
                     const sColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
                     for (let i = 0; i < 3; i++) {
                         const cx = 30 + colW * i + colW / 2;

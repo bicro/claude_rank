@@ -214,6 +214,12 @@ export async function getUserConcurrencyByDate(userHash, dateStr) {
     return apiFetch(`/api/users/${userHash}/concurrency?date=${dateStr}`);
 }
 
+export async function getUserRewards(userHash, dateStr) {
+    let url = `/api/users/${userHash}/rewards`;
+    if (dateStr) url += `?date=${dateStr}`;
+    return apiFetch(url);
+}
+
 export async function getUserDailyRanks(userHash, dateStr, period = 'day') {
     let url = `/api/users/${userHash}/daily-ranks?period=${period}`;
     if (dateStr) url += `&date=${dateStr}`;

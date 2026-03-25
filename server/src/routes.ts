@@ -264,6 +264,12 @@ export async function handleApiRequest(url: URL, request: Request): Promise<Resp
     return handleGetConcurrency(concurrencyMatch[1]!, url);
   }
 
+  // GET /api/users/:user_hash/rewards
+  const rewardsMatch = path.match(/^\/api\/users\/([^/]+)\/rewards$/);
+  if (rewardsMatch && method === "GET") {
+    return handleGetUserRewards(rewardsMatch[1]!, url);
+  }
+
   // GET /api/users/:user_hash — profile (must come after more specific routes)
   const userProfileMatch = path.match(/^\/api\/users\/([^/]+)$/);
   if (userProfileMatch && method === "GET") {
@@ -961,6 +967,163 @@ async function handleGetDailyRanks(userHash: string, url: URL): Promise<Response
   }
 
   return json({ date: target, period, ranks });
+}
+
+async function handleGetUserRewards(userHash: string, url: URL): Promise<Response> {
+  const db = getDb();
+  const pool = getPool();
+
+  const queryDate = url.searchParams.get("date");
+  let targetDate: string;
+  if (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
+    targetDate = queryDate;
+  } else {
+    targetDate = new Date().toISOString().split("T")[0]!;
+  }
+
+  // Resolve to primary hash and get all linked hashes
+  const userRow = await db.query("SELECT linked_to, team_hash FROM users WHERE user_hash = ?").get(userHash) as any;
+  if (!userRow) return error("User not found", 404);
+  const primaryHash = userRow.linked_to || userHash;
+  const hashes = await getLinkedHashes(db, primaryHash);
+  const ph = hashes.map((_, i) => `$${i + 1}`).join(", ");
+
+  // ── Personal Bests ──
+  // Today's values across all linked devices
+  const { rows: todayRows } = await pool.query(
+    `SELECT MAX(peak_concurrency) as peak_concurrency,
+            MAX(peak_hourly_streak) as peak_hourly_streak,
+            SUM(daily_spend) as daily_spend
+     FROM metrics_history
+     WHERE user_hash IN (${ph}) AND snapshot_date = $${hashes.length + 1}`,
+    [...hashes, targetDate],
+  );
+  const todayVals = todayRows[0] ?? { peak_concurrency: 0, peak_hourly_streak: 0, daily_spend: 0 };
+
+  // Historical bests (all dates before target) across all linked devices
+  const { rows: bestRows } = await pool.query(
+    `SELECT MAX(peak_concurrency) as best_peak_concurrency,
+            MAX(peak_hourly_streak) as best_hourly_streak,
+            MAX(daily_spend) as best_daily_spend
+     FROM metrics_history
+     WHERE user_hash IN (${ph}) AND snapshot_date < $${hashes.length + 1}`,
+    [...hashes, targetDate],
+  );
+  const bestVals = bestRows[0] ?? { best_peak_concurrency: 0, best_hourly_streak: 0, best_daily_spend: 0 };
+
+  // Get dates when bests occurred
+  async function getBestDate(column: string, bestValue: number): Promise<string | null> {
+    if (!bestValue || bestValue <= 0) return null;
+    const { rows } = await pool.query(
+      `SELECT snapshot_date FROM metrics_history
+       WHERE user_hash IN (${ph}) AND ${column} = $${hashes.length + 1} AND snapshot_date < $${hashes.length + 2}
+       ORDER BY snapshot_date DESC LIMIT 1`,
+      [...hashes, bestValue, targetDate],
+    );
+    return rows[0]?.snapshot_date ?? null;
+  }
+
+  const [peakConcBestDate, streakBestDate, spendBestDate] = await Promise.all([
+    getBestDate("peak_concurrency", bestVals.best_peak_concurrency ?? 0),
+    getBestDate("peak_hourly_streak", bestVals.best_hourly_streak ?? 0),
+    getBestDate("daily_spend", bestVals.best_daily_spend ?? 0),
+  ]);
+
+  const todayPeakConc = todayVals.peak_concurrency ?? 0;
+  const todayStreak = todayVals.peak_hourly_streak ?? 0;
+  const todaySpend = todayVals.daily_spend ?? 0;
+  const bestPeakConc = bestVals.best_peak_concurrency ?? 0;
+  const bestStreak = bestVals.best_hourly_streak ?? 0;
+  const bestSpend = bestVals.best_daily_spend ?? 0;
+
+  const personal_bests: Record<string, any> = {
+    peak_concurrency: {
+      best: bestPeakConc, best_date: peakConcBestDate,
+      today: todayPeakConc, is_new_record: todayPeakConc > 0 && todayPeakConc > bestPeakConc,
+    },
+    hourly_streak: {
+      best: bestStreak, best_date: streakBestDate,
+      today: todayStreak, is_new_record: todayStreak > 0 && todayStreak > bestStreak,
+    },
+    daily_spend: {
+      best: bestSpend, best_date: spendBestDate,
+      today: todaySpend, is_new_record: todaySpend > 0 && todaySpend > bestSpend,
+    },
+  };
+
+  // ── Team Ranks ──
+  let team_ranks: Record<string, any> | null = null;
+  const profileUser = await db.query("SELECT team_hash FROM users WHERE user_hash = ?").get(primaryHash) as any;
+  const teamHash = profileUser?.team_hash;
+
+  if (teamHash) {
+    const teamMembers = await db.query("SELECT user_hash FROM users WHERE team_hash = ?").all(teamHash) as any[];
+
+    // Get each member's metrics for the target date
+    const memberStats: { user_hash: string; peak_concurrency: number; daily_spend: number; peak_hourly_streak: number }[] = [];
+    for (const m of teamMembers) {
+      const mHashes = await getLinkedHashes(db, m.user_hash);
+      const mph = mHashes.map((_, i) => `$${i + 1}`).join(", ");
+      const { rows } = await pool.query(
+        `SELECT MAX(peak_concurrency) as peak_concurrency,
+                MAX(peak_hourly_streak) as peak_hourly_streak,
+                SUM(daily_spend) as daily_spend
+         FROM metrics_history
+         WHERE user_hash IN (${mph}) AND snapshot_date = $${mHashes.length + 1}`,
+        [...mHashes, targetDate],
+      );
+      const vals = rows[0] ?? {};
+      memberStats.push({
+        user_hash: m.user_hash,
+        peak_concurrency: vals.peak_concurrency ?? 0,
+        daily_spend: vals.daily_spend ?? 0,
+        peak_hourly_streak: vals.peak_hourly_streak ?? 0,
+      });
+    }
+
+    const total = memberStats.length;
+    function teamRank(metric: string): { rank: number; total: number } | null {
+      const myVal = memberStats.find(m => m.user_hash === primaryHash)?.[metric as keyof typeof memberStats[0]] as number ?? 0;
+      if (myVal <= 0) return null;
+      const higher = memberStats.filter(m => (m[metric as keyof typeof m] as number) > myVal).length;
+      return { rank: higher + 1, total };
+    }
+
+    team_ranks = {
+      peak_concurrency: teamRank("peak_concurrency"),
+      daily_spend: teamRank("daily_spend"),
+      hourly_streak: teamRank("peak_hourly_streak"),
+    };
+  }
+
+  // ── Global Tiers ──
+  const dailyRanks = await getDailyRanksForUser(db, primaryHash, targetDate);
+
+  function toTier(percentile: number | null): string | null {
+    if (percentile == null) return null;
+    if (percentile <= 1) return "top1";
+    if (percentile <= 10) return "top10";
+    if (percentile <= 25) return "top25";
+    if (percentile <= 50) return "top50";
+    return null;
+  }
+
+  const global_tiers: Record<string, any> = {
+    peak_concurrency: dailyRanks.peak_concurrency
+      ? { percentile: dailyRanks.peak_concurrency.percentile, tier: toTier(dailyRanks.peak_concurrency.percentile) }
+      : null,
+    daily_spend: dailyRanks.daily_spend
+      ? { percentile: dailyRanks.daily_spend.percentile, tier: toTier(dailyRanks.daily_spend.percentile) }
+      : null,
+    hourly_streak: null, // Not ranked globally yet
+  };
+
+  return json({
+    date: targetDate,
+    personal_bests,
+    team_ranks,
+    global_tiers,
+  });
 }
 
 async function handleGetConcurrency(userHash: string, url: URL): Promise<Response> {
@@ -1729,6 +1892,23 @@ async function handleSync(request: Request): Promise<Response> {
         [peakConcurrency, totalAgentMins, concurrentMinsAgg, peakConcurrencyMins, primaryHash, syncDate],
       );
     }
+  }
+
+  // Compute and store daily_spend and peak_hourly_streak for rewards tracking
+  {
+    const aggMetrics = await db.query("SELECT estimated_spend, total_tokens, current_hourly_streak FROM user_metrics WHERE user_hash = ?").get(primaryHash) as any;
+    const todayHistory = await db.query("SELECT daily_tokens FROM metrics_history WHERE user_hash = ? AND snapshot_date = ?").get(req.user_hash, today) as any;
+    const dailyTokens = todayHistory?.daily_tokens ?? 0;
+    const totalTokensAgg = aggMetrics?.total_tokens ?? 0;
+    const estSpend = aggMetrics?.estimated_spend ?? 0;
+    const dailySpend = totalTokensAgg > 0 ? (estSpend * dailyTokens / totalTokensAgg) : 0;
+    const hourlyStreak = aggMetrics?.current_hourly_streak ?? 0;
+
+    await pool.query(
+      `UPDATE metrics_history SET daily_spend = $1, peak_hourly_streak = GREATEST(COALESCE(peak_hourly_streak, 0), $2)
+       WHERE user_hash = $3 AND snapshot_date = $4`,
+      [dailySpend, hourlyStreak, req.user_hash, today],
+    );
   }
 
   // Evaluate badges using aggregated metrics for the primary user

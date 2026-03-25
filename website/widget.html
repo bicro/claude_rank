@@ -610,11 +610,70 @@
   }
   .copy-btn:hover { color: var(--text-primary); }
   .copy-btn svg { width: 14px; height: 14px; }
-  .copy-feedback {
-    font-size: 10px; color: #4ade80; text-align: center;
-    opacity: 0; transition: opacity 0.2s; margin-top: 4px;
+  .copy-tooltip {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #1a1a1a;
+    color: #4ade80;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
   }
-  .copy-feedback.show { opacity: 1; }
+  .copy-tooltip.show { opacity: 1; }
+  .copy-feedback { display: none; }
+
+  .stat-value-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+  }
+  .stat-rewards {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+    min-height: 0;
+  }
+  .reward-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    line-height: 1;
+  }
+  .reward-label.personal { color: #fbbf24; }
+  .reward-label.team     { color: #60a5fa; }
+  .reward-label.top1     { color: #f43f5e; }
+  .reward-label.top10    { color: #f97316; }
+  .reward-label.top25    { color: #a855f7; }
+  .reward-label.top50    { color: #22d3ee; }
+
+  .reward-toast {
+    position: fixed;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.88);
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    z-index: 50;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .reward-toast.show { opacity: 1; }
 
   .loading { color: var(--text-secondary); font-size: 12px; text-align: center; padding: 20px 0; }
 
@@ -770,19 +829,31 @@
   <div class="stats-section">
     <div class="stats-row">
       <div class="stat-col">
-        <div class="stat-label">CONCURRENT AGENTS</div>
-        <div class="stat-value accent" id="statPeakAgents">0&times;</div>
+        <div class="stat-label">CURRENT STREAK</div>
+        <div class="stat-value-row">
+          <span class="stat-value accent" id="statHourlyStreak">0h</span>
+          <span class="stat-rewards" id="rewardHourlyStreak"></span>
+        </div>
       </div>
       <div class="stat-col">
-        <div class="stat-label">CURRENT STREAK</div>
-        <div class="stat-value" id="statHourlyStreak">0h</div>
+        <div class="stat-label">CONCURRENT AGENTS</div>
+        <div class="stat-value-row">
+          <span class="stat-value" id="statPeakAgents">0&times;</span>
+          <span class="stat-rewards" id="rewardPeakAgents"></span>
+        </div>
       </div>
       <div class="stat-col">
         <div class="stat-label">EST. SPEND</div>
-        <div class="stat-value" id="statEstSpend">$0</div>
+        <div class="stat-value-row">
+          <span class="stat-value" id="statEstSpend">$0</span>
+          <span class="stat-rewards" id="rewardEstSpend"></span>
+        </div>
       </div>
     </div>
   </div>
+
+  <!-- Reward toast -->
+  <div class="reward-toast" id="rewardToast"></div>
 
   <!-- 13. Divider -->
   <div class="divider"></div>
@@ -790,6 +861,7 @@
   <!-- 14. Footer -->
   <div class="footer-row">
     <a class="footer-link" id="linkFull" href="/" target="_blank">CLAUDERANK.COM</a>
+    <span class="copy-tooltip" id="copyTooltip">Copied!</span>
     <button class="copy-btn" id="copyBtn" title="Copy card to clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
   </div>
   <div class="copy-feedback" id="copyFeedback">Copied!</div>
@@ -806,7 +878,7 @@
 </div>
 
 <script type="module">
-import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, setDisplayName, formatNumber, formatCost, animateValue } from './js/api.js?v=2';
+import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, getUserRewards, setDisplayName, formatNumber, formatCost, animateValue } from './js/api.js?v=2';
 import { getCachedAvatar, clearCachedAvatar } from './js/avatar.js';
 
 const ALLOWED_PARENT_ORIGINS = [
@@ -853,6 +925,95 @@ let previousPeakAgents = 0;
 let previousHourlyStreak = 0;
 let currentHourlyStreak = 0;
 let currentEstSpend = 0;
+let rewardsData = null;
+let toastQueue = [];
+let toastActive = false;
+
+// ── Rewards ──
+async function loadRewards() {
+  try {
+    rewardsData = await getUserRewards(userHash, lastLocalDateStr);
+    renderRewards();
+  } catch (e) {
+    console.error('Failed to load rewards:', e);
+  }
+}
+
+function renderRewards() {
+  if (!rewardsData) return;
+  const metrics = [
+    { key: 'peak_concurrency', el: 'rewardPeakAgents', label: 'Peak concurrency' },
+    { key: 'hourly_streak', el: 'rewardHourlyStreak', label: 'Hourly streak' },
+    { key: 'daily_spend', el: 'rewardEstSpend', label: 'Est. spend' },
+  ];
+
+  for (const m of metrics) {
+    const container = document.getElementById(m.el);
+    if (!container) continue;
+    container.innerHTML = '';
+
+    const pb = rewardsData.personal_bests?.[m.key];
+    const tr = rewardsData.team_ranks?.[m.key];
+    const gt = rewardsData.global_tiers?.[m.key];
+
+    // Personal record label
+    if (pb?.is_new_record) {
+      const lbl = document.createElement('span');
+      lbl.className = 'reward-label personal';
+      lbl.textContent = pb.best === 0 ? 'First Record!' : 'New PB!';
+      container.appendChild(lbl);
+      fireToast(m.label, pb.today, pb.best === 0);
+    } else if (m.key === 'hourly_streak' && pb) {
+      const best = Math.max(pb.best ?? 0, pb.today ?? 0);
+      if (best > 0) {
+        const lbl = document.createElement('span');
+        lbl.className = 'reward-label personal';
+        lbl.textContent = `PB: ${best}h`;
+        container.appendChild(lbl);
+      }
+    }
+
+    // Team #1 label
+    if (tr?.rank === 1 && tr.total > 1) {
+      const lbl = document.createElement('span');
+      lbl.className = 'reward-label team';
+      lbl.textContent = 'Team #1';
+      container.appendChild(lbl);
+    }
+
+    // Global tier label
+    if (gt?.tier) {
+      const lbl = document.createElement('span');
+      lbl.className = `reward-label ${gt.tier}`;
+      const tierText = { top1: 'Top 1%', top10: 'Top 10%', top25: 'Top 25%', top50: 'Top 50%' };
+      lbl.textContent = tierText[gt.tier] || `Top ${gt.percentile.toFixed(0)}%`;
+      container.appendChild(lbl);
+    }
+  }
+}
+
+function fireToast(label, value, isFirst) {
+  const storageKey = `reward-toast-${label}-${lastLocalDateStr}`;
+  if (sessionStorage.getItem(storageKey)) return;
+  sessionStorage.setItem(storageKey, '1');
+  const msg = isFirst ? `First record set! ${label}: ${value}` : `New personal best! ${label}: ${value}`;
+  toastQueue.push(msg);
+  processToastQueue();
+}
+
+function processToastQueue() {
+  if (toastActive || toastQueue.length === 0) return;
+  toastActive = true;
+  const msg = toastQueue.shift();
+  const el = document.getElementById('rewardToast');
+  if (!el) { toastActive = false; return; }
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => { toastActive = false; processToastQueue(); }, 400);
+  }, 3000);
+}
 
 // ── Auth connect ──
 window.startLogin = startLogin;
@@ -1209,6 +1370,7 @@ async function loadDayByIndex(index) {
     }
 
     notifyHeight();
+    loadRewards();
   } catch (e) {
     console.error('Failed to load concurrency data:', e);
   }
@@ -1665,47 +1827,59 @@ async function copyCardAsImage() {
   const username = usernameRaw || 'anonymous';
   const dateText = document.getElementById('dayLabel').textContent;
 
-  // Layout Y positions
-  const topY = 30, usernameY = 58;
-  const divider1Y = 80, gridLabelY = 110, gridTopY = 130;
-  const gridBottomY = gridTopY + gridHeight + 24;
-  const divider2Y = gridBottomY + 10;
-  const statsY = divider2Y + 20;
-  const statsHeight = 70;
-  const divider3Y = statsY + statsHeight + 10;
-  const footerY = divider3Y + 25;
-  const cardH = footerY + 20;
+  // Get avatar data URL from the DOM img element
+  const avatarEl = document.getElementById('userAvatar');
+  const avatarSrc = (avatarEl && avatarEl.style.display !== 'none' && avatarEl.src) ? avatarEl.src : null;
+  const avatarDataUrl = (avatarSrc && avatarSrc.startsWith('data:')) ? avatarSrc : null;
 
-  const fontStack = "'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace";
+  // Layout Y positions (text sizes scaled ~2x from widget to match 687px card width)
+  const topY = 40, usernameY = 76;
+  const divider1Y = 96;
+  const gridLabelY = 126, gridTopY = 148;
+  const gridBottomY = gridTopY + gridHeight + 28;
+  const divider2Y = gridBottomY + 12;
+  const statsY = divider2Y + 20;
+  const statsHeight = 96;
+  const divider3Y = statsY + statsHeight + 12;
+  const footerY = divider3Y + 30;
+  const cardH = footerY + 24;
+
+  const fontStack = "SF Mono, Menlo, Consolas, Liberation Mono, Courier New, monospace";
   let s = '';
   s += `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${cardW} ${cardH}" width="${cardW * 2}" height="${cardH * 2}" font-family="${fontStack}">`;
   s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
 
-  // Header + username
-  s += `<text x="30" y="${topY}" fill="#8a8480" font-size="10" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-  s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="20" font-weight="700">@${escHtml(username)}</text>`;
+  // Avatar + Header + username
+  const hasAvatar = !!avatarDataUrl;
+  const textX = hasAvatar ? 108 : 30;
+  if (hasAvatar) {
+    s += `<defs><clipPath id="widgetAvatarClip"><circle cx="62" cy="52" r="32"/></clipPath></defs>`;
+    s += `<image href="${avatarDataUrl}" x="30" y="20" width="64" height="64" clip-path="url(#widgetAvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
+  }
+  const headerCenterY = hasAvatar ? 52 : 50;
+  s += `<text x="${textX}" y="${headerCenterY}" fill="#1a1a1a" font-size="36" font-weight="700" dominant-baseline="central">@${escHtml(username)}</text>`;
 
   // Date (top right)
-  s += `<text x="${cardW - 30}" y="${usernameY}" fill="#8a8480" font-size="13" font-weight="600" letter-spacing="1.5" text-anchor="end">${escHtml(dateText)}</text>`;
+  s += `<text x="${cardW - 30}" y="${headerCenterY}" fill="#8a8480" font-size="22" font-weight="600" letter-spacing="2" text-anchor="end" dominant-baseline="central">${escHtml(dateText)}</text>`;
 
   // Divider 1
   s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
 
   // Grid label + legend
-  s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="11" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
-  const legendW = 80, legendH = 10;
+  s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-weight="700" letter-spacing="2">AGENT ACTIVITY TIMELINE</text>`;
+  const legendW = 100, legendH = 14;
   const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
-  const legendY = gridLabelY - 10;
+  const legendY = gridLabelY - 14;
   s += `<defs><linearGradient id="v5LG" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgb(245,170,100)"/><stop offset="100%" stop-color="rgb(210,70,15)"/></linearGradient></defs>`;
-  s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="9" font-weight="600" text-anchor="end">HIGH</text>`;
-  const highTW = 28, legendX = gridRightEdge - highTW - legendW;
-  s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="3" ry="3" fill="url(#v5LG)"/>`;
-  s += `<text x="${legendX - 6}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="9" font-weight="600" text-anchor="end">LOW</text>`;
+  s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-weight="600" text-anchor="end">HIGH</text>`;
+  const highTW = 38, legendX = gridRightEdge - highTW - legendW;
+  s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="4" ry="4" fill="url(#v5LG)"/>`;
+  s += `<text x="${legendX - 8}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-weight="600" text-anchor="end">LOW</text>`;
 
   // Row labels
   for (let row = 0; row < maxRows; row++) {
-    const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 4;
-    s += `<text x="30" y="${y}" fill="#8a8480" font-size="10" font-weight="600">A${row + 1}</text>`;
+    const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 5;
+    s += `<text x="30" y="${y}" fill="#8a8480" font-size="16" font-weight="600">A${row + 1}</text>`;
   }
 
   // Grid cells
@@ -1729,11 +1903,11 @@ async function copyCardAsImage() {
   const currentHourCol = hourlyData.findIndex(d => d.isCurrent);
   if (currentHourCol >= 0) {
     const markerX = gridMarginLeft + currentHourCol * (cellW + gap);
-    s += `<rect x="${markerX}" y="${gridTopY + gridHeight + 2}" width="${cellW}" height="2" rx="1" fill="${getV5Color(0.8)}"/>`;
+    s += `<rect x="${markerX}" y="${gridTopY + gridHeight + 3}" width="${cellW}" height="3" rx="1" fill="${getV5Color(0.8)}"/>`;
   }
 
   // Time axis
-  const xAxisY = gridTopY + gridHeight + 18;
+  const xAxisY = gridTopY + gridHeight + 22;
   const expFmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
   const expIsToday = lastLocalDateStr === localDateISO(new Date());
   let expStartHour, expMidHour, expEndHour;
@@ -1747,32 +1921,32 @@ async function copyCardAsImage() {
     expMidHour = 12;
     expEndHour = 23;
   }
-  s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="10">${expFmtHr(expStartHour)}</text>`;
-  s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10">${expFmtHr(expMidHour)}</text>`;
-  s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" text-anchor="end">${expFmtHr(expEndHour)}</text>`;
+  s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="16">${expFmtHr(expStartHour)}</text>`;
+  s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="16">${expFmtHr(expMidHour)}</text>`;
+  s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="16" text-anchor="end">${expFmtHr(expEndHour)}</text>`;
 
   // Divider 2
   s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
 
   // Stats row
   const colW = (cardW - 60) / 3;
-  const sLabels = ['CONCURRENT AGENTS', 'CURRENT STREAK', 'EST. SPEND'];
+  const sLabels = ['CURRENT STREAK', 'CONCURRENT AGENTS', 'EST. SPEND'];
   const spendDisplay = currentEstSpend >= 1000 ? '$' + (currentEstSpend / 1000).toFixed(1) + 'K' : '$' + currentEstSpend.toFixed(2);
-  const sValues = [maxSessions + '\u00d7', currentHourlyStreak + 'h', spendDisplay];
+  const sValues = [currentHourlyStreak + 'h', maxSessions + '\u00d7', spendDisplay];
   const sColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
   for (let i = 0; i < 3; i++) {
     const cx = 30 + colW * i + colW / 2;
-    s += `<text x="${cx}" y="${statsY + 18}" fill="#8a8480" font-size="10" font-weight="700" letter-spacing="1" text-anchor="middle">${sLabels[i]}</text>`;
-    s += `<text x="${cx}" y="${statsY + 50}" fill="${sColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${sValues[i]}</text>`;
+    s += `<text x="${cx}" y="${statsY + 26}" fill="#8a8480" font-size="16" font-weight="700" letter-spacing="1.5" text-anchor="middle">${sLabels[i]}</text>`;
+    s += `<text x="${cx}" y="${statsY + 72}" fill="${sColors[i]}" font-size="36" font-weight="700" text-anchor="middle">${sValues[i]}</text>`;
     if (i < 2) {
       const divX = 30 + colW * (i + 1);
-      s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#c8c0b8" stroke-width="1"/>`;
+      s += `<line x1="${divX}" y1="${statsY + 8}" x2="${divX}" y2="${statsY + statsHeight - 8}" stroke="#c8c0b8" stroke-width="1"/>`;
     }
   }
 
   // Divider 3 + footer
   s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
-  s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="10" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
+  s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="18" font-weight="600" letter-spacing="2" text-anchor="middle">CLAUDERANK.COM</text>`;
   s += `</svg>`;
 
   // SVG → canvas → clipboard
@@ -1800,9 +1974,9 @@ async function copyCardAsImage() {
 document.getElementById('copyBtn').addEventListener('click', async () => {
   try {
     await copyCardAsImage();
-    const fb = document.getElementById('copyFeedback');
-    fb.classList.add('show');
-    setTimeout(() => fb.classList.remove('show'), 1500);
+    const tt = document.getElementById('copyTooltip');
+    tt.classList.add('show');
+    setTimeout(() => tt.classList.remove('show'), 1500);
   } catch (err) {
     console.error('Copy failed:', err);
   }
@@ -1902,6 +2076,7 @@ window.addEventListener('message', async (e) => {
     await loadProfile();
     await loadActiveDates();
     await loadDayByIndex(activeDates.length - 1);
+    // loadDayByIndex already calls loadRewards()
     console.log('[widget] reload done, totalTokens=', totalTokens);
   }
 });

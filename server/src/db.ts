@@ -256,6 +256,29 @@ export async function initDb(): Promise<void> {
     await pool.query(`ALTER TABLE device_metrics ADD COLUMN IF NOT EXISTS current_hourly_streak INTEGER DEFAULT 0`);
   } catch { /* already exists */ }
 
+  // Add daily_spend and peak_hourly_streak to metrics_history for rewards tracking
+  try {
+    await pool.query(`ALTER TABLE metrics_history ADD COLUMN IF NOT EXISTS daily_spend DOUBLE PRECISION DEFAULT 0`);
+  } catch { /* already exists */ }
+  try {
+    await pool.query(`ALTER TABLE metrics_history ADD COLUMN IF NOT EXISTS peak_hourly_streak INTEGER DEFAULT 0`);
+  } catch { /* already exists */ }
+
+  // Backfill daily_spend from existing daily_tokens and estimated_spend
+  try {
+    await pool.query(`
+      UPDATE metrics_history mh SET daily_spend = (
+        CASE WHEN um.total_tokens > 0
+          THEN um.estimated_spend * mh.daily_tokens / um.total_tokens
+          ELSE 0 END
+      )
+      FROM user_metrics um
+      WHERE um.user_hash = mh.user_hash
+        AND mh.daily_spend = 0
+        AND mh.daily_tokens > 0
+    `);
+  } catch { /* backfill already ran or no data */ }
+
   // Backfill device_metrics from user_metrics for existing solo users
   await pool.query(`
     INSERT INTO device_metrics (device_hash, total_tokens, total_messages, total_sessions, total_tool_calls,
