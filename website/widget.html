@@ -25,7 +25,7 @@
   }
   body:active { cursor: grabbing; }
   button, a, input, select, textarea,
-  .view-toggle-btn, .team-member-row, .rank-pill, .user-identity,
+  .view-toggle-btn, .team-member-row, .user-identity,
   .copy-btn, .team-action-btn, .team-invite-btn, .confirm-btn,
   .date-nav-btn, .team-period-btn, .footer-link, .user-menu-item,
   .spinner-cancel { cursor: pointer; }
@@ -42,25 +42,19 @@
     box-shadow: 0 4px 24px rgba(0,0,0,0.18);
   }
 
-  /* ── 1. CLAUDERANK header ── */
+  /* ── 1. CLAUDERANK header bar ── */
   .header-row {
-    position: relative;
     display: flex;
     align-items: center;
-    margin-bottom: 8px;
-  }
-  .header-label {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--text-secondary);
-    letter-spacing: 2px;
+    justify-content: center;
+    background: var(--accent);
+    margin: -16px -16px 8px -16px;
+    padding: 6px 16px;
+    border-radius: 16px 16px 0 0;
   }
   .view-toggle {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
     display: flex;
-    background: var(--pill-bg);
+    background: rgba(255,255,255,0.2);
     border-radius: 10px;
     padding: 2px;
     gap: 0;
@@ -75,12 +69,12 @@
     border-radius: 8px;
     cursor: pointer;
     background: transparent;
-    color: var(--text-secondary);
+    color: rgba(255,255,255,0.7);
     transition: background 0.15s, color 0.15s;
   }
   .view-toggle-btn.active {
-    background: var(--accent);
-    color: #fff;
+    background: #fff;
+    color: var(--accent);
   }
 
   /* ── Team view ── */
@@ -329,8 +323,8 @@
     gap: 8px;
   }
   .user-avatar {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     flex-shrink: 0;
   }
@@ -463,22 +457,10 @@
     width: 100%;
   }
 
-  .rank-pill {
-    display: inline-flex; align-items: center;
-    padding: 3px 10px;
-    border-radius: 14px;
-    font-size: 10px; font-weight: 600; white-space: nowrap;
-    color: var(--accent);
-    border: 1.5px solid var(--accent);
-    letter-spacing: 0.5px;
-    height: 22px;
-  }
-
   /* ── 3. Date nav ── */
   .date-nav-row {
-    display: flex; align-items: center; justify-content: center;
-    gap: 8px;
-    margin-bottom: 8px;
+    display: flex; align-items: center;
+    gap: 4px;
   }
   .date-nav-btn {
     background: none; border: none; color: var(--text-secondary);
@@ -490,44 +472,6 @@
     font-size: 11px; color: var(--text-secondary); font-weight: 600;
     letter-spacing: 1.5px; min-width: 100px; text-align: center;
   }
-
-  /* ── 4-5. Hero tokens ── */
-  .hero-section {
-    text-align: center;
-    margin-top: 12px;
-    margin-bottom: 4px;
-  }
-  .hero-tokens {
-    font-size: 48px;
-    font-weight: 800;
-    color: var(--text-primary);
-    line-height: 1;
-  }
-  .hero-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    letter-spacing: 2px;
-    margin-top: 14px;
-  }
-
-  /* ── 6. Cost pill ── */
-  .cost-pill {
-    display: flex;
-    justify-content: center;
-    margin-top: 12px;
-    margin-bottom: 14px;
-  }
-  .cost-pill-inner {
-    background: var(--pill-bg);
-    padding: 6px 22px;
-    border-radius: 15px;
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    letter-spacing: 0.3px;
-  }
-  .cost-pill-inner .cost-value { color: var(--accent); }
 
   /* ── 7. Divider ── */
   .divider {
@@ -573,6 +517,19 @@
     width: 100%;
     height: auto;
     display: block;
+  }
+  @keyframes cellBlipIn {
+    0% { opacity: 0; transform: scale(0); }
+    60% { opacity: 1; transform: scale(1.15); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes cellColorFlash {
+    0% { filter: brightness(2); }
+    100% { filter: brightness(1); }
+  }
+  @keyframes markerSlideIn {
+    0% { opacity: 0; transform: scaleY(0); }
+    100% { opacity: 1; transform: scaleY(1); }
   }
   .heatmap-tooltip {
     position: absolute;
@@ -759,7 +716,6 @@
 
   <!-- 1. Header row -->
   <div class="header-row">
-    <div class="header-label">CLAUDERANK</div>
     <div class="view-toggle" id="viewToggle">
       <button class="view-toggle-btn active" id="toggleSolo">SOLO</button>
       <button class="view-toggle-btn" id="toggleTeam">TEAM</button>
@@ -781,33 +737,15 @@
         <button class="user-menu-item danger" onclick="doLogout()">Sign Out</button>
       </div>
     </div>
-    <div class="rank-pill" id="rankPill" style="cursor:pointer" title="View profile">RANK #&mdash;</div>
+    <div class="date-nav-row">
+      <button class="date-nav-btn" id="dayPrev" title="Previous day">&#9664;</button>
+      <span class="date-label" id="dayLabel">TODAY</span>
+      <button class="date-nav-btn" id="dayNext" title="Next day" disabled>&#9654;</button>
+    </div>
   </div>
 
   <!-- Solo view (default) -->
   <div class="solo-view" id="soloView">
-
-  <!-- 3. Date nav -->
-  <div class="date-nav-row">
-    <button class="date-nav-btn" id="dayPrev" title="Previous day">&#9664;</button>
-    <span class="date-label" id="dayLabel">TODAY</span>
-    <button class="date-nav-btn" id="dayNext" title="Next day" disabled>&#9654;</button>
-  </div>
-
-  <!-- 4-6. Hero section -->
-  <div class="hero-section">
-    <div class="hero-tokens" id="heroTokens">&mdash;</div>
-    <div class="hero-label">TOKENS BURNED</div>
-  </div>
-
-  <div class="cost-pill">
-    <div class="cost-pill-inner">
-      <span class="cost-value" id="costValue">$0</span> EST. TOKEN VALUE
-    </div>
-  </div>
-
-  <!-- 7. Divider -->
-  <div class="divider"></div>
 
   <!-- 8. Grid header -->
   <div class="grid-header">
@@ -836,12 +774,12 @@
         <div class="stat-value accent" id="statPeakAgents">0&times;</div>
       </div>
       <div class="stat-col">
-        <div class="stat-label">TOTAL AGENT HOURS</div>
-        <div class="stat-value" id="statAgentHours">0h</div>
+        <div class="stat-label">CURRENT STREAK</div>
+        <div class="stat-value" id="statHourlyStreak">0h</div>
       </div>
       <div class="stat-col">
-        <div class="stat-label">CONCURRENCY TIME</div>
-        <div class="stat-value" id="statConcTime">0m</div>
+        <div class="stat-label">EST. SPEND</div>
+        <div class="stat-value" id="statEstSpend">$0</div>
       </div>
     </div>
   </div>
@@ -868,7 +806,7 @@
 </div>
 
 <script type="module">
-import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, setDisplayName, formatNumber, formatCost, formatPercentile, animateValue } from './js/api.js?v=2';
+import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, setDisplayName, formatNumber, formatCost, animateValue } from './js/api.js?v=2';
 import { getCachedAvatar, clearCachedAvatar } from './js/avatar.js';
 
 const ALLOWED_PARENT_ORIGINS = [
@@ -886,7 +824,7 @@ function postToParent(data) {
 }
 
 // ── Drag: mousedown on non-interactive areas starts window drag ──
-const INTERACTIVE = 'button, a, input, select, textarea, [onclick], .view-toggle-btn, .team-member-row, .rank-pill, .user-identity, .copy-btn, .team-action-btn, .team-invite-btn, .confirm-btn, .date-nav-btn, .team-period-btn, .footer-link, .user-menu-item, .spinner-cancel';
+const INTERACTIVE = 'button, a, input, select, textarea, [onclick], .view-toggle-btn, .team-member-row, .user-identity, .copy-btn, .team-action-btn, .team-invite-btn, .confirm-btn, .date-nav-btn, .team-period-btn, .footer-link, .user-menu-item, .spinner-cancel';
 document.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
   if (e.target.closest(INTERACTIVE)) return;
@@ -907,16 +845,14 @@ let activeDates = [];
 let currentDateIndex = -1;
 let heatmapByDate = {};
 let totalTokens = 0;
-let totalCost = 0;
 let lastMergedHistograms = {};
 let lastLocalDateStr = '';
 let lastHourlyData = [];
 let loginPollInterval = null;
-let previousDayTokens = 0;
-let previousDayCostRaw = 0;
 let previousPeakAgents = 0;
-let previousAgentMins = 0;
-let previousConcMins = 0;
+let previousHourlyStreak = 0;
+let currentHourlyStreak = 0;
+let currentEstSpend = 0;
 
 // ── Auth connect ──
 window.startLogin = startLogin;
@@ -1095,11 +1031,15 @@ function renderHeatmap(svgEl, hourlyData, isToday) {
   // Grid cells
   for (let col = 0; col < 24; col++) {
     const data = hourlyData[col];
-    // Empty cells (V5: fill="#d8d2ca" opacity="0.8", rx="3" → scaled rx="2")
+    const baseDelay = col * 15;
+    // Empty cells
     for (let row = 0; row < maxRows; row++) {
       const x = marginLeft + col * (cellW + gap);
       const y = (maxRows - 1 - row) * (cellH + gap);
-      s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="#d8d2ca" opacity="0.8"/>`;
+      const cx = x + cellW / 2;
+      const cy = y + cellH / 2;
+      const d = baseDelay + row * 10;
+      s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="#d8d2ca" opacity="0" style="transform-origin:${cx}px ${cy}px;animation:cellBlipIn 0.3s ${d}ms ease-out forwards"/>`;
     }
     // Active cells
     for (const session of data.sessions) {
@@ -1107,13 +1047,16 @@ function renderHeatmap(svgEl, hourlyData, isToday) {
       const row = session.index - 1;
       const x = marginLeft + col * (cellW + gap);
       const y = (maxRows - 1 - row) * (cellH + gap);
+      const cx = x + cellW / 2;
+      const cy = y + cellH / 2;
       const color = getV5Color(session.intensity || 0.5);
-      s += `<rect class="hm-cell" x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}" style="cursor:default"/>`;
+      const d = baseDelay + row * 10 + 200;
+      s += `<rect class="hm-cell" x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}" style="cursor:default;opacity:0;transform-origin:${cx}px ${cy}px;animation:cellBlipIn 0.3s ${d}ms ease-out forwards,cellColorFlash 0.4s ${d}ms ease-out forwards"/>`;
     }
     // Current hour marker
     if (data.isCurrent) {
       const x = marginLeft + col * (cellW + gap);
-      s += `<rect x="${x}" y="${gridHeight + 2}" width="${cellW}" height="2" rx="1" fill="${getV5Color(0.8)}"/>`;
+      s += `<rect x="${x}" y="${gridHeight + 2}" width="${cellW}" height="2" rx="1" fill="${getV5Color(0.8)}" opacity="0" style="transform-origin:${x + cellW / 2}px ${gridHeight + 3}px;animation:markerSlideIn 0.3s ${baseDelay + 300}ms ease-out forwards"/>`;
     }
   }
 
@@ -1160,45 +1103,18 @@ new ResizeObserver(() => notifyHeight()).observe(document.querySelector('.panel'
 // ── Update stats ──
 function updateStats(hourlyData) {
   let maxSessions = 0;
-  let totalDevMins = 0;
-  let concurrentMins = 0;
 
   for (const d of hourlyData) {
     if (d.sessions.length > maxSessions) maxSessions = d.sessions.length;
-    for (const sess of d.sessions) {
-      totalDevMins += sess.minutes;
-    }
-    const s2 = d.sessions.find(s => s.index === 2);
-    if (s2) concurrentMins += s2.minutes;
   }
 
   animateValue(document.getElementById('statPeakAgents'), previousPeakAgents, maxSessions, v => v + '\u00d7');
   previousPeakAgents = maxSessions;
 
-  animateValue(document.getElementById('statAgentHours'), previousAgentMins, totalDevMins, v => (v / 60).toFixed(1) + 'h');
-  previousAgentMins = totalDevMins;
+  animateValue(document.getElementById('statHourlyStreak'), previousHourlyStreak, currentHourlyStreak, v => v + 'h');
+  previousHourlyStreak = currentHourlyStreak;
 
-  animateValue(document.getElementById('statConcTime'), previousConcMins, concurrentMins, v => {
-    const m = Math.round(v);
-    return m >= 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + 'm';
-  });
-  previousConcMins = concurrentMins;
-}
-
-// ── Center display ──
-function updateCenterDisplay() {
-  if (currentDateIndex < 0 || !activeDates[currentDateIndex]) return;
-  const dayData = heatmapByDate[activeDates[currentDateIndex]];
-  const dayTokens = dayData ? dayData.tokens : 0;
-  animateValue(document.getElementById('heroTokens'), previousDayTokens, dayTokens, formatNumber);
-  previousDayTokens = dayTokens;
-
-  let costRaw = 0;
-  if (totalTokens > 0 && dayTokens > 0 && totalCost > 0) {
-    costRaw = totalCost * (dayTokens / totalTokens);
-  }
-  animateValue(document.getElementById('costValue'), previousDayCostRaw, Math.round(costRaw * 100), v => formatCost(v / 100));
-  previousDayCostRaw = Math.round(costRaw * 100);
+  document.getElementById('statEstSpend').textContent = formatCost(currentEstSpend);
 }
 
 // ── Date formatting (V5: "MAR 15, 2026") ──
@@ -1266,8 +1182,6 @@ async function loadDayByIndex(index) {
   document.getElementById('dayNext').disabled = (index >= activeDates.length - 1);
   document.getElementById('dayPrev').disabled = (index <= 0);
 
-  updateCenterDisplay();
-
   try {
     const utcDates = utcDatesForLocalDay(localDateStr);
     const results = await Promise.all(utcDates.map(d => getUserConcurrencyByDate(userHash, d)));
@@ -1292,7 +1206,6 @@ async function loadDayByIndex(index) {
     if (hourlyTokens > 0) {
       heatmapByDate[localDateStr] = heatmapByDate[localDateStr] || {};
       heatmapByDate[localDateStr].tokens = hourlyTokens;
-      updateCenterDisplay();
     }
 
     notifyHeight();
@@ -1348,15 +1261,6 @@ async function loadProfile() {
       usernameEl.textContent = '@anonymous';
     }
 
-    const ranks = data.ranks || {};
-    const weightedRank = ranks.weighted;
-    const rankPill = document.getElementById('rankPill');
-    if (weightedRank) {
-      const rank = weightedRank.rank || weightedRank;
-      const pct = formatPercentile(weightedRank.percentile);
-      rankPill.textContent = '#' + rank + ' GLOBALLY' + (pct != null ? ' \u00b7 TOP ' + pct + '%' : '');
-    }
-
     // Track team membership
     currentTeamHash = data.team_hash || null;
     const leaveBtn = document.getElementById('leaveTeamBtn');
@@ -1364,8 +1268,8 @@ async function loadProfile() {
 
     const m = data.metrics || {};
     totalTokens = m.total_tokens || 0;
-    totalCost = m.estimated_spend || 0;
-    updateCenterDisplay();
+    currentHourlyStreak = m.current_hourly_streak || 0;
+    currentEstSpend = m.estimated_spend || 0;
 
     document.getElementById('linkFull').href = window.location.origin;
   } catch (e) {
@@ -1756,31 +1660,14 @@ async function copyCardAsImage() {
   const maxRows = Math.max(1, maxSessions);
   const gridHeight = maxRows * (cellH + gap) - gap;
 
-  // Compute stats
-  let totalDevMins = 0;
-  let concurrentMins = 0;
-  for (const d of hourlyData) {
-    for (const sess of d.sessions) totalDevMins += sess.minutes;
-    const s2 = d.sessions.find(s => s.index === 2);
-    if (s2) concurrentMins += s2.minutes;
-  }
-  const devHours = (totalDevMins / 60).toFixed(1);
-  const concDisplay = concurrentMins >= 60
-    ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
-    : Math.round(concurrentMins) + 'm';
-
   // Get display data from DOM
   const usernameRaw = document.getElementById('username').childNodes[0].textContent.replace('@', '').trim();
   const username = usernameRaw || 'anonymous';
-  const rankText = document.getElementById('rankPill').textContent.trim();
-  const dayTokens = document.getElementById('heroTokens').textContent;
-  const costText = document.getElementById('costValue').textContent;
   const dateText = document.getElementById('dayLabel').textContent;
 
-  // Layout Y positions (exact V5 card)
-  const topY = 30, usernameY = 58, dateY = 100;
-  const heroY = 200, heroLabelY = 235, pillY = 260;
-  const divider1Y = 310, gridLabelY = 340, gridTopY = 360;
+  // Layout Y positions
+  const topY = 30, usernameY = 58;
+  const divider1Y = 80, gridLabelY = 110, gridTopY = 130;
   const gridBottomY = gridTopY + gridHeight + 24;
   const divider2Y = gridBottomY + 10;
   const statsY = divider2Y + 20;
@@ -1798,26 +1685,8 @@ async function copyCardAsImage() {
   s += `<text x="30" y="${topY}" fill="#8a8480" font-size="10" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
   s += `<text x="30" y="${usernameY}" fill="#1a1a1a" font-size="20" font-weight="700">@${escHtml(username)}</text>`;
 
-  // Rank pill
-  if (rankText && !rankText.includes('\u2014')) {
-    const rpH = 28, rpW = 230;
-    const rpX = cardW - 30 - rpW, rpY = usernameY - 20;
-    s += `<rect x="${rpX}" y="${rpY}" width="${rpW}" height="${rpH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
-    s += `<text x="${rpX + rpW / 2}" y="${rpY + rpH / 2 + 4}" fill="#E8692D" font-size="12" font-weight="600" text-anchor="middle" letter-spacing="0.5">${escHtml(rankText)}</text>`;
-  }
-
-  // Date
-  s += `<text x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="13" font-weight="600" letter-spacing="1.5" text-anchor="middle">${escHtml(dateText)}</text>`;
-
-  // Hero tokens
-  s += `<text x="${cardW / 2}" y="${heroY}" fill="#1a1a1a" font-size="96" font-weight="800" text-anchor="middle">${escHtml(dayTokens)}</text>`;
-  s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#8a8480" font-size="13" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
-
-  // Cost pill
-  const spW = 240, spH = 30, spX = (cardW - spW) / 2;
-  s += `<rect x="${spX}" y="${pillY}" width="${spW}" height="${spH}" rx="15" ry="15" fill="#f5f0eb"/>`;
-  s += `<text x="${cardW / 2}" y="${pillY + spH / 2 + 5}" fill="#8a8480" font-size="12" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
-  s += `<tspan fill="#E8692D">${escHtml(costText)}</tspan> EST. TOKEN VALUE</text>`;
+  // Date (top right)
+  s += `<text x="${cardW - 30}" y="${usernameY}" fill="#8a8480" font-size="13" font-weight="600" letter-spacing="1.5" text-anchor="end">${escHtml(dateText)}</text>`;
 
   // Divider 1
   s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
@@ -1887,8 +1756,9 @@ async function copyCardAsImage() {
 
   // Stats row
   const colW = (cardW - 60) / 3;
-  const sLabels = ['CONCURRENT AGENTS', 'TOTAL AGENT HOURS', 'CONCURRENCY TIME'];
-  const sValues = [maxSessions + '\u00d7', devHours + 'h', concDisplay];
+  const sLabels = ['CONCURRENT AGENTS', 'CURRENT STREAK', 'EST. SPEND'];
+  const spendDisplay = currentEstSpend >= 1000 ? '$' + (currentEstSpend / 1000).toFixed(1) + 'K' : '$' + currentEstSpend.toFixed(2);
+  const sValues = [maxSessions + '\u00d7', currentHourlyStreak + 'h', spendDisplay];
   const sColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
   for (let i = 0; i < 3; i++) {
     const cx = 30 + colW * i + colW / 2;
@@ -2006,16 +1876,6 @@ document.getElementById('refreshMetricsBtn').addEventListener('click', async (e)
 document.getElementById('viewRankingsBtn').addEventListener('click', (e) => {
   e.preventDefault();
   userMenu.classList.remove('open');
-  const url = window.location.origin + '/profile.html?hash=' + encodeURIComponent(userHash);
-  if (window.parent !== window) {
-    postToParent({ type: 'open-url', url });
-  } else {
-    window.open(url, '_blank');
-  }
-});
-
-// ── Rank pill → open profile page externally ──
-document.getElementById('rankPill').addEventListener('click', () => {
   const url = window.location.origin + '/profile.html?hash=' + encodeURIComponent(userHash);
   if (window.parent !== window) {
     postToParent({ type: 'open-url', url });

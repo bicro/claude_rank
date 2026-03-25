@@ -114,7 +114,8 @@ export async function initDb(): Promise<void> {
       last_synced TEXT,
       total_session_time_secs BIGINT DEFAULT 0,
       total_active_time_secs BIGINT DEFAULT 0,
-      total_idle_time_secs BIGINT DEFAULT 0
+      total_idle_time_secs BIGINT DEFAULT 0,
+      current_hourly_streak INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS metrics_history (
@@ -133,6 +134,7 @@ export async function initDb(): Promise<void> {
       peak_concurrency INTEGER DEFAULT 0,
       total_agent_mins INTEGER DEFAULT 0,
       concurrent_mins INTEGER DEFAULT 0,
+      peak_concurrency_mins INTEGER DEFAULT 0,
       UNIQUE(user_hash, snapshot_date)
     );
 
@@ -195,7 +197,8 @@ export async function initDb(): Promise<void> {
       last_synced TEXT,
       total_session_time_secs BIGINT DEFAULT 0,
       total_active_time_secs BIGINT DEFAULT 0,
-      total_idle_time_secs BIGINT DEFAULT 0
+      total_idle_time_secs BIGINT DEFAULT 0,
+      current_hourly_streak INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS merge_log (
@@ -233,6 +236,9 @@ export async function initDb(): Promise<void> {
   try {
     await pool.query(`ALTER TABLE metrics_history ADD COLUMN IF NOT EXISTS concurrent_mins INTEGER DEFAULT 0`);
   } catch { /* already exists */ }
+  try {
+    await pool.query(`ALTER TABLE metrics_history ADD COLUMN IF NOT EXISTS peak_concurrency_mins INTEGER DEFAULT 0`);
+  } catch { /* already exists */ }
 
   // Add total_output_tokens column for achievement tracking
   try {
@@ -240,6 +246,14 @@ export async function initDb(): Promise<void> {
   } catch { /* already exists */ }
   try {
     await pool.query(`ALTER TABLE user_metrics ADD COLUMN IF NOT EXISTS total_output_tokens BIGINT DEFAULT 0`);
+  } catch { /* already exists */ }
+
+  // Add current_hourly_streak column
+  try {
+    await pool.query(`ALTER TABLE user_metrics ADD COLUMN IF NOT EXISTS current_hourly_streak INTEGER DEFAULT 0`);
+  } catch { /* already exists */ }
+  try {
+    await pool.query(`ALTER TABLE device_metrics ADD COLUMN IF NOT EXISTS current_hourly_streak INTEGER DEFAULT 0`);
   } catch { /* already exists */ }
 
   // Backfill device_metrics from user_metrics for existing solo users

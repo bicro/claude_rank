@@ -1,5 +1,3 @@
-import { formatNumber } from './api.js?v=2';
-
 export function localDateISO(d) {
     return d.getFullYear() + '-' +
         String(d.getMonth() + 1).padStart(2, '0') + '-' +
@@ -119,11 +117,6 @@ export function renderShareableCardV5(svg, hourlyData, sessions, cardData) {
     const maxRows = Math.max(1, maxSessions);
     const gridHeight = maxRows * (cellH + gap) - gap;
 
-    let totalDevMins = 0;
-    for (const d of hourlyData) {
-        for (const sess of d.sessions) totalDevMins += sess.minutes;
-    }
-    const devHours = (totalDevMins / 60).toFixed(1);
     const activeMins = cardData.activeMins || 0;
     const activeH = Math.floor(activeMins / 60);
     const activeM = Math.round(activeMins % 60);
@@ -132,9 +125,8 @@ export function renderShareableCardV5(svg, hourlyData, sessions, cardData) {
     const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
     const dateDisplay = `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
 
-    const topY = 30, usernameY = 58, dateY = 100;
-    const heroY = 200, heroLabelY = 235, pillY = 260;
-    const divider1Y = 310, gridLabelY = 340, gridTopY = 360;
+    const topY = 30, usernameY = 58;
+    const divider1Y = 80, gridLabelY = 110, gridTopY = 130;
     const gridBottomY = gridTopY + gridHeight + 24;
     const divider2Y = gridBottomY + 10;
     const statsY = divider2Y + 20;
@@ -156,24 +148,7 @@ export function renderShareableCardV5(svg, hourlyData, sessions, cardData) {
     s += `<text x="${v5TextX}" y="${topY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
     s += `<text x="${v5TextX}" y="${usernameY}" fill="#1a1a1a" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
 
-    const rankPillH = 28, rankPillW = 230;
-    const rankPillX = cardW - 30 - rankPillW, rankPillY = usernameY - 20;
-    s += `<g id="v5RankBadge" opacity="0">`;
-    s += `<rect x="${rankPillX}" y="${rankPillY}" width="${rankPillW}" height="${rankPillH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
-    s += `<text id="v5RankText" x="${rankPillX + rankPillW / 2}" y="${rankPillY + rankPillH / 2 + 4}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.5"></text>`;
-    s += `</g>`;
-
-    s += `<text class="card-date-text" x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle" opacity="0">${dateDisplay}</text>`;
-
-    const heroTokens = formatNumber(cardData.dayTokens || 0);
-    s += `<text id="v5HeroTokens" x="${cardW / 2}" y="${heroY}" fill="#1a1a1a" font-size="96" font-family="inherit" font-weight="800" text-anchor="middle">${heroTokens}</text>`;
-    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
-
-    const heroCost = cardData.costText || '$0';
-    const statsPillW = 240, statsPillH = 30, statsPillX = (cardW - statsPillW) / 2;
-    s += `<rect x="${statsPillX}" y="${pillY}" width="${statsPillW}" height="${statsPillH}" rx="15" ry="15" fill="#f5f0eb" stroke="none"/>`;
-    s += `<text x="${cardW / 2}" y="${pillY + statsPillH / 2 + 5}" fill="#8a8480" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
-    s += `<tspan id="v5CostValue" fill="#E8692D">${heroCost}</tspan> EST. TOKEN VALUE</text>`;
+    s += `<text class="card-date-text" x="${cardW - 30}" y="${usernameY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="end" opacity="0">${dateDisplay}</text>`;
 
     s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
     s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="11" font-family="inherit" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
@@ -218,17 +193,12 @@ export function renderShareableCardV5(svg, hourlyData, sessions, cardData) {
 
     s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
 
-    let concurrentMins = 0;
-    for (const d of hourlyData) {
-        const s2 = d.sessions.find(s => s.index === 2);
-        if (s2) concurrentMins += s2.minutes;
-    }
-    const concDisplay = concurrentMins >= 60
-        ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
-        : Math.round(concurrentMins) + 'm';
+    const estSpend = cardData.estimatedSpend || 0;
+    const spendDisplay = estSpend >= 1000 ? '$' + (estSpend / 1000).toFixed(1) + 'K' : '$' + estSpend.toFixed(2);
     const colW = (cardW - 60) / 3;
-    const statsLabels = ['CONCURRENT AGENTS', 'TOTAL AGENT HOURS', 'CONCURRENCY TIME'];
-    const statsValues = [maxSessions + '\u00d7', devHours + 'h', concDisplay];
+    const statsLabels = ['CONCURRENT AGENTS', 'CURRENT STREAK', 'EST. SPEND'];
+    const hourlyStreakVal = cardData.hourlyStreak != null ? cardData.hourlyStreak : 0;
+    const statsValues = [maxSessions + '\u00d7', hourlyStreakVal + 'h', spendDisplay];
     const statsColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
 
     for (let i = 0; i < 3; i++) {
@@ -261,12 +231,6 @@ export function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
     const maxRows = Math.max(1, maxSessions);
     const gridHeight = maxRows * (cellH + gap) - gap;
 
-    let totalDevMins = 0;
-    for (const d of hourlyData) {
-        for (const sess of d.sessions) totalDevMins += sess.minutes;
-    }
-    const devHours = (totalDevMins / 60).toFixed(1);
-
     function getV6Color(intensity) {
         const r1 = 245, g1 = 170, b1 = 100;
         const r2 = 210, g2 = 70, b2 = 15;
@@ -277,9 +241,8 @@ export function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
     const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
     const dateDisplay = `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
 
-    const topY = 30, usernameY = 58, dateY = 100;
-    const heroY = 200, heroLabelY = 235, pillY = 260;
-    const divider1Y = 310, gridLabelY = 340, gridTopY = 360;
+    const topY = 30, usernameY = 58;
+    const divider1Y = 80, gridLabelY = 110, gridTopY = 130;
     const gridBottomY = gridTopY + gridHeight + 24;
     const divider2Y = gridBottomY + 10;
     const statsY = divider2Y + 20;
@@ -301,24 +264,7 @@ export function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
     s += `<text x="${v6TextX}" y="${topY}" fill="#999999" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
     s += `<text x="${v6TextX}" y="${usernameY}" fill="#ececec" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
 
-    const rankPillH = 28, rankPillW = 230;
-    const rankPillX = cardW - 30 - rankPillW, rankPillY = usernameY - 20;
-    s += `<g id="v6RankBadge" opacity="0">`;
-    s += `<rect x="${rankPillX}" y="${rankPillY}" width="${rankPillW}" height="${rankPillH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
-    s += `<text id="v6RankText" x="${rankPillX + rankPillW / 2}" y="${rankPillY + rankPillH / 2 + 4}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.5"></text>`;
-    s += `</g>`;
-
-    s += `<text class="card-date-text" x="${cardW / 2}" y="${dateY}" fill="#999999" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle" opacity="0">${dateDisplay}</text>`;
-
-    const heroTokens = formatNumber(cardData.dayTokens || 0);
-    s += `<text id="v5HeroTokens" x="${cardW / 2}" y="${heroY}" fill="#ececec" font-size="96" font-family="inherit" font-weight="800" text-anchor="middle">${heroTokens}</text>`;
-    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#999999" font-size="13" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
-
-    const heroCost = cardData.costText || '$0';
-    const statsPillW = 240, statsPillH = 30, statsPillX = (cardW - statsPillW) / 2;
-    s += `<rect x="${statsPillX}" y="${pillY}" width="${statsPillW}" height="${statsPillH}" rx="15" ry="15" fill="#232323" stroke="none"/>`;
-    s += `<text x="${cardW / 2}" y="${pillY + statsPillH / 2 + 5}" fill="#999999" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
-    s += `<tspan id="v5CostValue" fill="#E8692D">${heroCost}</tspan> EST. TOKEN VALUE</text>`;
+    s += `<text class="card-date-text" x="${cardW - 30}" y="${usernameY}" fill="#999999" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="end" opacity="0">${dateDisplay}</text>`;
 
     s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#333333" stroke-width="1"/>`;
     s += `<text x="30" y="${gridLabelY}" fill="#999999" font-size="11" font-family="inherit" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
@@ -363,17 +309,12 @@ export function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
 
     s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#333333" stroke-width="1"/>`;
 
-    let concurrentMins = 0;
-    for (const d of hourlyData) {
-        const s2 = d.sessions.find(s => s.index === 2);
-        if (s2) concurrentMins += s2.minutes;
-    }
-    const concDisplay = concurrentMins >= 60
-        ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
-        : Math.round(concurrentMins) + 'm';
+    const estSpend = cardData.estimatedSpend || 0;
+    const spendDisplay = estSpend >= 1000 ? '$' + (estSpend / 1000).toFixed(1) + 'K' : '$' + estSpend.toFixed(2);
     const colW = (cardW - 60) / 3;
-    const statsLabels = ['CONCURRENT AGENTS', 'TOTAL AGENT HOURS', 'CONCURRENCY TIME'];
-    const statsValues = [maxSessions + '\u00d7', devHours + 'h', concDisplay];
+    const statsLabels = ['CONCURRENT AGENTS', 'CURRENT STREAK', 'EST. SPEND'];
+    const hourlyStreakVal = cardData.hourlyStreak != null ? cardData.hourlyStreak : 0;
+    const statsValues = [maxSessions + '\u00d7', hourlyStreakVal + 'h', spendDisplay];
     const statsColors = ['#E8692D', '#ececec', '#ececec'];
 
     for (let i = 0; i < 3; i++) {

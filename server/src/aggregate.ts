@@ -1,5 +1,5 @@
 import { getDb, getPool, type DbClient } from "./db";
-import { computeWeightedScore, computePoints, computeStreak } from "./services";
+import { computeWeightedScore, computePoints, computeStreak, computeHourlyStreak } from "./services";
 
 /**
  * Get all device hashes linked to a user (primary + all secondaries).
@@ -63,6 +63,9 @@ export async function recomputeUserMetrics(primaryHash: string): Promise<void> {
   // Compute streak from metrics_history (server-side) — include all linked devices
   const streak = await computeStreak(db, hashes);
 
+  // Compute hourly streak from metrics_hourly
+  const hourlyStreak = await computeHourlyStreak(db, hashes);
+
   // Count active days from metrics_history — include all linked devices
   const hashPlaceholders = hashes.map(() => "?").join(", ");
   const activeDaysRow = await db.query(
@@ -89,8 +92,9 @@ export async function recomputeUserMetrics(primaryHash: string): Promise<void> {
       user_hash, total_tokens, total_messages, total_sessions, total_tool_calls,
       prompt_uniqueness_score, weighted_score, estimated_spend,
       current_streak, total_points, level, total_output_tokens, last_synced,
-      total_session_time_secs, total_active_time_secs, total_idle_time_secs
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      total_session_time_secs, total_active_time_secs, total_idle_time_secs,
+      current_hourly_streak
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (user_hash) DO UPDATE SET
       total_tokens = EXCLUDED.total_tokens, total_messages = EXCLUDED.total_messages,
       total_sessions = EXCLUDED.total_sessions, total_tool_calls = EXCLUDED.total_tool_calls,
@@ -100,7 +104,8 @@ export async function recomputeUserMetrics(primaryHash: string): Promise<void> {
       total_output_tokens = EXCLUDED.total_output_tokens, last_synced = EXCLUDED.last_synced,
       total_session_time_secs = EXCLUDED.total_session_time_secs,
       total_active_time_secs = EXCLUDED.total_active_time_secs,
-      total_idle_time_secs = EXCLUDED.total_idle_time_secs`
+      total_idle_time_secs = EXCLUDED.total_idle_time_secs,
+      current_hourly_streak = EXCLUDED.current_hourly_streak`
   ).run(
     primaryHash,
     agg.total_tokens ?? 0, agg.total_messages ?? 0,
@@ -111,5 +116,6 @@ export async function recomputeUserMetrics(primaryHash: string): Promise<void> {
     agg.last_synced ?? now,
     agg.total_session_time_secs ?? 0, agg.total_active_time_secs ?? 0,
     agg.total_idle_time_secs ?? 0,
+    hourlyStreak,
   );
 }

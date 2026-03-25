@@ -96,6 +96,8 @@
                 ]);
 
                 const m = profile.metrics;
+                window._profileHourlyStreak = m.current_hourly_streak || 0;
+                window._profileEstSpend = m.estimated_spend || 0;
                 const ranks = profile.ranks || {};
                 const tier = profile.tier || { tier: 'Bronze', next_tier: 'Silver', progress: 0 };
                 const tierObj = getTier(m.weighted_score);
@@ -602,14 +604,6 @@
                     const maxRows = Math.max(1, maxSessions);
                     const gridHeight = maxRows * (cellH + gap) - gap;
 
-                    // Compute stats
-                    let totalDevMins = 0;
-                    for (const d of hourlyData) {
-                        for (const sess of d.sessions) {
-                            totalDevMins += sess.minutes;
-                        }
-                    }
-                    const devHours = (totalDevMins / 60).toFixed(1);
                     const activeMins = cardData.activeMins || 0;
                     const activeH = Math.floor(activeMins / 60);
                     const activeM = Math.round(activeMins % 60);
@@ -734,17 +728,12 @@
 
                     s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
 
-                    let concurrentMins = 0;
-                    for (const d of hourlyData) {
-                        const s2 = d.sessions.find(s => s.index === 2);
-                        if (s2) concurrentMins += s2.minutes;
-                    }
-                    const concDisplay = concurrentMins >= 60
-                        ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
-                        : Math.round(concurrentMins) + 'm';
+                    const estSpend = cardData.estimatedSpend || 0;
+                    const spendDisplay = estSpend >= 1000 ? '$' + (estSpend / 1000).toFixed(1) + 'K' : '$' + estSpend.toFixed(2);
                     const colW = (cardW - 60) / 3;
-                    const statsLabels = ['CONCURRENT AGENTS', 'TOTAL AGENT HOURS', 'CONCURRENCY TIME'];
-                    const statsValues = [maxSessions + '×', devHours + 'h', concDisplay];
+                    const statsLabels = ['CONCURRENT AGENTS', 'CURRENT STREAK', 'EST. SPEND'];
+                    const hourlyStreakVal = cardData.hourlyStreak != null ? cardData.hourlyStreak : 0;
+                    const statsValues = [maxSessions + '×', hourlyStreakVal + 'h', spendDisplay];
                     const statsColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
 
                     for (let i = 0; i < 3; i++) {
@@ -787,14 +776,6 @@
                     const maxRows = Math.max(1, maxSessions);
                     const gridHeight = maxRows * (cellH + gap) - gap;
 
-                    // Compute stats
-                    let totalDevMins = 0;
-                    for (const d of hourlyData) {
-                        for (const sess of d.sessions) {
-                            totalDevMins += sess.minutes;
-                        }
-                    }
-                    const devHours = (totalDevMins / 60).toFixed(1);
                     const activeMins = cardData.activeMins || 0;
                     const activeH = Math.floor(activeMins / 60);
                     const activeM = Math.round(activeMins % 60);
@@ -917,17 +898,12 @@
 
                     s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#333333" stroke-width="1"/>`;
 
-                    let concurrentMins = 0;
-                    for (const d of hourlyData) {
-                        const s2 = d.sessions.find(s => s.index === 2);
-                        if (s2) concurrentMins += s2.minutes;
-                    }
-                    const concDisplay = concurrentMins >= 60
-                        ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
-                        : Math.round(concurrentMins) + 'm';
+                    const estSpend = cardData.estimatedSpend || 0;
+                    const spendDisplay = estSpend >= 1000 ? '$' + (estSpend / 1000).toFixed(1) + 'K' : '$' + estSpend.toFixed(2);
                     const colW = (cardW - 60) / 3;
-                    const statsLabels = ['CONCURRENT AGENTS', 'TOTAL AGENT HOURS', 'CONCURRENCY TIME'];
-                    const statsValues = [maxSessions + '×', devHours + 'h', concDisplay];
+                    const statsLabels = ['CONCURRENT AGENTS', 'CURRENT STREAK', 'EST. SPEND'];
+                    const hourlyStreakVal = cardData.hourlyStreak != null ? cardData.hourlyStreak : 0;
+                    const statsValues = [maxSessions + '×', hourlyStreakVal + 'h', spendDisplay];
                     const statsColors = ['#E8692D', '#ececec', '#ececec'];
 
                     for (let i = 0; i < 3; i++) {
@@ -980,18 +956,6 @@
                     const gridHeight = maxRows * (cellH + gap) - gap;
 
                     // Compute stats
-                    let totalDevMins = 0;
-                    let concurrentMins = 0;
-                    for (const d of hourlyData) {
-                        for (const sess of d.sessions) totalDevMins += sess.minutes;
-                        const s2 = d.sessions.find(s => s.index === 2);
-                        if (s2) concurrentMins += s2.minutes;
-                    }
-                    const devHours = (totalDevMins / 60).toFixed(1);
-                    const concDisplay = concurrentMins >= 60
-                        ? Math.floor(concurrentMins / 60) + 'h ' + Math.round(concurrentMins % 60) + 'm'
-                        : Math.round(concurrentMins) + 'm';
-
                     // Data from render args
                     const username = cardData.username || 'anonymous';
                     const dayTokens = formatNumber(cardData.dayTokens || 0);
@@ -1113,8 +1077,10 @@
 
                     // Stats row
                     const colW = (cardW - 60) / 3;
-                    const sLabels = ['CONCURRENT AGENTS', 'TOTAL AGENT HOURS', 'CONCURRENCY TIME'];
-                    const sValues = [maxSessions + '\u00d7', devHours + 'h', concDisplay];
+                    const estSpendCopy = window._profileEstSpend || 0;
+                    const spendDisplayCopy = estSpendCopy >= 1000 ? '$' + (estSpendCopy / 1000).toFixed(1) + 'K' : '$' + estSpendCopy.toFixed(2);
+                    const sLabels = ['CONCURRENT AGENTS', 'CURRENT STREAK', 'EST. SPEND'];
+                    const sValues = [maxSessions + '\u00d7', (window._profileHourlyStreak || 0) + 'h', spendDisplayCopy];
                     const sColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
                     for (let i = 0; i < 3; i++) {
                         const cx = 30 + colW * i + colW / 2;
@@ -1202,6 +1168,8 @@
                         peakPercentile: null,
                         isToday: isToday,
                         avatarDataUrl: cachedAvatarDataUrl,
+                        hourlyStreak: window._profileHourlyStreak || 0,
+                        estimatedSpend: window._profileEstSpend || 0,
                     };
 
                     // Store for theme-toggle re-render

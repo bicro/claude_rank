@@ -18,6 +18,8 @@ const PRICING = [
 
 const FALLBACK_PRICE = { input: 3, output: 15, cache_read: 0.30, cache_write: 3.75 };
 
+const MIN_PEAK_MINUTES = 2;
+
 export function estimateCost(tokenBreakdown: Record<string, any>): number {
   let cost = 0.0;
   for (const [model, usage] of Object.entries(tokenBreakdown)) {
@@ -192,7 +194,7 @@ export async function getDailyRanksForUser(db: DbClient, userHash: string, targe
     for (const [sessionsStr, minutes] of Object.entries(histogram)) {
       const sessionCount = parseInt(sessionsStr, 10);
       const mins = minutes as number;
-      if (sessionCount > userStats[uh].peak) {
+      if (sessionCount > userStats[uh].peak && (sessionCount <= 1 || mins >= MIN_PEAK_MINUTES)) {
         userStats[uh].peak = sessionCount;
       }
       if (sessionCount >= 1) {
@@ -286,9 +288,10 @@ export async function getWeeklyRanksForUser(db: DbClient, userHash: string, week
     const sep = row.snapshot_hour.includes("T") ? "T" : " ";
     const d = row.snapshot_hour.split(sep)[0]!;
     if (!userDayPeaks[uh]) userDayPeaks[uh] = {};
-    for (const sessionsStr of Object.keys(histogram)) {
+    for (const [sessionsStr, minutes] of Object.entries(histogram)) {
       const sc = parseInt(sessionsStr, 10);
-      if (sc > (userDayPeaks[uh][d] ?? 0)) {
+      const mins = minutes as number;
+      if (sc > (userDayPeaks[uh][d] ?? 0) && (sc <= 1 || mins >= MIN_PEAK_MINUTES)) {
         userDayPeaks[uh][d] = sc;
       }
     }
@@ -468,6 +471,39 @@ export async function computeStreak(db: DbClient, hashes: string[]): Promise<num
     const curr = new Date(rows[i].snapshot_date + "T00:00:00Z");
     const diffDays = (prev.getTime() - curr.getTime()) / (1000 * 60 * 60 * 24);
     if (diffDays === 1) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+export async function computeHourlyStreak(db: DbClient, hashes: string[]): Promise<number> {
+  const placeholders = hashes.map(() => "?").join(", ");
+  const rows = await db.query(
+    `SELECT DISTINCT snapshot_hour FROM metrics_hourly
+     WHERE user_hash IN (${placeholders}) AND (total_messages > 0 OR total_tokens > 0)
+     ORDER BY snapshot_hour DESC`
+  ).all(...hashes) as any[];
+
+  if (rows.length === 0) return 0;
+
+  const now = new Date();
+  const currentHour = new Date(now);
+  currentHour.setUTCMinutes(0, 0, 0);
+  const previousHour = new Date(currentHour.getTime() - 3600000);
+
+  // Streak must start from current hour or previous hour
+  const firstHour = new Date(rows[0].snapshot_hour);
+  if (firstHour.getTime() < previousHour.getTime()) return 0;
+
+  let streak = 1;
+  for (let i = 1; i < rows.length; i++) {
+    const prev = new Date(rows[i - 1].snapshot_hour);
+    const curr = new Date(rows[i].snapshot_hour);
+    const diffMs = prev.getTime() - curr.getTime();
+    if (diffMs === 3600000) {
       streak++;
     } else {
       break;

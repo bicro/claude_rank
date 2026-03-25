@@ -17,6 +17,8 @@ import {
 } from "./services";
 import { recomputeUserMetrics, getLinkedHashes } from "./aggregate";
 
+const MIN_PEAK_MINUTES = 2;
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function json(data: any, status = 200): Response {
@@ -673,7 +675,7 @@ async function handleGetUserProfile(userHash: string, request: Request): Promise
       for (const [sessionsStr, minutes] of Object.entries(histogram)) {
         const sessionCount = parseInt(sessionsStr, 10);
         const mins = minutes as number;
-        if (sessionCount > maxConcurrent) maxConcurrent = sessionCount;
+        if (sessionCount > maxConcurrent && (sessionCount <= 1 || mins >= MIN_PEAK_MINUTES)) maxConcurrent = sessionCount;
         if (sessionCount > 1) concurrentMins += mins;
       }
     } catch {
@@ -711,6 +713,7 @@ async function handleGetUserProfile(userHash: string, request: Request): Promise
       prompt_uniqueness_score: metrics?.prompt_uniqueness_score ?? 0,
       weighted_score: weighted,
       current_streak: metrics?.current_streak ?? 0,
+      current_hourly_streak: metrics?.current_hourly_streak ?? 0,
       total_points: metrics?.total_points ?? 0,
       level: metrics?.level ?? 0,
       last_synced: metrics?.last_synced ?? null,
@@ -1084,9 +1087,10 @@ async function handleGetConcurrency(userHash: string, url: URL): Promise<Respons
   const perHour: Record<string, number> = {};
   for (const [hourKey, histogram] of Object.entries(hourHistograms)) {
     let peak = 0;
-    for (const sessionsStr of Object.keys(histogram)) {
+    for (const [sessionsStr, minutes] of Object.entries(histogram)) {
       const s = parseInt(sessionsStr, 10);
-      if (s > peak) peak = s;
+      const mins = minutes as number;
+      if (s > peak && (s <= 1 || mins >= MIN_PEAK_MINUTES)) peak = s;
     }
     perHour[hourKey] = peak;
   }
@@ -1705,17 +1709,24 @@ async function handleSync(request: Request): Promise<Response> {
       for (const histogram of Object.values(perHourMerged)) {
         for (const [sessionsStr, minutes] of Object.entries(histogram)) {
           const sessionCount = parseInt(sessionsStr, 10);
-          if (sessionCount > peakConcurrency) peakConcurrency = sessionCount;
+          if (sessionCount > peakConcurrency && (sessionCount <= 1 || minutes >= MIN_PEAK_MINUTES)) peakConcurrency = sessionCount;
           totalAgentMins += minutes;
           if (sessionCount >= 2) concurrentMinsAgg += minutes;
         }
       }
 
+      // Compute minutes spent at peak concurrency level
+      let peakConcurrencyMins = 0;
+      for (const histogram of Object.values(perHourMerged)) {
+        const minsAtPeak = histogram[String(peakConcurrency)] ?? 0;
+        peakConcurrencyMins += minsAtPeak;
+      }
+
       // Update metrics_history for primary hash
       await pool.query(
-        `UPDATE metrics_history SET peak_concurrency = $1, total_agent_mins = $2, concurrent_mins = $3
-         WHERE user_hash = $4 AND snapshot_date = $5`,
-        [peakConcurrency, totalAgentMins, concurrentMinsAgg, primaryHash, syncDate],
+        `UPDATE metrics_history SET peak_concurrency = $1, total_agent_mins = $2, concurrent_mins = $3, peak_concurrency_mins = $4
+         WHERE user_hash = $5 AND snapshot_date = $6`,
+        [peakConcurrency, totalAgentMins, concurrentMinsAgg, peakConcurrencyMins, primaryHash, syncDate],
       );
     }
   }
@@ -1752,7 +1763,7 @@ async function handleSync(request: Request): Promise<Response> {
 
 // ─── Leaderboard Handler ───────────────────────────────────────────────────
 
-const VALID_CATEGORIES = ["tokens", "concurrent_agents", "agent_hours", "concurrency_time", "consistency", "messages"];
+const VALID_CATEGORIES = ["tokens", "concurrent_agents", "agent_hours", "concurrency_time", "consistency", "messages", "hourly_streak"];
 
 async function handleGetLeaderboard(category: string, url: URL): Promise<Response> {
   if (!VALID_CATEGORIES.includes(category)) {
@@ -1804,7 +1815,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
         JOIN users u ON mh.user_hash = u.user_hash
         JOIN user_metrics um ON u.user_hash = um.user_hash
         WHERE mh.snapshot_date = ? AND u.linked_to IS NULL AND mh.peak_concurrency > 0
-        ORDER BY mh.peak_concurrency DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
+        ORDER BY mh.peak_concurrency DESC, mh.peak_concurrency_mins DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
         LIMIT ? OFFSET ?`
       ).all(dateParam, limit, offset) as any[];
       countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.peak_concurrency > 0`;
@@ -1848,6 +1859,17 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
       ).all(dateParam, limit, offset) as any[];
       countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.daily_messages > 0`;
       countParams = [dateParam];
+    } else if (category === "hourly_streak") {
+      rows = await db.query(
+        `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+          um.current_hourly_streak as value, um.weighted_score
+        FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
+        WHERE u.linked_to IS NULL AND um.current_hourly_streak > 0
+        ORDER BY um.current_hourly_streak DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
+        LIMIT ? OFFSET ?`
+      ).all(limit, offset) as any[];
+      countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL AND um.current_hourly_streak > 0`;
+      countParams = [];
     } else {
       // consistency — same for daily and alltime
       rows = await db.query(
@@ -1904,7 +1926,7 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
       WHERE u.linked_to IS NULL
       GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score
       HAVING MAX(mh.peak_concurrency) > 0
-      ORDER BY value DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
+      ORDER BY value DESC, MAX(mh.peak_concurrency_mins) DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
     countSql = `SELECT COUNT(*) as cnt FROM (
@@ -1961,6 +1983,16 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
     countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL`;
+  } else if (category === "hourly_streak") {
+    rows = await db.query(
+      `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
+        um.current_hourly_streak as value, um.weighted_score
+      FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
+      WHERE u.linked_to IS NULL AND um.current_hourly_streak > 0
+      ORDER BY um.current_hourly_streak DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
+      LIMIT ? OFFSET ?`
+    ).all(limit, offset) as any[];
+    countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL AND um.current_hourly_streak > 0`;
   } else {
     // consistency
     rows = await db.query(

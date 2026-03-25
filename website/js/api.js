@@ -91,6 +91,7 @@ export function getCategoryLabel(cat) {
         concurrency_time: 'Concurrency Time',
         consistency: 'Consistency',
         messages: 'Messages',
+        hourly_streak: 'Hourly Streak',
     };
     return labels[cat] || cat;
 }
@@ -103,11 +104,12 @@ export function getCategoryIcon(cat) {
         concurrency_time: '\u{1f500}',
         consistency: '\u{1f4c5}',
         messages: '\u{1f4ac}',
+        hourly_streak: '\u{23f1}\u{fe0f}',
     };
     return icons[cat] || '';
 }
 
-export const CATEGORIES = ['tokens', 'concurrent_agents', 'agent_hours', 'concurrency_time', 'consistency', 'messages'];
+export const CATEGORIES = ['tokens', 'concurrent_agents', 'agent_hours', 'concurrency_time', 'consistency', 'messages', 'hourly_streak'];
 
 export function getCategoryTooltip(cat) {
     const tips = {
@@ -117,6 +119,7 @@ export function getCategoryTooltip(cat) {
         concurrency_time: 'Minutes spent running 2 or more Claude Code sessions at the same time.',
         consistency: 'Current daily usage streak \u2014 consecutive days with at least one sync.',
         messages: 'Total prompts you sent to Claude across all sessions.',
+        hourly_streak: 'Current consecutive hours of unbroken Claude Code usage.',
     };
     return tips[cat] || '';
 }
@@ -143,6 +146,10 @@ export function formatConsistency(days) {
     return days + (days === 1 ? ' day' : ' days');
 }
 
+export function formatHourlyStreak(hours) {
+    return hours + (hours === 1 ? ' hour' : ' hours');
+}
+
 export function formatMessages(n) {
     return formatNumber(n);
 }
@@ -155,6 +162,7 @@ export function formatLeaderboardValue(category, value, cost) {
     if (category === 'agent_hours') return formatAgentHours(value);
     if (category === 'concurrency_time') return formatConcurrencyTime(value);
     if (category === 'consistency') return formatConsistency(value);
+    if (category === 'hourly_streak') return formatHourlyStreak(value);
     if (category === 'messages') return formatMessages(value);
     return formatNumber(value);
 }
