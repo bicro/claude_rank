@@ -88,7 +88,6 @@ export function getCategoryLabel(cat) {
         tokens: 'Token Spend',
         concurrent_agents: 'Concurrent Agents',
         agent_hours: 'Agent Hours',
-        concurrency_time: 'Concurrency Time',
         consistency: 'Consistency',
         messages: 'Messages',
         hourly_streak: 'Hourly Streak',
@@ -101,7 +100,6 @@ export function getCategoryIcon(cat) {
         tokens: '\u{1f525}',
         concurrent_agents: '\u{26a1}',
         agent_hours: '\u{23f1}\u{fe0f}',
-        concurrency_time: '\u{1f500}',
         consistency: '\u{1f4c5}',
         messages: '\u{1f4ac}',
         hourly_streak: '\u{23f1}\u{fe0f}',
@@ -109,14 +107,13 @@ export function getCategoryIcon(cat) {
     return icons[cat] || '';
 }
 
-export const CATEGORIES = ['tokens', 'concurrent_agents', 'agent_hours', 'concurrency_time', 'consistency', 'messages', 'hourly_streak'];
+export const CATEGORIES = ['tokens', 'concurrent_agents', 'agent_hours', 'consistency', 'messages', 'hourly_streak'];
 
 export function getCategoryTooltip(cat) {
     const tips = {
         tokens: 'Total tokens consumed across all Claude models, with estimated dollar cost based on per-model pricing.',
         concurrent_agents: 'Peak number of Claude Code sessions running simultaneously in a single hour.',
         agent_hours: 'Total minutes of active Claude Code agent time, converted to hours.',
-        concurrency_time: 'Minutes spent running 2 or more Claude Code sessions at the same time.',
         consistency: 'Current daily usage streak \u2014 consecutive days with at least one sync.',
         messages: 'Total prompts you sent to Claude across all sessions.',
         hourly_streak: 'Current consecutive hours of unbroken Claude Code usage.',

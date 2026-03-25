@@ -14,7 +14,6 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder};
 use tauri::{command, AppHandle, Emitter, Listener, Manager};
 use tauri_plugin_autostart::MacosLauncher;
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_updater::UpdaterExt;
 use log::{error, info, warn};
 use serde::Deserialize;
@@ -1096,17 +1095,6 @@ fn main() {
             // Store tray icon handle so we can query its rect() for positioning
             *state.tray_icon.lock().unwrap() = Some(tray);
 
-            // Register global shortcut (Alt+Space on Windows/macOS, Super+Space on Linux)
-            #[cfg(target_os = "linux")]
-            let shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::Space);
-            #[cfg(not(target_os = "linux"))]
-            let shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Space);
-            if let Err(e) = app.global_shortcut().register(shortcut) {
-                error!("[shortcut] failed to register Alt/Super+Space: {}", e);
-                return Err(e.into());
-            }
-            info!("[shortcut] registered Alt/Super+Space successfully");
-
             // Clear stale window prefs on version change (reinstall/upgrade)
             let current_version = app.config().version.clone().unwrap_or_default();
             if let Some(prefs) = load_window_prefs() {
@@ -1195,28 +1183,7 @@ fn main() {
                 .level(log::LevelFilter::Info)
                 .build(),
         )
-        .plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, shortcut, event| {
-                    let is_alt_space_shortcut = shortcut.matches(Modifiers::ALT, Code::Space)
-                        || shortcut.matches(Modifiers::SUPER, Code::Space);
-                    if !is_alt_space_shortcut {
-                        return;
-                    }
-
-                    if let ShortcutState::Pressed = event.state() {
-                        let state = app.state::<AppState>();
-                        let is_visible = *state.overlay_visible.lock().unwrap();
-
-                        if !is_visible {
-                            let _ = show_overlay_sync(app);
-                        } else {
-                            hide_overlay_sync(app);
-                        }
-                    }
-                })
-                .build(),
-        )
+        .plugin(tauri_plugin_global_shortcut::init())
         .invoke_handler(tauri::generate_handler![
             show_overlay,
             hide_overlay,

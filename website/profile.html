@@ -91,6 +91,7 @@
             const mappings = [
                 { key: 'daily_spend', el: 'rewardPillsSpend' },
                 { key: 'peak_concurrency', el: 'rewardPillsConcurrency' },
+                { key: 'hourly_streak', el: 'rewardPillsStreak' },
             ];
             for (const m of mappings) {
                 const container = document.getElementById(m.el);
@@ -102,23 +103,31 @@
                 const gt = rewards.global_tiers?.[m.key];
 
                 if (pb?.is_new_record) {
-                    const pill = document.createElement('span');
-                    pill.className = 'reward-pill personal';
-                    pill.textContent = pb.best === 0 ? 'First Record!' : 'Personal Best';
-                    container.appendChild(pill);
+                    const lbl = document.createElement('span');
+                    lbl.className = 'reward-label personal';
+                    lbl.textContent = pb.best === 0 ? 'First Record!' : 'New PB!';
+                    container.appendChild(lbl);
+                } else if (m.key === 'hourly_streak' && pb) {
+                    const best = Math.max(pb.best ?? 0, pb.today ?? 0);
+                    if (best > 0) {
+                        const lbl = document.createElement('span');
+                        lbl.className = 'reward-label personal';
+                        lbl.textContent = `PB: ${best}h`;
+                        container.appendChild(lbl);
+                    }
                 }
                 if (tr?.rank === 1 && tr.total > 1) {
-                    const pill = document.createElement('span');
-                    pill.className = 'reward-pill team';
-                    pill.textContent = 'Team #1';
-                    container.appendChild(pill);
+                    const lbl = document.createElement('span');
+                    lbl.className = 'reward-label team';
+                    lbl.textContent = 'Team #1';
+                    container.appendChild(lbl);
                 }
                 if (gt?.tier) {
-                    const pill = document.createElement('span');
-                    pill.className = `reward-pill ${gt.tier}`;
-                    const pctText = gt.tier === 'top1' ? '1%' : gt.tier === 'top10' ? '10%' : gt.tier === 'top25' ? '25%' : '50%';
-                    pill.textContent = `Top ${pctText}`;
-                    container.appendChild(pill);
+                    const lbl = document.createElement('span');
+                    lbl.className = `reward-label ${gt.tier}`;
+                    const tierText = { top1: 'Top 1%', top10: 'Top 10%', top25: 'Top 25%', top50: 'Top 50%' };
+                    lbl.textContent = tierText[gt.tier] || `Top ${gt.percentile.toFixed(0)}%`;
+                    container.appendChild(lbl);
                 }
             }
         }
@@ -636,11 +645,9 @@
                 function renderShareableCardV5(svg, hourlyData, sessions, cardData) {
                     sessions = sessions || [];
                     const cellW = 22, cellH = 22, gap = 3;
-                    const gridMarginLeft = 60;
-                    const gridMarginRight = 30;
+                    const gridMarginLeft = 60, gridMarginRight = 30;
                     const cardW = gridMarginLeft + 24 * (cellW + gap) - gap + gridMarginRight;
 
-                    // Find peak concurrency — V5 uses exact peak (no minimum)
                     let maxSessions = 0;
                     for (const data of hourlyData) {
                         if (data.sessions.length > maxSessions) maxSessions = data.sessions.length;
@@ -648,104 +655,62 @@
                     const maxRows = Math.max(1, maxSessions);
                     const gridHeight = maxRows * (cellH + gap) - gap;
 
-                    const activeMins = cardData.activeMins || 0;
-                    const activeH = Math.floor(activeMins / 60);
-                    const activeM = Math.round(activeMins % 60);
-                    const activeDisplay = activeMins > 0 ? (activeH > 0 ? activeH + 'h ' + activeM + 'm' : activeM + 'm') : '0m';
-
-                    // V5 gradient: light tan to deep burnt orange (readable on white)
                     function getV5Color(intensity) {
                         const r1 = 245, g1 = 170, b1 = 100;
                         const r2 = 210, g2 = 70, b2 = 15;
-                        const r = Math.round(r1 + (r2 - r1) * intensity);
-                        const g = Math.round(g1 + (g2 - g1) * intensity);
-                        const b = Math.round(b1 + (b2 - b1) * intensity);
-                        return `rgb(${r},${g},${b})`;
+                        return `rgb(${Math.round(r1 + (r2 - r1) * intensity)},${Math.round(g1 + (g2 - g1) * intensity)},${Math.round(b1 + (b2 - b1) * intensity)})`;
                     }
 
-                    // Format date
                     const dateObj = cardData.localDateStr ? new Date(cardData.localDateStr + 'T12:00:00') : new Date();
                     const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
                     const dateDisplay = `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
 
-                    // Layout Y positions
-                    const topY = 30;
-                    const usernameY = 58;
-                    const dateY = 100;
-                    const heroY = 200;
-                    const heroLabelY = 235;
-                    const pillY = 260;
-                    const divider1Y = 310;
-                    const gridLabelY = 340;
-                    const gridTopY = 360;
-                    const gridBottomY = gridTopY + gridHeight + 24;
-                    const divider2Y = gridBottomY + 10;
+                    // Layout (widget-proportional: ~2x text sizes for 687px card)
+                    const headerCenterY = 52;
+                    const divider1Y = 96;
+                    const gridLabelY = 126, gridTopY = 148;
+                    const gridBottomY = gridTopY + gridHeight + 28;
+                    const divider2Y = gridBottomY + 12;
                     const statsY = divider2Y + 20;
-                    const statsHeight = 70;
-                    const divider3Y = statsY + statsHeight + 10;
-                    const footerY = divider3Y + 25;
-                    const cardH = footerY + 20;
+                    const statsHeight = 96;
+                    const divider3Y = statsY + statsHeight + 12;
+                    const footerY = divider3Y + 30;
+                    const cardH = footerY + 24;
 
                     svg.setAttribute('viewBox', `0 0 ${cardW} ${cardH}`);
-
                     let s = '';
-
                     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
 
-                    const v5HasAvatar = !!cardData.avatarDataUrl;
-                    const v5TextX = v5HasAvatar ? 80 : 30;
-                    if (v5HasAvatar) {
-                        s += `<defs><clipPath id="v5AvatarClip"><circle cx="50" cy="40" r="20"/></clipPath></defs>`;
-                        s += `<image href="${cardData.avatarDataUrl}" x="30" y="20" width="40" height="40" clip-path="url(#v5AvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
+                    // Avatar + username
+                    const hasAvatar = !!cardData.avatarDataUrl;
+                    const textX = hasAvatar ? 108 : 30;
+                    if (hasAvatar) {
+                        s += `<defs><clipPath id="v5AvatarClip"><circle cx="62" cy="${headerCenterY}" r="32"/></clipPath></defs>`;
+                        s += `<image href="${cardData.avatarDataUrl}" x="30" y="${headerCenterY - 32}" width="64" height="64" clip-path="url(#v5AvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
                     }
-                    s += `<text x="${v5TextX}" y="${topY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-                    s += `<text x="${v5TextX}" y="${usernameY}" fill="#1a1a1a" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
+                    s += `<text x="${textX}" y="${headerCenterY}" fill="#1a1a1a" font-size="36" font-family="inherit" font-weight="700" dominant-baseline="central">@${escHtml(cardData.username || 'anonymous')}</text>`;
 
-                    const rankPillH = 28;
-                    const rankPillW = 230;
-                    const rankPillX = cardW - 30 - rankPillW;
-                    const rankPillY = usernameY - 20;
-                    s += `<g id="v5RankBadge" opacity="0">`;
-                    s += `<rect x="${rankPillX}" y="${rankPillY}" width="${rankPillW}" height="${rankPillH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
-                    s += `<text id="v5RankText" x="${rankPillX + rankPillW / 2}" y="${rankPillY + rankPillH / 2 + 4}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.5"></text>`;
-                    s += `</g>`;
-
-                    s += `<text class="card-date-text" x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle" opacity="0">${dateDisplay}</text>`;
-
-                    const heroTokens = formatNumber(cardData.dayTokens || 0);
-                    s += `<text id="v5HeroTokens" x="${cardW / 2}" y="${heroY}" fill="#1a1a1a" font-size="96" font-family="inherit" font-weight="800" text-anchor="middle">${heroTokens}</text>`;
-                    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#8a8480" font-size="13" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
-
-                    const heroCost = cardData.costText || '$0';
-                    const statsPillW = 240;
-                    const statsPillH = 30;
-                    const statsPillX = (cardW - statsPillW) / 2;
-                    s += `<rect x="${statsPillX}" y="${pillY}" width="${statsPillW}" height="${statsPillH}" rx="15" ry="15" fill="#f5f0eb" stroke="none"/>`;
-                    s += `<text x="${cardW / 2}" y="${pillY + statsPillH / 2 + 5}" fill="#8a8480" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
-                    s += `<tspan id="v5CostValue" fill="#E8692D">${heroCost}</tspan> EST. TOKEN VALUE`;
-                    s += `</text>`;
+                    // Date (hidden — HTML overlay used instead)
+                    s += `<text class="card-date-text" x="${cardW - 30}" y="${headerCenterY}" fill="#8a8480" font-size="22" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="end" dominant-baseline="central" opacity="0">${dateDisplay}</text>`;
 
                     s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
 
-                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="11" font-family="inherit" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
-                    // Gradient legend on right
-                    const legendW = 80, legendH = 10;
+                    // Grid label + legend
+                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-family="inherit" font-weight="700" letter-spacing="2">AGENT ACTIVITY TIMELINE</text>`;
+                    const legendW = 100, legendH = 14;
                     const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
-                    const legendY = gridLabelY - 10;
-                    // "HIGH" text right-aligned to grid edge, gradient bar to its left, "LOW" to the left of that
+                    const legendY = gridLabelY - 14;
                     s += `<defs><linearGradient id="v5LegendGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgb(245,170,100)"/><stop offset="100%" stop-color="rgb(210,70,15)"/></linearGradient></defs>`;
-                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="9" font-family="inherit" font-weight="600" text-anchor="end">HIGH</text>`;
-                    const highTextW = 28;
-                    const legendX = gridRightEdge - highTextW - legendW;
-                    s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="3" ry="3" fill="url(#v5LegendGrad)"/>`;
-                    s += `<text x="${legendX - 6}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="9" font-family="inherit" font-weight="600" text-anchor="end">LOW</text>`;
+                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-family="inherit" font-weight="600" text-anchor="end">HIGH</text>`;
+                    const highTW = 38, legendX = gridRightEdge - highTW - legendW;
+                    s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="4" ry="4" fill="url(#v5LegendGrad)"/>`;
+                    s += `<text x="${legendX - 8}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-family="inherit" font-weight="600" text-anchor="end">LOW</text>`;
 
                     for (let row = 0; row < maxRows; row++) {
-                        const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 4;
-                        s += `<text x="30" y="${y}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600">A${row + 1}</text>`;
+                        const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 5;
+                        s += `<text x="30" y="${y}" fill="#8a8480" font-size="16" font-family="inherit" font-weight="600">A${row + 1}</text>`;
                     }
 
-                    // Grid cells — V5 uses intensity gradient
                     for (let col = 0; col < 24; col++) {
                         const data = hourlyData[col];
                         for (let row = 0; row < maxRows; row++) {
@@ -758,17 +723,15 @@
                             const row = session.index - 1;
                             const x = gridMarginLeft + col * (cellW + gap);
                             const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
-                            const color = getV5Color(session.intensity || 0.5);
-                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${color}"/>`;
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${getV5Color(session.intensity || 0.5)}"/>`;
                         }
                     }
 
-                    const xAxisY = gridTopY + gridHeight + 18;
+                    const xAxisY = gridTopY + gridHeight + 22;
                     const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
-                    const startHour = 0, midHour = 12, endHour = 23;
-                    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit">${fmtHr(startHour)}</text>`;
-                    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit">${fmtHr(midHour)}</text>`;
-                    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" font-family="inherit" text-anchor="end">${fmtHr(endHour)}</text>`;
+                    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="16" font-family="inherit">${fmtHr(0)}</text>`;
+                    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="16" font-family="inherit">${fmtHr(12)}</text>`;
+                    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="16" font-family="inherit" text-anchor="end">${fmtHr(23)}</text>`;
 
                     s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
 
@@ -782,24 +745,23 @@
 
                     for (let i = 0; i < 3; i++) {
                         const cx = 30 + colW * i + colW / 2;
-                        s += `<text x="${cx}" y="${statsY + 18}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="1" text-anchor="middle">${statsLabels[i]}</text>`;
-                        s += `<text id="v5Stat${i}" x="${cx}" y="${statsY + 50}" fill="${statsColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
+                        s += `<text x="${cx}" y="${statsY + 26}" fill="#8a8480" font-size="16" font-family="inherit" font-weight="700" letter-spacing="1.5" text-anchor="middle">${statsLabels[i]}</text>`;
+                        s += `<text id="v5Stat${i}" x="${cx}" y="${statsY + 72}" fill="${statsColors[i]}" font-size="36" font-family="inherit" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
                         if (i < 2) {
                             const divX = 30 + colW * (i + 1);
-                            s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#c8c0b8" stroke-width="1"/>`;
+                            s += `<line x1="${divX}" y1="${statsY + 8}" x2="${divX}" y2="${statsY + statsHeight - 8}" stroke="#c8c0b8" stroke-width="1"/>`;
                         }
                     }
 
                     s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
-                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
+                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="18" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">CLAUDERANK.COM</text>`;
 
                     // Tooltip hitboxes
-                    s += `<rect x="30" y="${heroY - 80}" width="${cardW - 60}" height="${pillY + statsPillH - heroY + 90}" fill="transparent" data-tooltip="Total tokens burned today with estimated dollar cost based on per-model pricing." style="cursor:default"/>`;
                     s += `<rect x="30" y="${gridLabelY - 16}" width="${cardW - 60}" height="${xAxisY - gridLabelY + 24}" fill="transparent" data-tooltip="Each column is one hour (local time). Each row is a concurrent agent slot. Color intensity shows activity level within that hour." style="cursor:default"/>`;
+                    const statTips = ['Current consecutive hours of unbroken usage.', 'Peak concurrent agents running in a single hour.', 'Estimated spend based on per-model token pricing.'];
                     for (let i = 0; i < 3; i++) {
                         const sx = 30 + colW * i;
-                        const tips = ['Peak number of Claude Code sessions running simultaneously in a single hour today.', 'Total minutes of active agent time across all sessions, converted to hours.', 'Minutes spent running 2 or more sessions at the same time today.'];
-                        s += `<rect x="${sx}" y="${statsY}" width="${colW}" height="${statsHeight}" fill="transparent" data-tooltip="${tips[i]}" style="cursor:default"/>`;
+                        s += `<rect x="${sx}" y="${statsY}" width="${colW}" height="${statsHeight}" fill="transparent" data-tooltip="${statTips[i]}" style="cursor:default"/>`;
                     }
 
                     svg.innerHTML = s;
@@ -808,11 +770,9 @@
                 function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
                     sessions = sessions || [];
                     const cellW = 22, cellH = 22, gap = 3;
-                    const gridMarginLeft = 60;
-                    const gridMarginRight = 30;
+                    const gridMarginLeft = 60, gridMarginRight = 30;
                     const cardW = gridMarginLeft + 24 * (cellW + gap) - gap + gridMarginRight;
 
-                    // Find peak concurrency — exact peak (no minimum)
                     let maxSessions = 0;
                     for (const data of hourlyData) {
                         if (data.sessions.length > maxSessions) maxSessions = data.sessions.length;
@@ -820,103 +780,60 @@
                     const maxRows = Math.max(1, maxSessions);
                     const gridHeight = maxRows * (cellH + gap) - gap;
 
-                    const activeMins = cardData.activeMins || 0;
-                    const activeH = Math.floor(activeMins / 60);
-                    const activeM = Math.round(activeMins % 60);
-                    const activeDisplay = activeMins > 0 ? (activeH > 0 ? activeH + 'h ' + activeM + 'm' : activeM + 'm') : '0m';
-
-                    // V6 dark mode gradient — brighter range for readability
                     function getV6Color(intensity) {
                         const r1 = 245, g1 = 170, b1 = 100;
                         const r2 = 210, g2 = 70, b2 = 15;
-                        const r = Math.round(r1 + (r2 - r1) * intensity);
-                        const g = Math.round(g1 + (g2 - g1) * intensity);
-                        const b = Math.round(b1 + (b2 - b1) * intensity);
-                        return `rgb(${r},${g},${b})`;
+                        return `rgb(${Math.round(r1 + (r2 - r1) * intensity)},${Math.round(g1 + (g2 - g1) * intensity)},${Math.round(b1 + (b2 - b1) * intensity)})`;
                     }
 
-                    // Format date
                     const dateObj = cardData.localDateStr ? new Date(cardData.localDateStr + 'T12:00:00') : new Date();
                     const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
                     const dateDisplay = `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
 
-                    // Layout Y positions
-                    const topY = 30;
-                    const usernameY = 58;
-                    const dateY = 100;
-                    const heroY = 200;
-                    const heroLabelY = 235;
-                    const pillY = 260;
-                    const divider1Y = 310;
-                    const gridLabelY = 340;
-                    const gridTopY = 360;
-                    const gridBottomY = gridTopY + gridHeight + 24;
-                    const divider2Y = gridBottomY + 10;
+                    // Layout (widget-proportional)
+                    const headerCenterY = 52;
+                    const divider1Y = 96;
+                    const gridLabelY = 126, gridTopY = 148;
+                    const gridBottomY = gridTopY + gridHeight + 28;
+                    const divider2Y = gridBottomY + 12;
                     const statsY = divider2Y + 20;
-                    const statsHeight = 70;
-                    const divider3Y = statsY + statsHeight + 10;
-                    const footerY = divider3Y + 25;
-                    const cardH = footerY + 20;
+                    const statsHeight = 96;
+                    const divider3Y = statsY + statsHeight + 12;
+                    const footerY = divider3Y + 30;
+                    const cardH = footerY + 24;
 
                     svg.setAttribute('viewBox', `0 0 ${cardW} ${cardH}`);
-
                     let s = '';
-
                     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#111111"/>`;
 
-                    const v6HasAvatar = !!cardData.avatarDataUrl;
-                    const v6TextX = v6HasAvatar ? 80 : 30;
-                    if (v6HasAvatar) {
-                        s += `<defs><clipPath id="v6AvatarClip"><circle cx="50" cy="40" r="20"/></clipPath></defs>`;
-                        s += `<image href="${cardData.avatarDataUrl}" x="30" y="20" width="40" height="40" clip-path="url(#v6AvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
+                    // Avatar + username
+                    const hasAvatar = !!cardData.avatarDataUrl;
+                    const textX = hasAvatar ? 108 : 30;
+                    if (hasAvatar) {
+                        s += `<defs><clipPath id="v6AvatarClip"><circle cx="62" cy="${headerCenterY}" r="32"/></clipPath></defs>`;
+                        s += `<image href="${cardData.avatarDataUrl}" x="30" y="${headerCenterY - 32}" width="64" height="64" clip-path="url(#v6AvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
                     }
-                    s += `<text x="${v6TextX}" y="${topY}" fill="#999999" font-size="10" font-family="inherit" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-                    s += `<text x="${v6TextX}" y="${usernameY}" fill="#ececec" font-size="20" font-family="inherit" font-weight="700">@${escHtml(cardData.username || 'anonymous')}</text>`;
+                    s += `<text x="${textX}" y="${headerCenterY}" fill="#ececec" font-size="36" font-family="inherit" font-weight="700" dominant-baseline="central">@${escHtml(cardData.username || 'anonymous')}</text>`;
 
-                    const rankPillH = 28;
-                    const rankPillW = 230;
-                    const rankPillX = cardW - 30 - rankPillW;
-                    const rankPillY = usernameY - 20;
-                    s += `<g id="v6RankBadge" opacity="0">`;
-                    s += `<rect x="${rankPillX}" y="${rankPillY}" width="${rankPillW}" height="${rankPillH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
-                    s += `<text id="v6RankText" x="${rankPillX + rankPillW / 2}" y="${rankPillY + rankPillH / 2 + 4}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.5"></text>`;
-                    s += `</g>`;
-
-                    s += `<text class="card-date-text" x="${cardW / 2}" y="${dateY}" fill="#999999" font-size="13" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle" opacity="0">${dateDisplay}</text>`;
-
-                    const heroTokens = formatNumber(cardData.dayTokens || 0);
-                    s += `<text id="v5HeroTokens" x="${cardW / 2}" y="${heroY}" fill="#ececec" font-size="96" font-family="inherit" font-weight="800" text-anchor="middle">${heroTokens}</text>`;
-                    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#999999" font-size="13" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
-
-                    const heroCost = cardData.costText || '$0';
-                    const statsPillW = 240;
-                    const statsPillH = 30;
-                    const statsPillX = (cardW - statsPillW) / 2;
-                    s += `<rect x="${statsPillX}" y="${pillY}" width="${statsPillW}" height="${statsPillH}" rx="15" ry="15" fill="#232323" stroke="none"/>`;
-                    s += `<text x="${cardW / 2}" y="${pillY + statsPillH / 2 + 5}" fill="#999999" font-size="12" font-family="inherit" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
-                    s += `<tspan id="v5CostValue" fill="#E8692D">${heroCost}</tspan> EST. TOKEN VALUE`;
-                    s += `</text>`;
+                    s += `<text class="card-date-text" x="${cardW - 30}" y="${headerCenterY}" fill="#999999" font-size="22" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="end" dominant-baseline="central" opacity="0">${dateDisplay}</text>`;
 
                     s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#333333" stroke-width="1"/>`;
 
-                    s += `<text x="30" y="${gridLabelY}" fill="#999999" font-size="11" font-family="inherit" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
-                    // Gradient legend on right
-                    const legendW = 80, legendH = 10;
+                    s += `<text x="30" y="${gridLabelY}" fill="#999999" font-size="18" font-family="inherit" font-weight="700" letter-spacing="2">AGENT ACTIVITY TIMELINE</text>`;
+                    const legendW = 100, legendH = 14;
                     const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
-                    const legendY = gridLabelY - 10;
+                    const legendY = gridLabelY - 14;
                     s += `<defs><linearGradient id="v6LegendGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgb(245,170,100)"/><stop offset="100%" stop-color="rgb(210,70,15)"/></linearGradient></defs>`;
-                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#999999" font-size="9" font-family="inherit" font-weight="600" text-anchor="end">HIGH</text>`;
-                    const highTextW = 28;
-                    const legendX = gridRightEdge - highTextW - legendW;
-                    s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="3" ry="3" fill="url(#v6LegendGrad)"/>`;
-                    s += `<text x="${legendX - 6}" y="${legendY + legendH - 1}" fill="#999999" font-size="9" font-family="inherit" font-weight="600" text-anchor="end">LOW</text>`;
+                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#999999" font-size="14" font-family="inherit" font-weight="600" text-anchor="end">HIGH</text>`;
+                    const highTW = 38, legendX = gridRightEdge - highTW - legendW;
+                    s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="4" ry="4" fill="url(#v6LegendGrad)"/>`;
+                    s += `<text x="${legendX - 8}" y="${legendY + legendH - 1}" fill="#999999" font-size="14" font-family="inherit" font-weight="600" text-anchor="end">LOW</text>`;
 
                     for (let row = 0; row < maxRows; row++) {
-                        const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 4;
-                        s += `<text x="30" y="${y}" fill="#999999" font-size="10" font-family="inherit" font-weight="600">A${row + 1}</text>`;
+                        const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 5;
+                        s += `<text x="30" y="${y}" fill="#999999" font-size="16" font-family="inherit" font-weight="600">A${row + 1}</text>`;
                     }
 
-                    // Grid cells — intensity gradient (dark mode)
                     for (let col = 0; col < 24; col++) {
                         const data = hourlyData[col];
                         for (let row = 0; row < maxRows; row++) {
@@ -929,16 +846,15 @@
                             const row = session.index - 1;
                             const x = gridMarginLeft + col * (cellW + gap);
                             const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
-                            const color = getV6Color(session.intensity || 0.5);
-                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${color}"/>`;
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${getV6Color(session.intensity || 0.5)}"/>`;
                         }
                     }
 
-                    const xAxisY = gridTopY + gridHeight + 18;
+                    const xAxisY = gridTopY + gridHeight + 22;
                     const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
-                    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#999999" font-size="10" font-family="inherit">${fmtHr(0)}</text>`;
-                    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#999999" font-size="10" font-family="inherit">${fmtHr(12)}</text>`;
-                    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#999999" font-size="10" font-family="inherit" text-anchor="end">${fmtHr(23)}</text>`;
+                    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#999999" font-size="16" font-family="inherit">${fmtHr(0)}</text>`;
+                    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#999999" font-size="16" font-family="inherit">${fmtHr(12)}</text>`;
+                    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#999999" font-size="16" font-family="inherit" text-anchor="end">${fmtHr(23)}</text>`;
 
                     s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#333333" stroke-width="1"/>`;
 
@@ -952,24 +868,23 @@
 
                     for (let i = 0; i < 3; i++) {
                         const cx = 30 + colW * i + colW / 2;
-                        s += `<text x="${cx}" y="${statsY + 18}" fill="#999999" font-size="10" font-family="inherit" font-weight="700" letter-spacing="1" text-anchor="middle">${statsLabels[i]}</text>`;
-                        s += `<text id="v5Stat${i}" x="${cx}" y="${statsY + 50}" fill="${statsColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
+                        s += `<text x="${cx}" y="${statsY + 26}" fill="#999999" font-size="16" font-family="inherit" font-weight="700" letter-spacing="1.5" text-anchor="middle">${statsLabels[i]}</text>`;
+                        s += `<text id="v5Stat${i}" x="${cx}" y="${statsY + 72}" fill="${statsColors[i]}" font-size="36" font-family="inherit" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
                         if (i < 2) {
                             const divX = 30 + colW * (i + 1);
-                            s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#333333" stroke-width="1"/>`;
+                            s += `<line x1="${divX}" y1="${statsY + 8}" x2="${divX}" y2="${statsY + statsHeight - 8}" stroke="#333333" stroke-width="1"/>`;
                         }
                     }
 
                     s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#333333" stroke-width="1"/>`;
-                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#999999" font-size="10" font-family="inherit" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
+                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#999999" font-size="18" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">CLAUDERANK.COM</text>`;
 
                     // Tooltip hitboxes
-                    s += `<rect x="30" y="${heroY - 80}" width="${cardW - 60}" height="${pillY + statsPillH - heroY + 90}" fill="transparent" data-tooltip="Total tokens burned today with estimated dollar cost based on per-model pricing." style="cursor:default"/>`;
                     s += `<rect x="30" y="${gridLabelY - 16}" width="${cardW - 60}" height="${xAxisY - gridLabelY + 24}" fill="transparent" data-tooltip="Each column is one hour (local time). Each row is a concurrent agent slot. Color intensity shows activity level within that hour." style="cursor:default"/>`;
+                    const statTips = ['Current consecutive hours of unbroken usage.', 'Peak concurrent agents running in a single hour.', 'Estimated spend based on per-model token pricing.'];
                     for (let i = 0; i < 3; i++) {
                         const sx = 30 + colW * i;
-                        const tips = ['Peak number of Claude Code sessions running simultaneously in a single hour today.', 'Total minutes of active agent time across all sessions, converted to hours.', 'Minutes spent running 2 or more sessions at the same time today.'];
-                        s += `<rect x="${sx}" y="${statsY}" width="${colW}" height="${statsHeight}" fill="transparent" data-tooltip="${tips[i]}" style="cursor:default"/>`;
+                        s += `<rect x="${sx}" y="${statsY}" width="${colW}" height="${statsHeight}" fill="transparent" data-tooltip="${statTips[i]}" style="cursor:default"/>`;
                     }
 
                     svg.innerHTML = s;
@@ -999,91 +914,57 @@
                     const maxRows = Math.max(1, maxSessions);
                     const gridHeight = maxRows * (cellH + gap) - gap;
 
-                    // Compute stats
-                    // Data from render args
                     const username = cardData.username || 'anonymous';
-                    const dayTokens = formatNumber(cardData.dayTokens || 0);
-                    const costText = cardData.costText || '$0';
-
-                    // Date display
                     const dateObj = cardData.localDateStr ? new Date(cardData.localDateStr + 'T12:00:00') : new Date();
                     const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
                     const dateText = `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
 
-                    // Rank from DOM
-                    const rankBadge = document.getElementById('v5RankBadge');
-                    const rankTextEl = document.getElementById('v5RankText');
-                    const rankText = (rankBadge && rankTextEl && rankBadge.getAttribute('opacity') !== '0') ? rankTextEl.textContent.trim() : '';
-
-                    // Layout Y positions (exact V5 card — matches web display)
-                    const topY = 30, usernameY = 58, dateY = 100;
-                    const heroY = 200, heroLabelY = 235, pillY = 260;
-                    const divider1Y = 310, gridLabelY = 340, gridTopY = 360;
-                    const gridBottomY = gridTopY + gridHeight + 24;
-                    const divider2Y = gridBottomY + 10;
+                    // Layout (widget-proportional)
+                    const headerCenterY = 52;
+                    const divider1Y = 96;
+                    const gridLabelY = 126, gridTopY = 148;
+                    const gridBottomY = gridTopY + gridHeight + 28;
+                    const divider2Y = gridBottomY + 12;
                     const statsY = divider2Y + 20;
-                    const statsHeight = 70;
-                    const divider3Y = statsY + statsHeight + 10;
-                    const footerY = divider3Y + 25;
-                    const cardH = footerY + 20;
+                    const statsHeight = 96;
+                    const divider3Y = statsY + statsHeight + 12;
+                    const footerY = divider3Y + 30;
+                    const cardH = footerY + 24;
 
-                    const fontStack = "'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace";
+                    const fontStack = "SF Mono, Menlo, Consolas, Liberation Mono, Courier New, monospace";
                     let s = '';
                     s += `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${cardW} ${cardH}" width="${cardW * 2}" height="${cardH * 2}" font-family="${fontStack}">`;
                     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
 
-                    // Avatar + header + username
-                    const copyHasAvatar = !!cardData.avatarDataUrl;
-                    const copyTextX = copyHasAvatar ? 80 : 30;
-                    if (copyHasAvatar) {
-                        s += `<defs><clipPath id="copyAvatarClip"><circle cx="50" cy="40" r="20"/></clipPath></defs>`;
-                        s += `<image href="${cardData.avatarDataUrl}" x="30" y="20" width="40" height="40" clip-path="url(#copyAvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
+                    // Avatar + username
+                    const avatarDataUrl = cardData.avatarDataUrl;
+                    const hasAvatar = !!(avatarDataUrl && avatarDataUrl.startsWith('data:'));
+                    const textX = hasAvatar ? 108 : 30;
+                    if (hasAvatar) {
+                        s += `<defs><clipPath id="copyAvatarClip"><circle cx="62" cy="${headerCenterY}" r="32"/></clipPath></defs>`;
+                        s += `<image href="${avatarDataUrl}" x="30" y="${headerCenterY - 32}" width="64" height="64" clip-path="url(#copyAvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
                     }
-                    s += `<text x="${copyTextX}" y="${topY}" fill="#8a8480" font-size="10" font-weight="700" letter-spacing="2">CLAUDERANK</text>`;
-                    s += `<text x="${copyTextX}" y="${usernameY}" fill="#1a1a1a" font-size="20" font-weight="700">@${escHtml(username)}</text>`;
+                    s += `<text x="${textX}" y="${headerCenterY}" fill="#1a1a1a" font-size="36" font-weight="700" dominant-baseline="central">@${escHtml(username)}</text>`;
+                    s += `<text x="${cardW - 30}" y="${headerCenterY}" fill="#8a8480" font-size="22" font-weight="600" letter-spacing="2" text-anchor="end" dominant-baseline="central">${escHtml(dateText)}</text>`;
 
-                    // Rank pill
-                    if (rankText && !rankText.includes('\u2014')) {
-                        const rpH = 28, rpW = 230;
-                        const rpX = cardW - 30 - rpW, rpY = usernameY - 20;
-                        s += `<rect x="${rpX}" y="${rpY}" width="${rpW}" height="${rpH}" rx="14" ry="14" fill="none" stroke="#E8692D" stroke-width="1.5"/>`;
-                        s += `<text x="${rpX + rpW / 2}" y="${rpY + rpH / 2 + 4}" fill="#E8692D" font-size="12" font-weight="600" text-anchor="middle" letter-spacing="0.5">${escHtml(rankText)}</text>`;
-                    }
-
-                    // Date
-                    s += `<text x="${cardW / 2}" y="${dateY}" fill="#8a8480" font-size="13" font-weight="600" letter-spacing="1.5" text-anchor="middle">${escHtml(dateText)}</text>`;
-
-                    // Hero tokens
-                    s += `<text x="${cardW / 2}" y="${heroY}" fill="#1a1a1a" font-size="96" font-weight="800" text-anchor="middle">${escHtml(dayTokens)}</text>`;
-                    s += `<text x="${cardW / 2}" y="${heroLabelY}" fill="#8a8480" font-size="13" font-weight="600" letter-spacing="2" text-anchor="middle">TOKENS BURNED</text>`;
-
-                    // Cost pill
-                    const spW = 240, spH = 30, spX = (cardW - spW) / 2;
-                    s += `<rect x="${spX}" y="${pillY}" width="${spW}" height="${spH}" rx="15" ry="15" fill="#f5f0eb"/>`;
-                    s += `<text x="${cardW / 2}" y="${pillY + spH / 2 + 5}" fill="#8a8480" font-size="12" font-weight="600" text-anchor="middle" letter-spacing="0.3">`;
-                    s += `<tspan fill="#E8692D">${escHtml(costText)}</tspan> EST. TOKEN VALUE</text>`;
-
-                    // Divider 1
                     s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
 
                     // Grid label + legend
-                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="11" font-weight="700" letter-spacing="1.5">AGENT ACTIVITY TIMELINE</text>`;
-                    const legendW = 80, legendH = 10;
+                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-weight="700" letter-spacing="2">AGENT ACTIVITY TIMELINE</text>`;
+                    const legendW = 100, legendH = 14;
                     const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
-                    const legendY = gridLabelY - 10;
+                    const legendY = gridLabelY - 14;
                     s += `<defs><linearGradient id="v5LG" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgb(245,170,100)"/><stop offset="100%" stop-color="rgb(210,70,15)"/></linearGradient></defs>`;
-                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="9" font-weight="600" text-anchor="end">HIGH</text>`;
-                    const highTW = 28, legendX = gridRightEdge - highTW - legendW;
-                    s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="3" ry="3" fill="url(#v5LG)"/>`;
-                    s += `<text x="${legendX - 6}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="9" font-weight="600" text-anchor="end">LOW</text>`;
+                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-weight="600" text-anchor="end">HIGH</text>`;
+                    const highTW = 38, legendX = gridRightEdge - highTW - legendW;
+                    s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="4" ry="4" fill="url(#v5LG)"/>`;
+                    s += `<text x="${legendX - 8}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-weight="600" text-anchor="end">LOW</text>`;
 
-                    // Row labels
                     for (let row = 0; row < maxRows; row++) {
-                        const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 4;
-                        s += `<text x="30" y="${y}" fill="#8a8480" font-size="10" font-weight="600">A${row + 1}</text>`;
+                        const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 5;
+                        s += `<text x="30" y="${y}" fill="#8a8480" font-size="16" font-weight="600">A${row + 1}</text>`;
                     }
 
-                    // Grid cells
                     for (let col = 0; col < 24; col++) {
                         const data = hourlyData[col];
                         for (let row = 0; row < maxRows; row++) {
@@ -1100,26 +981,20 @@
                         }
                     }
 
-                    // Current hour marker
                     const currentHourCol = hourlyData.findIndex(d => d.isCurrent);
                     if (currentHourCol >= 0) {
                         const markerX = gridMarginLeft + currentHourCol * (cellW + gap);
-                        s += `<rect x="${markerX}" y="${gridTopY + gridHeight + 2}" width="${cellW}" height="2" rx="1" fill="${getV5Color(0.8)}"/>`;
+                        s += `<rect x="${markerX}" y="${gridTopY + gridHeight + 3}" width="${cellW}" height="3" rx="1" fill="${getV5Color(0.8)}"/>`;
                     }
 
-                    // Time axis
-                    const xAxisY = gridTopY + gridHeight + 18;
+                    const xAxisY = gridTopY + gridHeight + 22;
                     const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
-                    const isToday = cardData.isToday;
-                    const startHour = 0, midHour = 12, endHour = 23;
-                    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="10">${fmtHr(startHour)}</text>`;
-                    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10">${fmtHr(midHour)}</text>`;
-                    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="10" text-anchor="end">${fmtHr(endHour)}</text>`;
+                    s += `<text x="${gridMarginLeft}" y="${xAxisY}" fill="#8a8480" font-size="16">${fmtHr(0)}</text>`;
+                    s += `<text x="${gridMarginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="16">${fmtHr(12)}</text>`;
+                    s += `<text x="${gridMarginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="#8a8480" font-size="16" text-anchor="end">${fmtHr(23)}</text>`;
 
-                    // Divider 2
                     s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
 
-                    // Stats row
                     const colW = (cardW - 60) / 3;
                     const estSpendCopy = window._profileEstSpend || 0;
                     const spendDisplayCopy = estSpendCopy >= 1000 ? '$' + (estSpendCopy / 1000).toFixed(1) + 'K' : '$' + estSpendCopy.toFixed(2);
@@ -1128,17 +1003,16 @@
                     const sColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
                     for (let i = 0; i < 3; i++) {
                         const cx = 30 + colW * i + colW / 2;
-                        s += `<text x="${cx}" y="${statsY + 18}" fill="#8a8480" font-size="10" font-weight="700" letter-spacing="1" text-anchor="middle">${sLabels[i]}</text>`;
-                        s += `<text x="${cx}" y="${statsY + 50}" fill="${sColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${sValues[i]}</text>`;
+                        s += `<text x="${cx}" y="${statsY + 26}" fill="#8a8480" font-size="16" font-weight="700" letter-spacing="1.5" text-anchor="middle">${sLabels[i]}</text>`;
+                        s += `<text x="${cx}" y="${statsY + 72}" fill="${sColors[i]}" font-size="36" font-weight="700" text-anchor="middle">${sValues[i]}</text>`;
                         if (i < 2) {
                             const divX = 30 + colW * (i + 1);
-                            s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#c8c0b8" stroke-width="1"/>`;
+                            s += `<line x1="${divX}" y1="${statsY + 8}" x2="${divX}" y2="${statsY + statsHeight - 8}" stroke="#c8c0b8" stroke-width="1"/>`;
                         }
                     }
 
-                    // Divider 3 + footer
                     s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
-                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="10" font-weight="600" letter-spacing="1.5" text-anchor="middle">CLAUDERANK.COM</text>`;
+                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="18" font-weight="600" letter-spacing="2" text-anchor="middle">CLAUDERANK.COM</text>`;
                     s += `</svg>`;
 
                     // SVG → canvas → clipboard (2x for retina)
@@ -1242,38 +1116,14 @@
                                : renderShareableCardV5(svgMain, cardHourlyData, sessions, cardData);
                         positionDateNav(svgMain);
 
-                        // Animate hero tokens
-                        const heroEl = document.getElementById('v5HeroTokens');
-                        if (heroEl) animateValue(heroEl, prevDayTokens, dayTokens, formatNumber);
-                        prevDayTokens = dayTokens;
-
-                        // Animate cost
-                        const costEl = document.getElementById('v5CostValue');
-                        const newCostRaw = Math.round((totalTokens > 0 && dayTokens > 0 ? totalCost * (dayTokens / totalTokens) : 0) * 100);
-                        if (costEl) animateValue(costEl, prevCostRaw, newCostRaw, v => formatCost(v / 100));
-                        prevCostRaw = newCostRaw;
-
-                        // Animate concurrent agents
-                        const stat0 = document.getElementById('v5Stat0');
-                        if (stat0) animateValue(stat0, prevMaxSessions, cardMaxSessions, v => v + '\u00d7');
-                        prevMaxSessions = cardMaxSessions;
-
-                        // Animate agent hours
+                        // Animate concurrent agents (stat1 in new layout)
                         const stat1 = document.getElementById('v5Stat1');
-                        if (stat1) animateValue(stat1, prevDevMins, Math.round(cardTotalDevMins), v => (v / 60).toFixed(1) + 'h');
-                        prevDevMins = Math.round(cardTotalDevMins);
-
-                        // Animate concurrency time
-                        const stat2 = document.getElementById('v5Stat2');
-                        if (stat2) animateValue(stat2, prevConcMins, Math.round(cardConcurrentMins), v => {
-                            const m = Math.round(v);
-                            return m >= 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + 'm';
-                        });
-                        prevConcMins = Math.round(cardConcurrentMins);
+                        if (stat1) animateValue(stat1, prevMaxSessions, cardMaxSessions, v => v + '\u00d7');
+                        prevMaxSessions = cardMaxSessions;
                     }
                 }
 
-                // Position date nav overlay to match SVG date position (dateY=100)
+                // Position date nav overlay to match SVG header position
                 function positionDateNav(svg) {
                     const nav = document.getElementById('cardDateNav');
                     if (!nav || !svg) return;
@@ -1281,8 +1131,8 @@
                     if (!vb) return;
                     const parts = vb.split(/\s+/).map(Number);
                     const vbH = parts[3];
-                    // dateY=100 in SVG coords, text baseline; center the nav vertically
-                    const pct = ((100 - 6) / vbH) * 100;
+                    // headerCenterY=52 in SVG coords; center the nav vertically
+                    const pct = ((52 - 6) / vbH) * 100;
                     nav.style.top = pct + '%';
                 }
 
