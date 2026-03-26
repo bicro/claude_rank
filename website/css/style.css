@@ -1326,8 +1326,8 @@ a.top-entry:hover { text-decoration: none; background: var(--bg-hover); }
     /* inherits max-width: 900px from .profile-section-constrained */
 }
 .copy-burn-btn {
-    background: var(--bg-card);
-    border: 1px solid var(--border, #e0ddd9);
+    background: none;
+    border: none;
     color: var(--text-secondary);
     font-size: 12px;
     padding: 4px 12px;
@@ -1356,9 +1356,6 @@ a.top-entry:hover { text-decoration: none; background: var(--bg-hover); }
 }
 .copy-feedback.show {
     opacity: 1;
-}
-[data-theme="dark"] .copy-burn-btn {
-    border-color: var(--border, #2a2a2a);
 }
 .burn-clock-wrapper {
     background: var(--bg-primary);

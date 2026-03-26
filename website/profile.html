@@ -194,7 +194,7 @@
 
                     <div class="profile-section-divider" style="padding-top:24px;" data-tooltip="Activity breakdown for a single day. Use the date arrows to navigate between days.">
                         <span>Daily</span>
-                        <div class="burn-clock-card-date-nav" id="cardDateNav">
+                        <div class="burn-clock-card-date-nav" id="cardDateNav" style="display:none">
                             <button class="date-nav-btn" id="dayPrev" title="Previous day">&#9664;</button>
                             <span class="date-label" id="dayLabel">Today</span>
                             <button class="date-nav-btn" id="dayNext" title="Next day" disabled>&#9654;</button>
@@ -376,14 +376,44 @@
                     document.getElementById('dayPrev').disabled = (offset <= -13);
 
                     try {
-                        // Fetch and render daily view immediately
-                        const dayConcurrency = await fetchDayConcurrency(localDateStr);
-                        // For V3 last-24-hours view, also fetch yesterday's data
                         const yesterdayDate = new Date(targetDate);
                         yesterdayDate.setDate(yesterdayDate.getDate() - 1);
                         const yesterdayStr = localDateISO(yesterdayDate);
-                        const yesterdayConcurrency = await fetchDayConcurrency(yesterdayStr);
-                        renderBurnClockV2(dayConcurrency, profile.username, localDateStr, yesterdayConcurrency, yesterdayStr, offset === 0, displayName);
+                        const [dayConcurrency, yesterdayConcurrency, dailyRanksResp] = await Promise.all([
+                            fetchDayConcurrency(localDateStr),
+                            fetchDayConcurrency(yesterdayStr),
+                            getUserDailyRanks(hash, localDateStr, 'day').catch(e => { console.error('Daily ranks fetch failed:', e); return { ranks: {} }; })
+                        ]);
+
+                        // Extract best rank for card pill
+                        const dr = dailyRanksResp.ranks || {};
+                        const bestRankForPill = dr.daily_overall || dr.peak_concurrency || dr.daily_tokens || dr.active_mins;
+
+                        renderBurnClockV2(dayConcurrency, profile.username, localDateStr, yesterdayConcurrency, yesterdayStr, offset === 0, displayName, bestRankForPill);
+
+                        // Update rank-related UI elements synchronously
+                        document.querySelectorAll('#concurrencyPercentile').forEach(pctEl => {
+                            if (pctEl && dr.peak_concurrency) {
+                                pctEl.textContent = `Putting you in the top ${formatPercentile(dr.peak_concurrency.percentile)}% of users for today`;
+                                pctEl.setAttribute('opacity', '0.5');
+                            }
+                        });
+                        if (window._dailySummary) {
+                            window._dailySummary.activePercentile = dr.active_mins ? dr.active_mins.percentile : null;
+                            renderDailySummary();
+                        }
+                        // Overall rank pill in header
+                        const overallEl = document.getElementById('profileOverallRank');
+                        if (overallEl) {
+                            const ov = dr.daily_overall;
+                            if (ov) {
+                                overallEl.textContent = `#${ov.rank} · Top ${formatPercentile(ov.percentile)}%`;
+                                overallEl.style.display = 'inline-flex';
+                            } else {
+                                overallEl.textContent = '';
+                                overallEl.style.display = 'none';
+                            }
+                        }
 
                         // Fetch rewards and render pills
                         getUserRewards(hash, localDateStr).then(rewards => {
@@ -391,57 +421,6 @@
                             // Store PR data for shareable
                             if (window._burnClockRenderArgs) {
                                 window._burnClockRenderArgs.cardData.personalBests = rewards.personal_bests || {};
-                            }
-                        }).catch(() => {});
-
-                        // Fetch daily ranks and update summary with percentile
-                        getUserDailyRanks(hash, localDateStr, 'day').then(resp => {
-                            const dr = resp.ranks || {};
-                            document.querySelectorAll('#concurrencyPercentile').forEach(pctEl => {
-                                if (pctEl && dr.peak_concurrency) {
-                                    pctEl.textContent = `Putting you in the top ${formatPercentile(dr.peak_concurrency.percentile)}% of users for today`;
-                                    pctEl.setAttribute('opacity', '0.5');
-                                }
-                            });
-                            // Update rank badges (fallback chain: best available metric)
-                            const bestRank = dr.daily_overall || dr.peak_concurrency || dr.daily_tokens || dr.active_mins;
-                            for (const vn of ['v5', 'v6']) {
-                                const badge = document.getElementById(vn + 'RankBadge');
-                                if (badge && bestRank) {
-                                    const txt = document.getElementById(vn + 'RankText');
-                                    if (txt) txt.textContent = `#${bestRank.rank} GLOBALLY · TOP ${formatPercentile(bestRank.percentile)}%`;
-                                    badge.setAttribute('opacity', '1');
-                                }
-                            }
-                            if (window._dailySummary) {
-                                window._dailySummary.activePercentile = dr.active_mins ? dr.active_mins.percentile : null;
-                                renderDailySummary();
-                            }
-                            // Populate rank row
-                            // Overall rank pill in header
-                            const overallEl = document.getElementById('profileOverallRank');
-                            if (overallEl) {
-                                const ov = dr.daily_overall;
-                                if (ov) {
-                                    overallEl.textContent = `#${ov.rank} · Top ${formatPercentile(ov.percentile)}%`;
-                                    overallEl.style.display = 'inline-flex';
-                                } else {
-                                    overallEl.textContent = '';
-                                    overallEl.style.display = 'none';
-                                }
-                            }
-                            // Store rank for shareable and re-render card to show pill
-                            if (window._burnClockRenderArgs) {
-                                const ov = dr.daily_overall;
-                                window._burnClockRenderArgs.cardData.rankHero = ov ? 'Rank #' + ov.rank : '';
-                                window._burnClockRenderArgs.cardData.rankSub = ov ? 'Top ' + formatPercentile(ov.percentile) + '%' : '';
-                                const svgMain = document.getElementById('burnClockDailyMain');
-                                if (svgMain) {
-                                    const { cardHourlyData, sessions, cardData } = window._burnClockRenderArgs;
-                                    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-                                    isDark ? renderShareableCardV6(svgMain, cardHourlyData, sessions, cardData)
-                                           : renderShareableCardV5(svgMain, cardHourlyData, sessions, cardData);
-                                }
                             }
                         }).catch(() => {});
 
@@ -705,7 +684,7 @@
                     const gridBottomY = gridTopY + gridHeight + 28;
                     const divider2Y = gridBottomY + 12;
                     const statsY = divider2Y + 20;
-                    const statsHeight = 78;
+                    const statsHeight = 100;
                     const divider3Y = statsY + statsHeight + 12;
                     const footerY = divider3Y + 30;
                     const cardH = footerY + 24;
@@ -729,36 +708,34 @@
                     }
                     const rankHero = cardData.rankHero || '';
                     const rankSub = cardData.rankSub || '';
-                    const teamName = cardData.teamName || '';
-                    const hasNameSub = !!teamName;
-                    if (hasNameSub) {
-                        s += `<text x="${textX}" y="${avatarCY - 8}" fill="#8a8480" font-size="12" font-family="inherit" font-weight="600" letter-spacing="0.3" dominant-baseline="central">${escHtml(teamName)}</text>`;
-                    }
-                    s += `<text x="${textX}" y="${hasNameSub ? avatarCY + 14 : avatarCY}" fill="#1a1a1a" font-size="28" font-family="inherit" font-weight="700" dominant-baseline="central">${escHtml(cardData.displayName || cardData.username || 'Anonymous')}</text>`;
+                    s += `<text x="${textX}" y="${avatarCY}" fill="#1a1a1a" font-size="28" font-family="inherit" font-weight="700" dominant-baseline="central">${escHtml(cardData.displayName || cardData.username || 'Anonymous')}</text>`;
                     if (rankHero) {
-                        const heroTextW = rankHero.length * 9 + 8;
+                        const heroTextW = rankHero.length * 14 + 8;
                         const pillW = heroTextW + 16;
-                        const pillH = 26;
+                        const pillH = 36;
                         const pillX = cardW - 30 - pillW;
                         const pillCY = rankSub ? avatarCY - 6 : avatarCY;
                         const pillY = pillCY - pillH / 2;
                         s += `<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillH / 2}" fill="#E8692D"/>`;
-                        s += `<text x="${pillX + pillW / 2}" y="${pillCY}" fill="#ffffff" font-size="14" font-family="inherit" font-weight="700" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankHero)}</text>`;
+                        s += `<text x="${pillX + pillW / 2}" y="${pillCY}" fill="#ffffff" font-size="22" font-family="inherit" font-weight="700" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankHero)}</text>`;
                         if (rankSub) {
-                            s += `<text x="${pillX + pillW / 2}" y="${pillY + pillH + 11}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankSub)}</text>`;
+                            s += `<text x="${pillX + pillW / 2}" y="${pillY + pillH + 14}" fill="#8a8480" font-size="16" font-family="inherit" font-weight="400" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankSub)}</text>`;
                         }
                     }
 
                     // Date (grid label area)
-                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-family="inherit" font-weight="700" letter-spacing="2">${dateDisplay}</text>`;
-                    const legendW = 100, legendH = 14;
+                    const isToday = cardData.isToday !== false;
+                    s += `<text data-action="prev" x="16" y="${gridLabelY}" fill="#8a8480" font-size="22" font-family="inherit" font-weight="700" style="cursor:pointer">◀</text>`;
+                    s += `<text x="36" y="${gridLabelY}" fill="#8a8480" font-size="22" font-family="inherit" font-weight="700" letter-spacing="3">${dateDisplay}</text>`;
+                    s += `<text data-action="next" x="${36 + dateDisplay.length * 14 + 10}" y="${gridLabelY}" fill="#8a8480" font-size="22" font-family="inherit" font-weight="700" style="cursor:pointer" opacity="${isToday ? 0.3 : 1}">▶</text>`;
+                    const legendW = 80, legendH = 12;
                     const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
-                    const legendY = gridLabelY - 14;
+                    const legendY = gridLabelY - 12;
                     s += `<defs><linearGradient id="v5LegendGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgb(245,170,100)"/><stop offset="100%" stop-color="rgb(210,70,15)"/></linearGradient></defs>`;
-                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-family="inherit" font-weight="600" text-anchor="end">HIGH</text>`;
-                    const highTW = 38, legendX = gridRightEdge - highTW - legendW;
-                    s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="4" ry="4" fill="url(#v5LegendGrad)"/>`;
-                    s += `<text x="${legendX - 8}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-family="inherit" font-weight="600" text-anchor="end">LOW</text>`;
+                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="16" font-family="inherit" font-weight="400" text-anchor="end">HIGH</text>`;
+                    const highTW = 46, legendX = gridRightEdge - highTW - legendW;
+                    s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="${legendH/2}" ry="${legendH/2}" fill="url(#v5LegendGrad)"/>`;
+                    s += `<text x="${legendX - 8}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="16" font-family="inherit" font-weight="400" text-anchor="end">LOW</text>`;
 
                     for (let row = 0; row < maxRows; row++) {
                         const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 5;
@@ -799,16 +776,16 @@
                         '<rect x="2" y="3" width="20" height="18" rx="2" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="6 9 10 13 6 17" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="17" x2="18" y2="17" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
                         '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
                     ];
-                    const iconSz = 14, iconGap = 4;
+                    const iconSz = 22, iconGap = 4;
 
                     for (let i = 0; i < 3; i++) {
                         const cx = 30 + colW * i + colW / 2;
-                        const textW = statsLabels[i].length * 11;
+                        const textW = statsLabels[i].length * 13;
                         const groupW = iconSz + iconGap + textW;
                         const groupX = cx - groupW / 2;
-                        s += `<svg x="${groupX}" y="${statsY + 13}" width="${iconSz}" height="${iconSz}" viewBox="0 0 24 24">${statsIcons[i]}</svg>`;
-                        s += `<text x="${groupX + iconSz + iconGap}" y="${statsY + 26}" fill="#8a8480" font-size="16" font-family="inherit" font-weight="700" letter-spacing="1.5" text-anchor="start">${statsLabels[i]}</text>`;
-                        s += `<text id="v5Stat${i}" x="${cx}" y="${statsY + 62}" fill="${statsColors[i]}" font-size="36" font-family="inherit" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
+                        s += `<svg x="${groupX}" y="${statsY + 12}" width="${iconSz}" height="${iconSz}" viewBox="0 0 24 24">${statsIcons[i]}</svg>`;
+                        s += `<text x="${groupX + iconSz + iconGap}" y="${statsY + 30}" fill="#8a8480" font-size="20" font-family="inherit" font-weight="700" letter-spacing="1.6" text-anchor="start">${statsLabels[i]}</text>`;
+                        s += `<text id="v5Stat${i}" x="${cx}" y="${statsY + 74}" fill="${statsColors[i]}" font-size="36" font-family="inherit" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
                         if (i < 2) {
                             const divX = 30 + colW * (i + 1);
                             s += `<line x1="${divX}" y1="${statsY + 8}" x2="${divX}" y2="${statsY + statsHeight - 8}" stroke="#c8c0b8" stroke-width="1"/>`;
@@ -816,7 +793,7 @@
                     }
 
                     s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
-                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="18" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">CLAUDERANK.COM</text>`;
+                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="18" font-family="inherit" font-weight="700" letter-spacing="3" text-anchor="middle">CLAUDERANK.COM</text>`;
 
                     // Tooltip hitboxes
                     s += `<rect x="30" y="${gridLabelY - 16}" width="${cardW - 60}" height="${xAxisY - gridLabelY + 24}" fill="transparent" data-tooltip="Each column is one hour (local time). Each row is a concurrent agent slot. Color intensity shows activity level within that hour." style="cursor:default"/>`;
@@ -827,6 +804,14 @@
                     }
 
                     svg.innerHTML = s;
+                    if (!svg._dateNavBound) {
+                        svg._dateNavBound = true;
+                        svg.addEventListener('click', (e) => {
+                            const action = e.target.getAttribute('data-action');
+                            if (action === 'prev') document.getElementById('dayPrev').click();
+                            if (action === 'next') document.getElementById('dayNext').click();
+                        });
+                    }
                 }
 
                 function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
@@ -858,7 +843,7 @@
                     const gridBottomY = gridTopY + gridHeight + 28;
                     const divider2Y = gridBottomY + 12;
                     const statsY = divider2Y + 20;
-                    const statsHeight = 78;
+                    const statsHeight = 100;
                     const divider3Y = statsY + statsHeight + 12;
                     const footerY = divider3Y + 30;
                     const cardH = footerY + 24;
@@ -882,35 +867,33 @@
                     }
                     const rankHero = cardData.rankHero || '';
                     const rankSub = cardData.rankSub || '';
-                    const teamName = cardData.teamName || '';
-                    const hasNameSub = !!teamName;
-                    if (hasNameSub) {
-                        s += `<text x="${textX}" y="${avatarCY - 8}" fill="#999999" font-size="12" font-family="inherit" font-weight="600" letter-spacing="0.3" dominant-baseline="central">${escHtml(teamName)}</text>`;
-                    }
-                    s += `<text x="${textX}" y="${hasNameSub ? avatarCY + 14 : avatarCY}" fill="#ececec" font-size="28" font-family="inherit" font-weight="700" dominant-baseline="central">${escHtml(cardData.displayName || cardData.username || 'Anonymous')}</text>`;
+                    s += `<text x="${textX}" y="${avatarCY}" fill="#ececec" font-size="28" font-family="inherit" font-weight="700" dominant-baseline="central">${escHtml(cardData.displayName || cardData.username || 'Anonymous')}</text>`;
                     if (rankHero) {
-                        const heroTextW = rankHero.length * 9 + 8;
+                        const heroTextW = rankHero.length * 14 + 8;
                         const pillW = heroTextW + 16;
-                        const pillH = 26;
+                        const pillH = 36;
                         const pillX = cardW - 30 - pillW;
                         const pillCY = rankSub ? avatarCY - 6 : avatarCY;
                         const pillY = pillCY - pillH / 2;
                         s += `<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillH / 2}" fill="#E8692D"/>`;
-                        s += `<text x="${pillX + pillW / 2}" y="${pillCY}" fill="#ffffff" font-size="14" font-family="inherit" font-weight="700" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankHero)}</text>`;
+                        s += `<text x="${pillX + pillW / 2}" y="${pillCY}" fill="#ffffff" font-size="22" font-family="inherit" font-weight="700" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankHero)}</text>`;
                         if (rankSub) {
-                            s += `<text x="${pillX + pillW / 2}" y="${pillY + pillH + 11}" fill="#999999" font-size="10" font-family="inherit" font-weight="600" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankSub)}</text>`;
+                            s += `<text x="${pillX + pillW / 2}" y="${pillY + pillH + 14}" fill="#999999" font-size="16" font-family="inherit" font-weight="400" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankSub)}</text>`;
                         }
                     }
 
-                    s += `<text x="30" y="${gridLabelY}" fill="#999999" font-size="18" font-family="inherit" font-weight="700" letter-spacing="2">${dateDisplay}</text>`;
-                    const legendW = 100, legendH = 14;
+                    const isToday = cardData.isToday !== false;
+                    s += `<text data-action="prev" x="16" y="${gridLabelY}" fill="#999999" font-size="22" font-family="inherit" font-weight="700" style="cursor:pointer">◀</text>`;
+                    s += `<text x="36" y="${gridLabelY}" fill="#999999" font-size="22" font-family="inherit" font-weight="700" letter-spacing="3">${dateDisplay}</text>`;
+                    s += `<text data-action="next" x="${36 + dateDisplay.length * 14 + 10}" y="${gridLabelY}" fill="#999999" font-size="22" font-family="inherit" font-weight="700" style="cursor:pointer" opacity="${isToday ? 0.3 : 1}">▶</text>`;
+                    const legendW = 80, legendH = 12;
                     const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
-                    const legendY = gridLabelY - 14;
+                    const legendY = gridLabelY - 12;
                     s += `<defs><linearGradient id="v6LegendGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgb(245,170,100)"/><stop offset="100%" stop-color="rgb(210,70,15)"/></linearGradient></defs>`;
-                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#999999" font-size="14" font-family="inherit" font-weight="600" text-anchor="end">HIGH</text>`;
-                    const highTW = 38, legendX = gridRightEdge - highTW - legendW;
-                    s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="4" ry="4" fill="url(#v6LegendGrad)"/>`;
-                    s += `<text x="${legendX - 8}" y="${legendY + legendH - 1}" fill="#999999" font-size="14" font-family="inherit" font-weight="600" text-anchor="end">LOW</text>`;
+                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#999999" font-size="16" font-family="inherit" font-weight="400" text-anchor="end">HIGH</text>`;
+                    const highTW = 46, legendX = gridRightEdge - highTW - legendW;
+                    s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="${legendH/2}" ry="${legendH/2}" fill="url(#v6LegendGrad)"/>`;
+                    s += `<text x="${legendX - 8}" y="${legendY + legendH - 1}" fill="#999999" font-size="16" font-family="inherit" font-weight="400" text-anchor="end">LOW</text>`;
 
                     for (let row = 0; row < maxRows; row++) {
                         const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 5;
@@ -951,16 +934,16 @@
                         '<rect x="2" y="3" width="20" height="18" rx="2" fill="none" stroke="#999999" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="6 9 10 13 6 17" fill="none" stroke="#999999" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="17" x2="18" y2="17" fill="none" stroke="#999999" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
                         '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="none" stroke="#999999" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
                     ];
-                    const iconSz = 14, iconGap = 4;
+                    const iconSz = 22, iconGap = 4;
 
                     for (let i = 0; i < 3; i++) {
                         const cx = 30 + colW * i + colW / 2;
-                        const textW = statsLabels[i].length * 11;
+                        const textW = statsLabels[i].length * 13;
                         const groupW = iconSz + iconGap + textW;
                         const groupX = cx - groupW / 2;
-                        s += `<svg x="${groupX}" y="${statsY + 13}" width="${iconSz}" height="${iconSz}" viewBox="0 0 24 24">${statsIcons[i]}</svg>`;
-                        s += `<text x="${groupX + iconSz + iconGap}" y="${statsY + 26}" fill="#999999" font-size="16" font-family="inherit" font-weight="700" letter-spacing="1.5" text-anchor="start">${statsLabels[i]}</text>`;
-                        s += `<text id="v6Stat${i}" x="${cx}" y="${statsY + 62}" fill="${statsColors[i]}" font-size="36" font-family="inherit" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
+                        s += `<svg x="${groupX}" y="${statsY + 12}" width="${iconSz}" height="${iconSz}" viewBox="0 0 24 24">${statsIcons[i]}</svg>`;
+                        s += `<text x="${groupX + iconSz + iconGap}" y="${statsY + 30}" fill="#999999" font-size="20" font-family="inherit" font-weight="700" letter-spacing="1.6" text-anchor="start">${statsLabels[i]}</text>`;
+                        s += `<text id="v6Stat${i}" x="${cx}" y="${statsY + 74}" fill="${statsColors[i]}" font-size="36" font-family="inherit" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
                         if (i < 2) {
                             const divX = 30 + colW * (i + 1);
                             s += `<line x1="${divX}" y1="${statsY + 8}" x2="${divX}" y2="${statsY + statsHeight - 8}" stroke="#333333" stroke-width="1"/>`;
@@ -968,7 +951,7 @@
                     }
 
                     s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#333333" stroke-width="1"/>`;
-                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#999999" font-size="18" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="middle">CLAUDERANK.COM</text>`;
+                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#999999" font-size="18" font-family="inherit" font-weight="700" letter-spacing="3" text-anchor="middle">CLAUDERANK.COM</text>`;
 
                     // Tooltip hitboxes
                     s += `<rect x="30" y="${gridLabelY - 16}" width="${cardW - 60}" height="${xAxisY - gridLabelY + 24}" fill="transparent" data-tooltip="Each column is one hour (local time). Each row is a concurrent agent slot. Color intensity shows activity level within that hour." style="cursor:default"/>`;
@@ -979,6 +962,14 @@
                     }
 
                     svg.innerHTML = s;
+                    if (!svg._dateNavBound) {
+                        svg._dateNavBound = true;
+                        svg.addEventListener('click', (e) => {
+                            const action = e.target.getAttribute('data-action');
+                            if (action === 'prev') document.getElementById('dayPrev').click();
+                            if (action === 'next') document.getElementById('dayNext').click();
+                        });
+                    }
                 }
 
                 async function copyCardAsImage() {
@@ -1054,12 +1045,7 @@
                     }
                     const rankHero = cardData.rankHero || '';
                     const rankSub = cardData.rankSub || '';
-                    const teamName = cardData.teamName || '';
-                    const hasNameSub = !!teamName;
-                    if (hasNameSub) {
-                        s += `<text x="${textX}" y="${avatarCY - 8}" fill="#8a8480" font-size="12" font-weight="600" letter-spacing="0.3" dominant-baseline="central">${escHtml(teamName)}</text>`;
-                    }
-                    s += `<text x="${textX}" y="${hasNameSub ? avatarCY + 14 : avatarCY}" fill="#1a1a1a" font-size="28" font-weight="700" dominant-baseline="central">${escHtml(nameDisplay)}</text>`;
+                    s += `<text x="${textX}" y="${avatarCY}" fill="#1a1a1a" font-size="28" font-weight="700" dominant-baseline="central">${escHtml(nameDisplay)}</text>`;
                     if (rankHero) {
                         const heroTextW = rankHero.length * 9 + 8;
                         const pillW = heroTextW + 16;
@@ -1070,19 +1056,19 @@
                         s += `<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillH / 2}" fill="#E8692D"/>`;
                         s += `<text x="${pillX + pillW / 2}" y="${pillCY}" fill="#ffffff" font-size="14" font-weight="700" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankHero)}</text>`;
                         if (rankSub) {
-                            s += `<text x="${pillX + pillW / 2}" y="${pillY + pillH + 11}" fill="#8a8480" font-size="10" font-weight="600" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankSub)}</text>`;
+                            s += `<text x="${pillX + pillW / 2}" y="${pillY + pillH + 11}" fill="#8a8480" font-size="10" font-weight="400" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankSub)}</text>`;
                         }
                     }
 
                     // Date (grid label area)
-                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-weight="700" letter-spacing="2">${escHtml(dateText)}</text>`;
+                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-weight="700" letter-spacing="3">${escHtml(dateText)}</text>`;
                     const legendW = 100, legendH = 14;
                     const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
                     const legendY = gridLabelY - 14;
-                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-weight="600" text-anchor="end">HIGH</text>`;
+                    s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-weight="400" text-anchor="end">HIGH</text>`;
                     const highTW = 38, legendX = gridRightEdge - highTW - legendW;
                     s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="4" ry="4" fill="url(#v5LG)"/>`;
-                    s += `<text x="${legendX - 8}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-weight="600" text-anchor="end">LOW</text>`;
+                    s += `<text x="${legendX - 8}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-weight="400" text-anchor="end">LOW</text>`;
 
                     for (let row = 0; row < maxRows; row++) {
                         const y = gridTopY + (maxRows - 1 - row) * (cellH + gap) + cellH / 2 + 5;
@@ -1136,7 +1122,7 @@
                         const groupW = iconSz + iconGap + textW;
                         const groupX = cx - groupW / 2;
                         s += `<svg x="${groupX}" y="${statsY + 13}" width="${iconSz}" height="${iconSz}" viewBox="0 0 24 24">${sIcons[i]}</svg>`;
-                        s += `<text x="${groupX + iconSz + iconGap}" y="${statsY + 26}" fill="#8a8480" font-size="16" font-weight="700" letter-spacing="1.5" text-anchor="start">${sLabels[i]}</text>`;
+                        s += `<text x="${groupX + iconSz + iconGap}" y="${statsY + 26}" fill="#8a8480" font-size="16" font-weight="700" letter-spacing="1.6" text-anchor="start">${sLabels[i]}</text>`;
                         s += `<text x="${cx}" y="${statsY + 62}" fill="${sColors[i]}" font-size="36" font-weight="700" text-anchor="middle">${sValues[i]}</text>`;
                         if (i < 2) {
                             const divX = 30 + colW * (i + 1);
@@ -1145,7 +1131,7 @@
                     }
 
                     s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
-                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="18" font-weight="600" letter-spacing="2" text-anchor="middle">CLAUDERANK.COM</text>`;
+                    s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="18" font-weight="700" letter-spacing="3" text-anchor="middle">CLAUDERANK.COM</text>`;
                     s += `</svg>`;
 
                     // SVG → canvas → clipboard (2x for retina)
@@ -1164,7 +1150,7 @@
                     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
                 }
 
-                function renderBurnClockV2(concurrencyHistogram, username, localDateStr, yesterdayConcurrency, yesterdayStr, isToday, displayName) {
+                function renderBurnClockV2(concurrencyHistogram, username, localDateStr, yesterdayConcurrency, yesterdayStr, isToday, displayName, rankData) {
                     const hourlyData = processHourlyData(concurrencyHistogram, localDateStr);
                     burnClockDayData = hourlyData;
 
@@ -1229,6 +1215,8 @@
                         isToday: isToday,
                         avatarDataUrl: cachedAvatarDataUrl,
                         peakStreak: peakStreak,
+                        rankHero: rankData ? 'Rank #' + rankData.rank : '',
+                        rankSub: rankData ? 'Top ' + formatPercentile(rankData.percentile) + '%' : '',
                     };
 
                     // Store for theme-toggle re-render
