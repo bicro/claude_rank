@@ -316,9 +316,9 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    background: var(--accent);
+    background: var(--bg);
     margin: 0 -16px;
-    padding: 4px 16px 8px;
+    padding: 14px 16px 8px;
   }
   .user-identity {
     display: flex;
@@ -335,7 +335,7 @@
     height: 30px;
     border-radius: 50%;
     flex-shrink: 0;
-    outline: 1px solid rgba(255,255,255,0.5);
+    outline: 1px solid rgba(0,0,0,0.1);
   }
   /* ── Login overlay ── */
   .login-overlay {
@@ -412,23 +412,44 @@
   .login-provider-btn svg { flex-shrink: 0; }
   .user-row .username {
     font-weight: 700;
-    font-size: 13px;
-    color: #fff;
+    font-size: 18px;
+    color: var(--text-primary);
     cursor: pointer;
     padding: 0;
   }
+  .username-sub {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary, #8a8480);
+    letter-spacing: 0.3px;
+    line-height: 1;
+  }
+  .username-sub { display: none; }
   .user-overall-rank {
     display: none;
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.4px;
-    color: var(--accent);
-    background: rgba(255,255,255,0.9);
-    padding: 2px 7px;
-    border-radius: 8px;
-    white-space: nowrap;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
     flex-shrink: 0;
+    margin-left: auto;
   }
+  .rank-hero {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: #fff;
+    background: var(--accent);
+    padding: 4px 12px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+  .rank-sub {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-secondary, #8a8480);
+    letter-spacing: 0.3px;
+  }
+  .rank-sub:empty { display: none; }
   .user-row .username:hover { opacity: 0.8; }
   /* ── User menu dropdown ── */
   .user-menu-wrapper { position: relative; }
@@ -484,14 +505,14 @@
     gap: 4px;
   }
   .date-nav-btn {
-    background: none; border: none; color: rgba(255,255,255,0.6);
+    background: none; border: none; color: var(--text-secondary);
     font-size: 11px; cursor: pointer; padding: 2px 4px;
   }
-  .date-nav-btn:hover { color: #fff; }
+  .date-nav-btn:hover { color: var(--text-primary); }
   .date-nav-btn:disabled { opacity: 0.3; cursor: default; }
   .date-label {
-    font-size: 11px; color: rgba(255,255,255,0.85); font-weight: 600;
-    letter-spacing: 1.5px; min-width: 100px; text-align: center;
+    font-size: 11px; color: var(--text-secondary); font-weight: 700;
+    letter-spacing: 1.5px; text-align: center;
   }
 
   /* ── 7. Divider ── */
@@ -589,18 +610,18 @@
     border-left: 1px solid var(--divider);
   }
   .stat-label {
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 700;
     color: var(--text-secondary);
     letter-spacing: 0.8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 3px;
+    gap: 5px;
   }
   .stat-label svg {
-    width: 9px;
-    height: 9px;
+    width: 11px;
+    height: 11px;
     flex-shrink: 0;
   }
   .stat-value {
@@ -611,7 +632,7 @@
   }
   .stat-value.accent { color: var(--accent); }
   .stat-pb {
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 600;
     color: var(--text-secondary);
     letter-spacing: 0.3px;
@@ -817,8 +838,8 @@
       <div class="user-identity" id="userIdentity">
         <img class="user-avatar" id="userAvatar" style="display:none" alt="">
         <div class="user-name-group">
+          <div class="username-sub" id="usernameSub"></div>
           <div class="username" id="username">Loading...</div>
-          <div class="user-overall-rank" id="userOverallRank"></div>
         </div>
       </div>
       <div class="user-menu" id="userMenu">
@@ -829,10 +850,9 @@
         <button class="user-menu-item danger" onclick="doLogout()">Sign Out</button>
       </div>
     </div>
-    <div class="date-nav-row">
-      <button class="date-nav-btn" id="dayPrev" title="Previous day">&#9664;</button>
-      <span class="date-label" id="dayLabel">TODAY</span>
-      <button class="date-nav-btn" id="dayNext" title="Next day" disabled>&#9654;</button>
+    <div class="user-overall-rank" id="userOverallRank">
+      <div class="rank-hero" id="rankHero"></div>
+      <div class="rank-sub" id="rankSub"></div>
     </div>
   </div>
 
@@ -841,7 +861,11 @@
 
   <!-- 8. Grid header -->
   <div class="grid-header">
-    <span class="grid-title">AGENT ACTIVITY TIMELINE</span>
+    <div class="date-nav-row">
+      <button class="date-nav-btn" id="dayPrev" title="Previous day">&#9664;</button>
+      <span class="date-label" id="dayLabel"></span>
+      <button class="date-nav-btn" id="dayNext" title="Next day" disabled>&#9654;</button>
+    </div>
     <div class="grid-legend">
       <span>LOW</span>
       <div class="legend-bar"></div>
@@ -1006,10 +1030,12 @@ async function loadDailyRanks() {
     if (overallEl) {
       const ov = dr.daily_overall;
       if (ov) {
-        overallEl.textContent = `Rank #${ov.rank} · Top ${formatPercentile(ov.percentile)}%`;
-        overallEl.style.display = 'inline-block';
+        const heroEl = document.getElementById('rankHero');
+        const subEl = document.getElementById('rankSub');
+        if (heroEl) heroEl.textContent = 'Rank #' + ov.rank;
+        if (subEl) subEl.textContent = 'Top ' + formatPercentile(ov.percentile) + '%';
+        overallEl.style.display = 'flex';
       } else {
-        overallEl.textContent = '';
         overallEl.style.display = 'none';
       }
     }
@@ -1470,6 +1496,17 @@ async function loadProfile() {
     currentTeamHash = data.team_hash || null;
     const leaveBtn = document.getElementById('leaveTeamBtn');
     if (leaveBtn) leaveBtn.style.display = currentTeamHash ? '' : 'none';
+    // Show team name under username
+    const userSubEl = document.getElementById('usernameSub');
+    if (userSubEl) {
+      if (currentTeamHash) {
+        fetch(`/api/teams/${currentTeamHash}`).then(r => r.json()).then(t => {
+          userSubEl.textContent = t.team_name || '';
+        }).catch(() => {});
+      } else {
+        userSubEl.textContent = '';
+      }
+    }
 
     const m = data.metrics || {};
     totalTokens = m.total_tokens || 0;
@@ -1874,17 +1911,22 @@ async function copyCardAsImage() {
   const avatarSrc = (avatarEl && avatarEl.style.display !== 'none' && avatarEl.src) ? avatarEl.src : null;
   const avatarDataUrl = (avatarSrc && avatarSrc.startsWith('data:')) ? avatarSrc : null;
 
-  // Overall rank text
-  const overallRankEl = document.getElementById('userOverallRank');
-  const rankText = overallRankEl ? overallRankEl.textContent : '';
+  // Overall rank text (hero number + secondary percentile)
+  const rankHeroEl = document.getElementById('rankHero');
+  const rankSubEl = document.getElementById('rankSub');
+  const rankHero = rankHeroEl ? rankHeroEl.textContent.trim() : '';
+  const rankSub = rankSubEl ? rankSubEl.textContent.trim() : '';
+  // Team name (under username)
+  const usernameSubEl = document.getElementById('usernameSub');
+  const usernameSub = usernameSubEl ? usernameSubEl.textContent.trim() : '';
 
   // Layout Y positions (text sizes scaled ~2x from widget to match 687px card width)
-  const headerBarH = 84;
+  const headerBarH = 104;
   const gridLabelY = headerBarH + 44, gridTopY = headerBarH + 66;
   const gridBottomY = gridTopY + gridHeight + 28;
   const divider2Y = gridBottomY + 12;
   const statsY = divider2Y + 20;
-  const statsHeight = 78;
+  const statsHeight = 100;
   const divider3Y = statsY + statsHeight + 12;
   const footerY = divider3Y + 30;
   const cardH = footerY + 24;
@@ -1892,11 +1934,11 @@ async function copyCardAsImage() {
   const fontStack = "'SF Mono', Menlo, Consolas, 'Liberation Mono', 'Courier New', monospace";
   let s = '';
   s += `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${cardW} ${cardH}" width="${cardW * 2}" height="${cardH * 2}" font-family="${fontStack}">`;
-  s += `<style>@font-face{font-family:'SF Mono';src:local('SF Mono Regular'),local('SFMono-Regular');font-weight:400}@font-face{font-family:'SF Mono';src:local('SF Mono Semibold'),local('SFMono-Semibold');font-weight:600}@font-face{font-family:'SF Mono';src:local('SF Mono Bold'),local('SFMono-Bold');font-weight:700}@font-face{font-family:'Menlo';src:local('Menlo Regular'),local('Menlo-Regular');font-weight:400}@font-face{font-family:'Menlo';src:local('Menlo Bold'),local('Menlo-Bold');font-weight:700}</style>`;
+  s += `<style>@font-face{font-family:'SF Mono';src:local('SF Mono Regular'),local('SFMono-Regular');font-weight:400}@font-face{font-family:'SF Mono';src:local('SF Mono Semibold'),local('SFMono-Semibold');font-weight:600}@font-face{font-family:'SF Mono';src:local('SF Mono Bold'),local('SFMono-Bold');font-weight:700}@font-face{font-family:'Menlo';src:local('Menlo Regular'),local('Menlo-Regular');font-weight:400}@font-face{font-family:'Menlo';src:local('Menlo Bold'),local('Menlo-Bold');font-weight:700}text{font-family:'SF Mono',Menlo,Consolas,'Liberation Mono','Courier New',monospace}</style>`;
 
   // Single consolidated <defs> block
   const hasAvatar = !!avatarDataUrl;
-  const avatarSize = 42;
+  const avatarSize = 60;
   const avatarX = 24, avatarCY = headerBarH / 2;
   {
     let defs = '<defs>';
@@ -1908,35 +1950,41 @@ async function copyCardAsImage() {
 
   s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
 
-  // Orange header bar
-  s += `<rect width="${cardW}" height="${headerBarH}" rx="16" ry="16" fill="#E8692D"/>`;
-  s += `<rect y="${headerBarH - 16}" width="${cardW}" height="16" fill="#E8692D"/>`;
+  // Header bar (white)
+  s += `<line x1="30" y1="${headerBarH}" x2="${cardW - 30}" y2="${headerBarH}" stroke="#e0ddd9" stroke-width="1"/>`;
 
-  // Avatar + username (white on orange)
+  // Avatar + username
   const textX = hasAvatar ? avatarX + avatarSize + 12 : 30;
   if (hasAvatar) {
     s += `<image href="${avatarDataUrl}" x="${avatarX}" y="${avatarCY - avatarSize / 2}" width="${avatarSize}" height="${avatarSize}" clip-path="url(#widgetAvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
-    s += `<circle cx="${avatarX + avatarSize / 2}" cy="${avatarCY}" r="${avatarSize / 2}" fill="none" stroke="#ffffff" stroke-opacity="0.5" stroke-width="1"/>`;
+    s += `<circle cx="${avatarX + avatarSize / 2}" cy="${avatarCY}" r="${avatarSize / 2}" fill="none" stroke="#e0ddd9" stroke-width="1"/>`;
   }
-  const nameY = rankText ? avatarCY - 8 : avatarCY;
-  s += `<text x="${textX}" y="${nameY}" fill="#ffffff" font-size="28" font-weight="700" dominant-baseline="central">${escHtml(displayText)}</text>`;
-  if (rankText) {
-    s += `<rect x="${textX}" y="${avatarCY + 6}" width="${rankText.length * 8.5 + 16}" height="20" rx="10" fill="#ffffff" fill-opacity="0.9"/>`;
-    s += `<text x="${textX + 8}" y="${avatarCY + 16}" fill="#E8692D" font-size="12" font-weight="700" letter-spacing="0.4" dominant-baseline="central">${escHtml(rankText)}</text>`;
+  s += `<text x="${textX}" y="${avatarCY}" fill="#1a1a1a" font-size="32" font-weight="700" dominant-baseline="central">${escHtml(displayText)}</text>`;
+
+  // Rank pill (orange, top right) with percentile below
+  if (rankHero) {
+    const heroTextW = rankHero.length * 14 + 8;
+    const pillW = heroTextW + 16;
+    const pillH = 36;
+    const pillX = cardW - 30 - pillW;
+    const pillCY = rankSub ? avatarCY - 6 : avatarCY;
+    const pillY = pillCY - pillH / 2;
+    s += `<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillH / 2}" fill="#E8692D"/>`;
+    s += `<text x="${pillX + pillW / 2}" y="${pillCY}" fill="#ffffff" font-size="22" font-weight="700" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankHero)}</text>`;
+    if (rankSub) {
+      s += `<text x="${pillX + pillW / 2}" y="${pillY + pillH + 14}" fill="#8a8480" font-size="16" font-weight="400" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankSub)}</text>`;
+    }
   }
 
-  // Date (top right, on orange)
-  s += `<text x="${cardW - 30}" y="${avatarCY}" fill="#ffffff" fill-opacity="0.85" font-size="20" font-weight="600" letter-spacing="2" text-anchor="end" dominant-baseline="central">${escHtml(dateText)}</text>`;
-
-  // Grid label + legend
-  s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-weight="700" letter-spacing="2">AGENT ACTIVITY TIMELINE</text>`;
-  const legendW = 100, legendH = 14;
+  // Date (grid label area — where "AGENT ACTIVITY TIMELINE" used to be)
+  s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="22" font-weight="700" letter-spacing="3">${escHtml(dateText)}</text>`;
+  const legendW = 80, legendH = 12;
   const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
-  const legendY = gridLabelY - 14;
-  s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-weight="600" text-anchor="end">HIGH</text>`;
-  const highTW = 38, legendX = gridRightEdge - highTW - legendW;
-  s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="4" ry="4" fill="url(#v5LG)"/>`;
-  s += `<text x="${legendX - 8}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-weight="600" text-anchor="end">LOW</text>`;
+  const legendY = gridLabelY - 12;
+  s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="16" font-weight="400" text-anchor="end">HIGH</text>`;
+  const highTW = 46, legendX = gridRightEdge - highTW - legendW;
+  s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="${legendH / 2}" ry="${legendH / 2}" fill="url(#v5LG)"/>`;
+  s += `<text x="${legendX - 8}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="16" font-weight="400" text-anchor="end">LOW</text>`;
 
   // Row labels
   for (let row = 0; row < maxRows; row++) {
@@ -1991,15 +2039,15 @@ async function copyCardAsImage() {
     '<rect x="2" y="3" width="20" height="18" rx="2" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="6 9 10 13 6 17" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="17" x2="18" y2="17" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
     '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
   ];
-  const iconSz = 14, iconGap = 4;
+  const iconSz = 22, iconGap = 4;
   for (let i = 0; i < 3; i++) {
     const cx = 30 + colW * i + colW / 2;
-    const textW = sLabels[i].length * 11;
+    const textW = sLabels[i].length * 13;
     const groupW = iconSz + iconGap + textW;
     const groupX = cx - groupW / 2;
-    s += `<svg x="${groupX}" y="${statsY + 13}" width="${iconSz}" height="${iconSz}" viewBox="0 0 24 24">${sIcons[i]}</svg>`;
-    s += `<text x="${groupX + iconSz + iconGap}" y="${statsY + 26}" fill="#8a8480" font-size="16" font-weight="700" letter-spacing="1.5" text-anchor="start">${sLabels[i]}</text>`;
-    s += `<text x="${cx}" y="${statsY + 62}" fill="${sColors[i]}" font-size="36" font-weight="700" text-anchor="middle">${sValues[i]}</text>`;
+    s += `<svg x="${groupX}" y="${statsY + 12}" width="${iconSz}" height="${iconSz}" viewBox="0 0 24 24">${sIcons[i]}</svg>`;
+    s += `<text x="${groupX + iconSz + iconGap}" y="${statsY + 30}" fill="#8a8480" font-size="20" font-weight="700" letter-spacing="1.6" text-anchor="start">${sLabels[i]}</text>`;
+    s += `<text x="${cx}" y="${statsY + 74}" fill="${sColors[i]}" font-size="36" font-weight="700" text-anchor="middle">${sValues[i]}</text>`;
     if (i < 2) {
       const divX = 30 + colW * (i + 1);
       s += `<line x1="${divX}" y1="${statsY + 8}" x2="${divX}" y2="${statsY + statsHeight - 8}" stroke="#c8c0b8" stroke-width="1"/>`;
@@ -2008,7 +2056,7 @@ async function copyCardAsImage() {
 
   // Divider 3 + footer
   s += `<line x1="30" y1="${divider3Y}" x2="${cardW - 30}" y2="${divider3Y}" stroke="#c8c0b8" stroke-width="1"/>`;
-  s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="18" font-weight="600" letter-spacing="2" text-anchor="middle">CLAUDERANK.COM</text>`;
+  s += `<text x="${cardW / 2}" y="${footerY}" fill="#8a8480" font-size="18" font-weight="700" letter-spacing="3" text-anchor="middle">CLAUDERANK.COM</text>`;
   s += `</svg>`;
 
   // SVG → canvas → clipboard

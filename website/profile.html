@@ -289,6 +289,15 @@
                     if (img && cachedAvatarDataUrl) img.src = cachedAvatarDataUrl;
                 }
 
+                // Load team name for card subtitles
+                let cachedTeamName = '';
+                if (profile.team_hash) {
+                    try {
+                        const t = await fetch(`/api/teams/${profile.team_hash}`).then(r => r.json());
+                        cachedTeamName = t.team_name || '';
+                    } catch (e) {}
+                }
+
                 // Animate stat values from 0 to target
                 requestAnimationFrame(() => {
                     container.querySelectorAll('[data-raw]').forEach(el => {
@@ -414,7 +423,7 @@
                             if (overallEl) {
                                 const ov = dr.daily_overall;
                                 if (ov) {
-                                    overallEl.textContent = `Rank #${ov.rank} · Top ${formatPercentile(ov.percentile)}%`;
+                                    overallEl.textContent = `#${ov.rank} · Top ${formatPercentile(ov.percentile)}%`;
                                     overallEl.style.display = 'inline-flex';
                                 } else {
                                     overallEl.textContent = '';
@@ -424,7 +433,8 @@
                             // Store rank for shareable and re-render card to show pill
                             if (window._burnClockRenderArgs) {
                                 const ov = dr.daily_overall;
-                                window._burnClockRenderArgs.cardData.rankText = ov ? `Rank #${ov.rank} · Top ${formatPercentile(ov.percentile)}%` : '';
+                                window._burnClockRenderArgs.cardData.rankHero = ov ? 'Rank #' + ov.rank : '';
+                                window._burnClockRenderArgs.cardData.rankSub = ov ? 'Top ' + formatPercentile(ov.percentile) + '%' : '';
                                 const svgMain = document.getElementById('burnClockDailyMain');
                                 if (svgMain) {
                                     const { cardHourlyData, sessions, cardData } = window._burnClockRenderArgs;
@@ -704,11 +714,10 @@
                     let s = '';
                     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
 
-                    // Orange header bar
-                    s += `<rect width="${cardW}" height="${headerBarH}" rx="16" ry="16" fill="#E8692D"/>`;
-                    s += `<rect y="${headerBarH - 16}" width="${cardW}" height="16" fill="#E8692D"/>`;
+                    // Header bar (white)
+                    s += `<line x1="30" y1="${headerBarH}" x2="${cardW - 30}" y2="${headerBarH}" stroke="#e0ddd9" stroke-width="1"/>`;
 
-                    // Avatar + username (white on orange)
+                    // Avatar + username
                     const hasAvatar = !!cardData.avatarDataUrl;
                     const avatarSize = 42;
                     const avatarX = 24, avatarCY = headerBarH / 2;
@@ -716,21 +725,32 @@
                     if (hasAvatar) {
                         s += `<defs><clipPath id="v5AvatarClip"><circle cx="${avatarX + avatarSize / 2}" cy="${avatarCY}" r="${avatarSize / 2}"/></clipPath></defs>`;
                         s += `<image href="${cardData.avatarDataUrl}" x="${avatarX}" y="${avatarCY - avatarSize / 2}" width="${avatarSize}" height="${avatarSize}" clip-path="url(#v5AvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
-                        s += `<circle cx="${avatarX + avatarSize / 2}" cy="${avatarCY}" r="${avatarSize / 2}" fill="none" stroke="#ffffff" stroke-opacity="0.5" stroke-width="1"/>`;
+                        s += `<circle cx="${avatarX + avatarSize / 2}" cy="${avatarCY}" r="${avatarSize / 2}" fill="none" stroke="#e0ddd9" stroke-width="1"/>`;
                     }
-                    const rankText = cardData.rankText || '';
-                    const nameY = rankText ? avatarCY - 8 : avatarCY;
-                    s += `<text x="${textX}" y="${nameY}" fill="#ffffff" font-size="28" font-family="inherit" font-weight="700" dominant-baseline="central">${escHtml(cardData.displayName || cardData.username || 'Anonymous')}</text>`;
-                    if (rankText) {
-                        s += `<rect x="${textX}" y="${avatarCY + 6}" width="${rankText.length * 8.5 + 16}" height="20" rx="10" fill="#ffffff" fill-opacity="0.9"/>`;
-                        s += `<text x="${textX + 8}" y="${avatarCY + 16}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="700" letter-spacing="0.4" dominant-baseline="central">${escHtml(rankText)}</text>`;
+                    const rankHero = cardData.rankHero || '';
+                    const rankSub = cardData.rankSub || '';
+                    const teamName = cardData.teamName || '';
+                    const hasNameSub = !!teamName;
+                    if (hasNameSub) {
+                        s += `<text x="${textX}" y="${avatarCY - 8}" fill="#8a8480" font-size="12" font-family="inherit" font-weight="600" letter-spacing="0.3" dominant-baseline="central">${escHtml(teamName)}</text>`;
+                    }
+                    s += `<text x="${textX}" y="${hasNameSub ? avatarCY + 14 : avatarCY}" fill="#1a1a1a" font-size="28" font-family="inherit" font-weight="700" dominant-baseline="central">${escHtml(cardData.displayName || cardData.username || 'Anonymous')}</text>`;
+                    if (rankHero) {
+                        const heroTextW = rankHero.length * 9 + 8;
+                        const pillW = heroTextW + 16;
+                        const pillH = 26;
+                        const pillX = cardW - 30 - pillW;
+                        const pillCY = rankSub ? avatarCY - 6 : avatarCY;
+                        const pillY = pillCY - pillH / 2;
+                        s += `<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillH / 2}" fill="#E8692D"/>`;
+                        s += `<text x="${pillX + pillW / 2}" y="${pillCY}" fill="#ffffff" font-size="14" font-family="inherit" font-weight="700" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankHero)}</text>`;
+                        if (rankSub) {
+                            s += `<text x="${pillX + pillW / 2}" y="${pillY + pillH + 11}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankSub)}</text>`;
+                        }
                     }
 
-                    // Date (top right, on orange)
-                    s += `<text class="card-date-text" x="${cardW - 30}" y="${avatarCY}" fill="#ffffff" fill-opacity="0.85" font-size="20" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="end" dominant-baseline="central">${dateDisplay}</text>`;
-
-                    // Grid label + legend
-                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-family="inherit" font-weight="700" letter-spacing="2">AGENT ACTIVITY TIMELINE</text>`;
+                    // Date (grid label area)
+                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-family="inherit" font-weight="700" letter-spacing="2">${dateDisplay}</text>`;
                     const legendW = 100, legendH = 14;
                     const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
                     const legendY = gridLabelY - 14;
@@ -847,11 +867,10 @@
                     let s = '';
                     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#111111"/>`;
 
-                    // Orange header bar
-                    s += `<rect width="${cardW}" height="${headerBarH}" rx="16" ry="16" fill="#E8692D"/>`;
-                    s += `<rect y="${headerBarH - 16}" width="${cardW}" height="16" fill="#E8692D"/>`;
+                    // Header bar (dark)
+                    s += `<line x1="30" y1="${headerBarH}" x2="${cardW - 30}" y2="${headerBarH}" stroke="#333333" stroke-width="1"/>`;
 
-                    // Avatar + username (white on orange)
+                    // Avatar + username
                     const hasAvatar = !!cardData.avatarDataUrl;
                     const avatarSize = 42;
                     const avatarX = 24, avatarCY = headerBarH / 2;
@@ -859,19 +878,31 @@
                     if (hasAvatar) {
                         s += `<defs><clipPath id="v6AvatarClip"><circle cx="${avatarX + avatarSize / 2}" cy="${avatarCY}" r="${avatarSize / 2}"/></clipPath></defs>`;
                         s += `<image href="${cardData.avatarDataUrl}" x="${avatarX}" y="${avatarCY - avatarSize / 2}" width="${avatarSize}" height="${avatarSize}" clip-path="url(#v6AvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
-                        s += `<circle cx="${avatarX + avatarSize / 2}" cy="${avatarCY}" r="${avatarSize / 2}" fill="none" stroke="#ffffff" stroke-opacity="0.5" stroke-width="1"/>`;
+                        s += `<circle cx="${avatarX + avatarSize / 2}" cy="${avatarCY}" r="${avatarSize / 2}" fill="none" stroke="#333333" stroke-width="1"/>`;
                     }
-                    const rankText = cardData.rankText || '';
-                    const nameY = rankText ? avatarCY - 8 : avatarCY;
-                    s += `<text x="${textX}" y="${nameY}" fill="#ffffff" font-size="28" font-family="inherit" font-weight="700" dominant-baseline="central">${escHtml(cardData.displayName || cardData.username || 'Anonymous')}</text>`;
-                    if (rankText) {
-                        s += `<rect x="${textX}" y="${avatarCY + 6}" width="${rankText.length * 8.5 + 16}" height="20" rx="10" fill="#ffffff" fill-opacity="0.9"/>`;
-                        s += `<text x="${textX + 8}" y="${avatarCY + 16}" fill="#E8692D" font-size="12" font-family="inherit" font-weight="700" letter-spacing="0.4" dominant-baseline="central">${escHtml(rankText)}</text>`;
+                    const rankHero = cardData.rankHero || '';
+                    const rankSub = cardData.rankSub || '';
+                    const teamName = cardData.teamName || '';
+                    const hasNameSub = !!teamName;
+                    if (hasNameSub) {
+                        s += `<text x="${textX}" y="${avatarCY - 8}" fill="#999999" font-size="12" font-family="inherit" font-weight="600" letter-spacing="0.3" dominant-baseline="central">${escHtml(teamName)}</text>`;
+                    }
+                    s += `<text x="${textX}" y="${hasNameSub ? avatarCY + 14 : avatarCY}" fill="#ececec" font-size="28" font-family="inherit" font-weight="700" dominant-baseline="central">${escHtml(cardData.displayName || cardData.username || 'Anonymous')}</text>`;
+                    if (rankHero) {
+                        const heroTextW = rankHero.length * 9 + 8;
+                        const pillW = heroTextW + 16;
+                        const pillH = 26;
+                        const pillX = cardW - 30 - pillW;
+                        const pillCY = rankSub ? avatarCY - 6 : avatarCY;
+                        const pillY = pillCY - pillH / 2;
+                        s += `<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillH / 2}" fill="#E8692D"/>`;
+                        s += `<text x="${pillX + pillW / 2}" y="${pillCY}" fill="#ffffff" font-size="14" font-family="inherit" font-weight="700" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankHero)}</text>`;
+                        if (rankSub) {
+                            s += `<text x="${pillX + pillW / 2}" y="${pillY + pillH + 11}" fill="#999999" font-size="10" font-family="inherit" font-weight="600" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankSub)}</text>`;
+                        }
                     }
 
-                    s += `<text class="card-date-text" x="${cardW - 30}" y="${avatarCY}" fill="#ffffff" fill-opacity="0.85" font-size="20" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="end" dominant-baseline="central">${dateDisplay}</text>`;
-
-                    s += `<text x="30" y="${gridLabelY}" fill="#999999" font-size="18" font-family="inherit" font-weight="700" letter-spacing="2">AGENT ACTIVITY TIMELINE</text>`;
+                    s += `<text x="30" y="${gridLabelY}" fill="#999999" font-size="18" font-family="inherit" font-weight="700" letter-spacing="2">${dateDisplay}</text>`;
                     const legendW = 100, legendH = 14;
                     const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
                     const legendY = gridLabelY - 14;
@@ -997,9 +1028,8 @@
                     s += `<style>@font-face{font-family:'SF Mono';src:local('SF Mono Regular'),local('SFMono-Regular');font-weight:400}@font-face{font-family:'SF Mono';src:local('SF Mono Semibold'),local('SFMono-Semibold');font-weight:600}@font-face{font-family:'SF Mono';src:local('SF Mono Bold'),local('SFMono-Bold');font-weight:700}@font-face{font-family:'Menlo';src:local('Menlo Regular'),local('Menlo-Regular');font-weight:400}@font-face{font-family:'Menlo';src:local('Menlo Bold'),local('Menlo-Bold');font-weight:700}</style>`;
                     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
 
-                    // Orange header bar
-                    s += `<rect width="${cardW}" height="${headerBarH}" rx="16" ry="16" fill="#E8692D"/>`;
-                    s += `<rect y="${headerBarH - 16}" width="${cardW}" height="16" fill="#E8692D"/>`;
+                    // Header bar (white)
+                    s += `<line x1="30" y1="${headerBarH}" x2="${cardW - 30}" y2="${headerBarH}" stroke="#e0ddd9" stroke-width="1"/>`;
 
                     // Avatar + username (prefer cardData cache, fallback to DOM element)
                     let avatarDataUrl = cardData.avatarDataUrl;
@@ -1020,19 +1050,32 @@
                     const textX = hasAvatar ? avatarX + avatarSize + 12 : 30;
                     if (hasAvatar) {
                         s += `<image href="${avatarDataUrl}" x="${avatarX}" y="${avatarCY - avatarSize / 2}" width="${avatarSize}" height="${avatarSize}" clip-path="url(#copyAvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
-                        s += `<circle cx="${avatarX + avatarSize / 2}" cy="${avatarCY}" r="${avatarSize / 2}" fill="none" stroke="#ffffff" stroke-opacity="0.5" stroke-width="1"/>`;
+                        s += `<circle cx="${avatarX + avatarSize / 2}" cy="${avatarCY}" r="${avatarSize / 2}" fill="none" stroke="#e0ddd9" stroke-width="1"/>`;
                     }
-                    const rankText = cardData.rankText || '';
-                    const nameY = rankText ? avatarCY - 8 : avatarCY;
-                    s += `<text x="${textX}" y="${nameY}" fill="#ffffff" font-size="28" font-weight="700" dominant-baseline="central">${escHtml(nameDisplay)}</text>`;
-                    if (rankText) {
-                        s += `<rect x="${textX}" y="${avatarCY + 6}" width="${rankText.length * 8.5 + 16}" height="20" rx="10" fill="#ffffff" fill-opacity="0.9"/>`;
-                        s += `<text x="${textX + 8}" y="${avatarCY + 16}" fill="#E8692D" font-size="12" font-weight="700" letter-spacing="0.4" dominant-baseline="central">${escHtml(rankText)}</text>`;
+                    const rankHero = cardData.rankHero || '';
+                    const rankSub = cardData.rankSub || '';
+                    const teamName = cardData.teamName || '';
+                    const hasNameSub = !!teamName;
+                    if (hasNameSub) {
+                        s += `<text x="${textX}" y="${avatarCY - 8}" fill="#8a8480" font-size="12" font-weight="600" letter-spacing="0.3" dominant-baseline="central">${escHtml(teamName)}</text>`;
                     }
-                    s += `<text x="${cardW - 30}" y="${avatarCY}" fill="#ffffff" fill-opacity="0.85" font-size="20" font-weight="600" letter-spacing="2" text-anchor="end" dominant-baseline="central">${escHtml(dateText)}</text>`;
+                    s += `<text x="${textX}" y="${hasNameSub ? avatarCY + 14 : avatarCY}" fill="#1a1a1a" font-size="28" font-weight="700" dominant-baseline="central">${escHtml(nameDisplay)}</text>`;
+                    if (rankHero) {
+                        const heroTextW = rankHero.length * 9 + 8;
+                        const pillW = heroTextW + 16;
+                        const pillH = 26;
+                        const pillX = cardW - 30 - pillW;
+                        const pillCY = rankSub ? avatarCY - 6 : avatarCY;
+                        const pillY = pillCY - pillH / 2;
+                        s += `<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillH / 2}" fill="#E8692D"/>`;
+                        s += `<text x="${pillX + pillW / 2}" y="${pillCY}" fill="#ffffff" font-size="14" font-weight="700" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankHero)}</text>`;
+                        if (rankSub) {
+                            s += `<text x="${pillX + pillW / 2}" y="${pillY + pillH + 11}" fill="#8a8480" font-size="10" font-weight="600" letter-spacing="0.3" dominant-baseline="central" text-anchor="middle">${escHtml(rankSub)}</text>`;
+                        }
+                    }
 
-                    // Grid label + legend
-                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-weight="700" letter-spacing="2">AGENT ACTIVITY TIMELINE</text>`;
+                    // Date (grid label area)
+                    s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-weight="700" letter-spacing="2">${escHtml(dateText)}</text>`;
                     const legendW = 100, legendH = 14;
                     const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
                     const legendY = gridLabelY - 14;
@@ -1176,6 +1219,7 @@
                     const cardData = {
                         username: username,
                         displayName: displayName || username,
+                        teamName: cachedTeamName,
                         localDateStr: localDateStr,
                         activeMins: cardActiveMins,
                         dayTokens: dayTokens,
