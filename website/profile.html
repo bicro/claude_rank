@@ -373,7 +373,7 @@
                         yesterdayDate.setDate(yesterdayDate.getDate() - 1);
                         const yesterdayStr = localDateISO(yesterdayDate);
                         const yesterdayConcurrency = await fetchDayConcurrency(yesterdayStr);
-                        renderBurnClockV2(dayConcurrency, profile.username, localDateStr, yesterdayConcurrency, yesterdayStr, offset === 0);
+                        renderBurnClockV2(dayConcurrency, profile.username, localDateStr, yesterdayConcurrency, yesterdayStr, offset === 0, displayName);
 
                         // Fetch rewards and render pills
                         getUserRewards(hash, localDateStr).then(rewards => {
@@ -560,18 +560,12 @@
                         }
                     }
 
-                    // X-axis labels every 3 hours
-                    const xLabels = [
-                        { hour: 0, label: '12am' }, { hour: 3, label: '3am' },
-                        { hour: 6, label: '6am' }, { hour: 9, label: '9am' },
-                        { hour: 12, label: '12pm' }, { hour: 15, label: '3pm' },
-                        { hour: 18, label: '6pm' }, { hour: 21, label: '9pm' }
-                    ];
+                    // X-axis labels (3 uppercase, matching widget/shareable style)
                     const xAxisY = marginTop + maxRows * (cellH + gap) + 12;
-                    xLabels.forEach(l => {
-                        const x = marginLeft + l.hour * (cellW + gap) + cellW / 2;
-                        svgContent += `<text x="${x}" y="${xAxisY}" text-anchor="middle" fill="${labelColor}" font-size="11" font-family="inherit">${l.label}</text>`;
-                    });
+                    const fmtHr = (h) => { const hh = ((h % 24) + 24) % 24; return hh === 0 ? '12AM' : hh < 12 ? hh + 'AM' : hh === 12 ? '12PM' : (hh - 12) + 'PM'; };
+                    svgContent += `<text x="${marginLeft}" y="${xAxisY}" fill="${labelColor}" font-size="11" font-family="inherit">${fmtHr(0)}</text>`;
+                    svgContent += `<text x="${marginLeft + 12 * (cellW + gap)}" y="${xAxisY}" fill="${labelColor}" font-size="11" font-family="inherit">${fmtHr(12)}</text>`;
+                    svgContent += `<text x="${marginLeft + 23 * (cellW + gap)}" y="${xAxisY}" fill="${labelColor}" font-size="11" font-family="inherit" text-anchor="end">${fmtHr(23)}</text>`;
 
                     // Y-axis: label the highest active concurrency row
                     if (maxSessions > 0) {
@@ -688,12 +682,10 @@
                         s += `<defs><clipPath id="v5AvatarClip"><circle cx="62" cy="${headerCenterY}" r="32"/></clipPath></defs>`;
                         s += `<image href="${cardData.avatarDataUrl}" x="30" y="${headerCenterY - 32}" width="64" height="64" clip-path="url(#v5AvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
                     }
-                    s += `<text x="${textX}" y="${headerCenterY}" fill="#1a1a1a" font-size="36" font-family="inherit" font-weight="700" dominant-baseline="central">@${escHtml(cardData.username || 'anonymous')}</text>`;
+                    s += `<text x="${textX}" y="${headerCenterY}" fill="#1a1a1a" font-size="36" font-family="inherit" font-weight="700" dominant-baseline="central">${escHtml(cardData.displayName || cardData.username || 'Anonymous')}</text>`;
 
                     // Date (hidden — HTML overlay used instead)
                     s += `<text class="card-date-text" x="${cardW - 30}" y="${headerCenterY}" fill="#8a8480" font-size="22" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="end" dominant-baseline="central" opacity="0">${dateDisplay}</text>`;
-
-                    s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
 
                     // Grid label + legend
                     s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-family="inherit" font-weight="700" letter-spacing="2">AGENT ACTIVITY TIMELINE</text>`;
@@ -813,11 +805,9 @@
                         s += `<defs><clipPath id="v6AvatarClip"><circle cx="62" cy="${headerCenterY}" r="32"/></clipPath></defs>`;
                         s += `<image href="${cardData.avatarDataUrl}" x="30" y="${headerCenterY - 32}" width="64" height="64" clip-path="url(#v6AvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
                     }
-                    s += `<text x="${textX}" y="${headerCenterY}" fill="#ececec" font-size="36" font-family="inherit" font-weight="700" dominant-baseline="central">@${escHtml(cardData.username || 'anonymous')}</text>`;
+                    s += `<text x="${textX}" y="${headerCenterY}" fill="#ececec" font-size="36" font-family="inherit" font-weight="700" dominant-baseline="central">${escHtml(cardData.displayName || cardData.username || 'Anonymous')}</text>`;
 
                     s += `<text class="card-date-text" x="${cardW - 30}" y="${headerCenterY}" fill="#999999" font-size="22" font-family="inherit" font-weight="600" letter-spacing="2" text-anchor="end" dominant-baseline="central" opacity="0">${dateDisplay}</text>`;
-
-                    s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#333333" stroke-width="1"/>`;
 
                     s += `<text x="30" y="${gridLabelY}" fill="#999999" font-size="18" font-family="inherit" font-weight="700" letter-spacing="2">AGENT ACTIVITY TIMELINE</text>`;
                     const legendW = 100, legendH = 14;
@@ -915,6 +905,7 @@
                     const gridHeight = maxRows * (cellH + gap) - gap;
 
                     const username = cardData.username || 'anonymous';
+                    const nameDisplay = cardData.displayName || username;
                     const dateObj = cardData.localDateStr ? new Date(cardData.localDateStr + 'T12:00:00') : new Date();
                     const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
                     const dateText = `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
@@ -936,18 +927,20 @@
                     s += `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${cardW} ${cardH}" width="${cardW * 2}" height="${cardH * 2}" font-family="${fontStack}">`;
                     s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
 
-                    // Avatar + username
-                    const avatarDataUrl = cardData.avatarDataUrl;
+                    // Avatar + username (prefer cardData cache, fallback to DOM element)
+                    let avatarDataUrl = cardData.avatarDataUrl;
+                    if (!avatarDataUrl || !avatarDataUrl.startsWith('data:')) {
+                        const imgEl = document.getElementById('profileAvatar');
+                        if (imgEl && imgEl.src && imgEl.src.startsWith('data:')) avatarDataUrl = imgEl.src;
+                    }
                     const hasAvatar = !!(avatarDataUrl && avatarDataUrl.startsWith('data:'));
                     const textX = hasAvatar ? 108 : 30;
                     if (hasAvatar) {
                         s += `<defs><clipPath id="copyAvatarClip"><circle cx="62" cy="${headerCenterY}" r="32"/></clipPath></defs>`;
                         s += `<image href="${avatarDataUrl}" x="30" y="${headerCenterY - 32}" width="64" height="64" clip-path="url(#copyAvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
                     }
-                    s += `<text x="${textX}" y="${headerCenterY}" fill="#1a1a1a" font-size="36" font-weight="700" dominant-baseline="central">@${escHtml(username)}</text>`;
+                    s += `<text x="${textX}" y="${headerCenterY}" fill="#1a1a1a" font-size="36" font-weight="700" dominant-baseline="central">@${escHtml(nameDisplay)}</text>`;
                     s += `<text x="${cardW - 30}" y="${headerCenterY}" fill="#8a8480" font-size="22" font-weight="600" letter-spacing="2" text-anchor="end" dominant-baseline="central">${escHtml(dateText)}</text>`;
-
-                    s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
 
                     // Grid label + legend
                     s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-weight="700" letter-spacing="2">AGENT ACTIVITY TIMELINE</text>`;
@@ -1031,7 +1024,7 @@
                     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
                 }
 
-                function renderBurnClockV2(concurrencyHistogram, username, localDateStr, yesterdayConcurrency, yesterdayStr, isToday) {
+                function renderBurnClockV2(concurrencyHistogram, username, localDateStr, yesterdayConcurrency, yesterdayStr, isToday, displayName) {
                     const hourlyData = processHourlyData(concurrencyHistogram, localDateStr);
                     burnClockDayData = hourlyData;
 
@@ -1078,6 +1071,7 @@
                     }
                     const cardData = {
                         username: username,
+                        displayName: displayName || username,
                         localDateStr: localDateStr,
                         activeMins: cardActiveMins,
                         dayTokens: dayTokens,

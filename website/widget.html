@@ -1862,9 +1862,6 @@ async function copyCardAsImage() {
   // Date (top right)
   s += `<text x="${cardW - 30}" y="${headerCenterY}" fill="#8a8480" font-size="22" font-weight="600" letter-spacing="2" text-anchor="end" dominant-baseline="central">${escHtml(dateText)}</text>`;
 
-  // Divider 1
-  s += `<line x1="30" y1="${divider1Y}" x2="${cardW - 30}" y2="${divider1Y}" stroke="#c8c0b8" stroke-width="1"/>`;
-
   // Grid label + legend
   s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-weight="700" letter-spacing="2">AGENT ACTIVITY TIMELINE</text>`;
   const legendW = 100, legendH = 14;

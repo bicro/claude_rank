@@ -1349,7 +1349,8 @@ body.page-profile .burn-clock-card-bg {
     right: 0;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-end;
+    padding-right: 4.5%;
     gap: 8px;
     z-index: 2;
     pointer-events: none;
