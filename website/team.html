@@ -324,7 +324,12 @@
                                     cardsContainer.appendChild(wrapper);
                                     const hourlyData = processHourlyData(member.concurrency, todayStr);
                                     const costText = member.estimated_spend ? formatCost(member.estimated_spend) : '$0';
-                                    const cardData = { username: member.display_name || member.username || 'anonymous', dayTokens: member.daily_tokens || 0, costText, localDateStr: todayStr, avatarDataUrl: avatars[i] };
+                                    let peakStreak = 0, curStreak = 0;
+                                    for (const d of hourlyData) {
+                                        if (d.sessions.length > 0) { curStreak++; if (curStreak > peakStreak) peakStreak = curStreak; }
+                                        else curStreak = 0;
+                                    }
+                                    const cardData = { username: member.display_name || member.username || 'anonymous', dayTokens: member.daily_tokens || 0, costText, localDateStr: todayStr, avatarDataUrl: avatars[i], peakStreak };
                                     isDark ? renderShareableCardV6(svg, hourlyData, [], cardData) : renderShareableCardV5(svg, hourlyData, [], cardData);
                                 });
                                 updateBurnScrollMode();
@@ -367,6 +372,11 @@
 
                             const hourlyData = processHourlyData(member.concurrency, dateStr);
                             const costText = member.estimated_spend ? formatCost(member.estimated_spend) : '$0';
+                            let peakStreak = 0, curStreak = 0;
+                            for (const d of hourlyData) {
+                                if (d.sessions.length > 0) { curStreak++; if (curStreak > peakStreak) peakStreak = curStreak; }
+                                else curStreak = 0;
+                            }
 
                             const cardData = {
                                 username: member.display_name || member.username || 'anonymous',
@@ -374,6 +384,7 @@
                                 costText,
                                 localDateStr: dateStr,
                                 avatarDataUrl: avatars[i],
+                                peakStreak,
                             };
 
                             if (isDark) {

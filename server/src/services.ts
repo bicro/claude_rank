@@ -233,6 +233,45 @@ export async function getDailyRanksForUser(db: DbClient, userHash: string, targe
     ranks.concurrent_mins = null;
   }
 
+  // hourly_streak rank
+  const streakRows = await db.query(
+    "SELECT user_hash, peak_hourly_streak FROM metrics_history WHERE snapshot_date = ? AND peak_hourly_streak > 0"
+  ).all(targetDate) as any[];
+
+  let userStreak: number | null = null;
+  for (const row of streakRows) {
+    if (row.user_hash === userHash) {
+      userStreak = row.peak_hourly_streak;
+      break;
+    }
+  }
+
+  if (userStreak !== null && userStreak > 0) {
+    const total = streakRows.length;
+    const higher = streakRows.filter(r => r.peak_hourly_streak > userStreak!).length;
+    ranks.hourly_streak = rankEntry(higher + 1, total);
+  } else {
+    ranks.hourly_streak = null;
+  }
+
+  // daily_overall rank (weighted score from daily metrics)
+  const dailyRows = await db.query(
+    "SELECT user_hash, daily_tokens, daily_messages, daily_tool_calls FROM metrics_history WHERE snapshot_date = ? AND (daily_tokens > 0 OR daily_messages > 0 OR daily_tool_calls > 0)"
+  ).all(targetDate) as any[];
+
+  const scored = dailyRows.map(r => ({
+    user_hash: r.user_hash,
+    score: (r.daily_tokens / 1_000_000) * 0.40 + r.daily_messages * 0.27 + r.daily_tool_calls * 0.33,
+  }));
+
+  const myScore = scored.find(s => s.user_hash === userHash);
+  if (myScore && myScore.score > 0) {
+    const higher = scored.filter(s => s.score > myScore.score).length;
+    ranks.daily_overall = rankEntry(higher + 1, scored.length);
+  } else {
+    ranks.daily_overall = null;
+  }
+
   return ranks;
 }
 

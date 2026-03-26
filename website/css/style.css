@@ -603,6 +603,18 @@ a.top-entry:hover { text-decoration: none; background: var(--bg-hover); }
     flex-shrink: 0;
 }
 .profile-info h2 { font-size: 24px; margin-bottom: 4px; }
+.profile-overall-rank {
+    display: none;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: #fff;
+    background: var(--accent);
+    padding: 3px 10px;
+    border-radius: 12px;
+    vertical-align: middle;
+    margin-left: 4px;
+}
 .profile-info .meta { color: var(--text-secondary); font-size: 13px; }
 .social-link {
     display: inline-flex;
@@ -642,21 +654,25 @@ a.top-entry:hover { text-decoration: none; background: var(--bg-hover); }
     max-width: 900px;
     margin: 0 auto;
     padding: 60px 24px 32px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 12px;
 }
-.profile-section-divider span {
-    display: block;
+.profile-section-divider > span {
     font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 2px;
     color: var(--text-secondary);
-    margin-bottom: 10px;
 }
 .profile-section-divider::after {
     content: '';
     display: block;
     height: 2px;
     background: var(--border, #c8c0b8);
+    flex-basis: 100%;
+    order: 1;
 }
 .profile-stats-below {
     display: grid;
@@ -708,13 +724,28 @@ a.top-entry:hover { text-decoration: none; background: var(--bg-hover); }
 .reward-pills { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
 .reward-label {
     font-size: 10px; font-weight: 600; letter-spacing: 0.3px; line-height: 1;
+    padding: 2px 6px; border-radius: 8px;
 }
-.reward-label.personal { color: #d97706; }
-.reward-label.team     { color: #2563eb; }
-.reward-label.top1     { color: #e11d48; }
-.reward-label.top10    { color: #ea580c; }
-.reward-label.top25    { color: #9333ea; }
-.reward-label.top50    { color: #0891b2; }
+.reward-label.personal { color: #d97706; background: rgba(217,119,6,0.12); }
+.reward-label.team     { color: #2563eb; background: rgba(37,99,235,0.12); }
+.reward-label.top1     { color: #e11d48; background: rgba(225,29,72,0.12); }
+.reward-label.top10    { color: #ea580c; background: rgba(234,88,12,0.12); }
+.reward-label.top25    { color: #9333ea; background: rgba(147,51,234,0.12); }
+.reward-label.top50    { color: #0891b2; background: rgba(8,145,178,0.12); }
+
+.profile-rank-row {
+    display: flex;
+    max-width: 900px;
+    margin: 8px auto 0;
+    padding: 0 24px;
+    gap: 12px;
+}
+.profile-rank-col {
+    flex: 1;
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: center;
+}
 
 .profile-badges {
     padding: 0 24px 0;
@@ -1344,16 +1375,10 @@ body.page-profile .burn-clock-card-bg {
     position: relative;
 }
 .burn-clock-card-date-nav {
-    position: absolute;
-    left: 0;
-    right: 0;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    padding-right: 4.5%;
-    gap: 8px;
-    z-index: 2;
-    pointer-events: none;
+    gap: 6px;
+    margin-left: auto;
 }
 .burn-clock-card-date-nav .date-nav-btn,
 .burn-clock-card-date-nav .date-label {

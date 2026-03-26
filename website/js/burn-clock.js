@@ -193,12 +193,10 @@ export function renderShareableCardV5(svg, hourlyData, sessions, cardData) {
 
     s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
 
-    const estSpend = cardData.estimatedSpend || 0;
-    const spendDisplay = estSpend >= 1000 ? '$' + (estSpend / 1000).toFixed(1) + 'K' : '$' + estSpend.toFixed(2);
     const colW = (cardW - 60) / 3;
-    const statsLabels = ['CURRENT STREAK', 'CONCURRENT AGENTS', 'EST. SPEND'];
-    const hourlyStreakVal = cardData.hourlyStreak != null ? cardData.hourlyStreak : 0;
-    const statsValues = [hourlyStreakVal + 'h', maxSessions + '\u00d7', spendDisplay];
+    const statsLabels = ['TOP STREAK', 'PEAK AGENT COUNT', 'EST. BURN'];
+    const peakStreakVal = cardData.peakStreak != null ? cardData.peakStreak : 0;
+    const statsValues = [peakStreakVal + 'h', maxSessions + '\u00d7', cardData.costText || '$0'];
     const statsColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
 
     for (let i = 0; i < 3; i++) {
@@ -309,12 +307,10 @@ export function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
 
     s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#333333" stroke-width="1"/>`;
 
-    const estSpend = cardData.estimatedSpend || 0;
-    const spendDisplay = estSpend >= 1000 ? '$' + (estSpend / 1000).toFixed(1) + 'K' : '$' + estSpend.toFixed(2);
     const colW = (cardW - 60) / 3;
-    const statsLabels = ['CURRENT STREAK', 'CONCURRENT AGENTS', 'EST. SPEND'];
-    const hourlyStreakVal = cardData.hourlyStreak != null ? cardData.hourlyStreak : 0;
-    const statsValues = [hourlyStreakVal + 'h', maxSessions + '\u00d7', spendDisplay];
+    const statsLabels = ['TOP STREAK', 'PEAK AGENT COUNT', 'EST. BURN'];
+    const peakStreakVal = cardData.peakStreak != null ? cardData.peakStreak : 0;
+    const statsValues = [peakStreakVal + 'h', maxSessions + '\u00d7', cardData.costText || '$0'];
     const statsColors = ['#E8692D', '#ececec', '#ececec'];
 
     for (let i = 0; i < 3; i++) {

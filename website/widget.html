@@ -48,7 +48,7 @@
     align-items: center;
     justify-content: center;
     background: var(--accent);
-    margin: -16px -16px 8px -16px;
+    margin: -16px -16px 0 -16px;
     padding: 6px 16px;
     border-radius: 16px 16px 0 0;
   }
@@ -316,17 +316,26 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    background: var(--accent);
+    margin: 0 -16px;
+    padding: 4px 16px 8px;
   }
   .user-identity {
     display: flex;
     align-items: center;
     gap: 8px;
   }
+  .user-name-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
   .user-avatar {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
     flex-shrink: 0;
+    outline: 1px solid rgba(255,255,255,0.5);
   }
   /* ── Login overlay ── */
   .login-overlay {
@@ -403,12 +412,24 @@
   .login-provider-btn svg { flex-shrink: 0; }
   .user-row .username {
     font-weight: 700;
-    font-size: 18px;
-    color: var(--text-primary);
+    font-size: 13px;
+    color: #fff;
     cursor: pointer;
-    padding: 1px 0;
+    padding: 0;
   }
-  .user-row .username:hover { opacity: 0.7; }
+  .user-overall-rank {
+    display: none;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: var(--accent);
+    background: rgba(255,255,255,0.9);
+    padding: 2px 7px;
+    border-radius: 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .user-row .username:hover { opacity: 0.8; }
   /* ── User menu dropdown ── */
   .user-menu-wrapper { position: relative; }
   .user-menu {
@@ -445,14 +466,14 @@
   .user-menu-item.danger { color: #ef4444; }
   .user-menu-item.danger:hover { background: rgba(239,68,68,0.08); }
   .display-name-input {
-    font-size: 18px;
+    font-size: 13px;
     font-weight: 700;
     font-family: inherit;
-    background: #fff;
+    background: rgba(255,255,255,0.9);
     color: var(--text-primary);
-    border: 1.5px solid var(--accent);
+    border: none;
     border-radius: 6px;
-    padding: 1px 6px;
+    padding: 2px 6px;
     outline: none;
     width: 100%;
   }
@@ -463,13 +484,13 @@
     gap: 4px;
   }
   .date-nav-btn {
-    background: none; border: none; color: var(--text-secondary);
+    background: none; border: none; color: rgba(255,255,255,0.6);
     font-size: 11px; cursor: pointer; padding: 2px 4px;
   }
-  .date-nav-btn:hover { color: var(--text-primary); }
+  .date-nav-btn:hover { color: #fff; }
   .date-nav-btn:disabled { opacity: 0.3; cursor: default; }
   .date-label {
-    font-size: 11px; color: var(--text-secondary); font-weight: 600;
+    font-size: 11px; color: rgba(255,255,255,0.85); font-weight: 600;
     letter-spacing: 1.5px; min-width: 100px; text-align: center;
   }
 
@@ -572,6 +593,15 @@
     font-weight: 700;
     color: var(--text-secondary);
     letter-spacing: 0.8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+  }
+  .stat-label svg {
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
   }
   .stat-value {
     font-size: 18px;
@@ -580,6 +610,12 @@
     color: var(--text-primary);
   }
   .stat-value.accent { color: var(--accent); }
+  .stat-pb {
+    font-size: 7px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.3px;
+  }
 
   /* ── 14. Footer ── */
   .footer-row {
@@ -636,24 +672,18 @@
     justify-content: center;
     gap: 1px;
   }
-  .stat-rewards {
+  .rank-row {
     display: flex;
-    gap: 4px;
-    flex-shrink: 0;
-    min-height: 0;
+    align-items: center;
+    text-align: center;
+    padding: 0 0 4px;
   }
-  .reward-label {
-    font-size: 9px;
-    font-weight: 600;
+  .rank-row .rank-col {
+    flex: 1;
+    font-size: 8px;
+    color: var(--text-secondary);
     letter-spacing: 0.3px;
-    line-height: 1;
   }
-  .reward-label.personal { color: #fbbf24; }
-  .reward-label.team     { color: #60a5fa; }
-  .reward-label.top1     { color: #f43f5e; }
-  .reward-label.top10    { color: #f97316; }
-  .reward-label.top25    { color: #a855f7; }
-  .reward-label.top50    { color: #22d3ee; }
 
   .reward-toast {
     position: fixed;
@@ -786,7 +816,10 @@
     <div class="user-menu-wrapper">
       <div class="user-identity" id="userIdentity">
         <img class="user-avatar" id="userAvatar" style="display:none" alt="">
-        <div class="username" id="username">Loading...</div>
+        <div class="user-name-group">
+          <div class="username" id="username">Loading...</div>
+          <div class="user-overall-rank" id="userOverallRank"></div>
+        </div>
       </div>
       <div class="user-menu" id="userMenu">
         <button class="user-menu-item" id="editDisplayNameBtn">Edit Display Name</button>
@@ -829,25 +862,25 @@
   <div class="stats-section">
     <div class="stats-row">
       <div class="stat-col">
-        <div class="stat-label">CURRENT STREAK</div>
+        <div class="stat-label"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1C9.2 6.4 5 10.5 5 15a7 7 0 0 0 14 0c0-4.5-4.2-8.6-7-14zm0 19a3 3 0 0 1-3-3c0-2 1.5-3.5 3-5.5 1.5 2 3 3.5 3 5.5a3 3 0 0 1-3 3z"/></svg> TOP STREAK</div>
         <div class="stat-value-row">
           <span class="stat-value accent" id="statHourlyStreak">0h</span>
-          <span class="stat-rewards" id="rewardHourlyStreak"></span>
         </div>
+        <div class="stat-pb" id="pbStreak"></div>
       </div>
       <div class="stat-col">
-        <div class="stat-label">CONCURRENT AGENTS</div>
+        <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><polyline points="6 9 10 13 6 17"/><line x1="12" y1="17" x2="18" y2="17"/></svg> MAX AGENTS</div>
         <div class="stat-value-row">
           <span class="stat-value" id="statPeakAgents">0&times;</span>
-          <span class="stat-rewards" id="rewardPeakAgents"></span>
         </div>
+        <div class="stat-pb" id="pbAgents"></div>
       </div>
       <div class="stat-col">
-        <div class="stat-label">EST. SPEND</div>
+        <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> EST. BURN</div>
         <div class="stat-value-row">
           <span class="stat-value" id="statEstSpend">$0</span>
-          <span class="stat-rewards" id="rewardEstSpend"></span>
         </div>
+        <div class="stat-pb" id="pbSpend"></div>
       </div>
     </div>
   </div>
@@ -878,7 +911,7 @@
 </div>
 
 <script type="module">
-import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, getUserRewards, setDisplayName, formatNumber, formatCost, animateValue } from './js/api.js?v=3';
+import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, getUserRewards, getUserDailyRanks, formatPercentile, setDisplayName, formatNumber, formatCost, animateValue } from './js/api.js?v=3';
 import { getCachedAvatar, clearCachedAvatar } from './js/avatar.js';
 
 const ALLOWED_PARENT_ORIGINS = [
@@ -925,6 +958,8 @@ let previousPeakAgents = 0;
 let previousHourlyStreak = 0;
 let currentHourlyStreak = 0;
 let currentEstSpend = 0;
+let currentPeakStreak = 0;
+let currentDailyCost = '$0';
 let rewardsData = null;
 let toastQueue = [];
 let toastActive = false;
@@ -933,62 +968,53 @@ let toastActive = false;
 async function loadRewards() {
   try {
     rewardsData = await getUserRewards(userHash, lastLocalDateStr);
-    renderRewards();
+    renderPersonalBests();
   } catch (e) {
     console.error('Failed to load rewards:', e);
   }
 }
 
-function renderRewards() {
-  if (!rewardsData) return;
-  const metrics = [
-    { key: 'peak_concurrency', el: 'rewardPeakAgents', label: 'Peak concurrency' },
-    { key: 'hourly_streak', el: 'rewardHourlyStreak', label: 'Hourly streak' },
-    { key: 'daily_spend', el: 'rewardEstSpend', label: 'Est. spend' },
+function renderPersonalBests() {
+  if (!rewardsData?.personal_bests) return;
+  const pb = rewardsData.personal_bests;
+  const mapping = [
+    { key: 'hourly_streak', el: 'pbStreak', fmt: v => v + 'h' },
+    { key: 'peak_concurrency', el: 'pbAgents', fmt: v => v + '\u00d7' },
+    { key: 'daily_spend', el: 'pbSpend', fmt: v => formatCost(v) },
   ];
+  for (const m of mapping) {
+    const el = document.getElementById(m.el);
+    if (!el) continue;
+    const data = pb[m.key];
+    if (data) {
+      const best = Math.max(data.best ?? 0, data.today ?? 0);
+      el.textContent = best > 0 ? `PR: ${m.fmt(best)}` : '';
+    } else {
+      el.textContent = '';
+    }
+  }
+}
 
-  for (const m of metrics) {
-    const container = document.getElementById(m.el);
-    if (!container) continue;
-    container.innerHTML = '';
 
-    const pb = rewardsData.personal_bests?.[m.key];
-    const tr = rewardsData.team_ranks?.[m.key];
-    const gt = rewardsData.global_tiers?.[m.key];
-
-    // Personal record label
-    if (pb?.is_new_record) {
-      const lbl = document.createElement('span');
-      lbl.className = 'reward-label personal';
-      lbl.textContent = pb.best === 0 ? 'First Record!' : 'New PB!';
-      container.appendChild(lbl);
-      fireToast(m.label, pb.today, pb.best === 0);
-    } else if (m.key === 'hourly_streak' && pb) {
-      const best = Math.max(pb.best ?? 0, pb.today ?? 0);
-      if (best > 0) {
-        const lbl = document.createElement('span');
-        lbl.className = 'reward-label personal';
-        lbl.textContent = `PB: ${best}h`;
-        container.appendChild(lbl);
+// ── Daily Ranks ──
+async function loadDailyRanks() {
+  try {
+    const resp = await getUserDailyRanks(userHash, lastLocalDateStr);
+    const dr = resp.ranks || {};
+    // Overall rank pill under username
+    const overallEl = document.getElementById('userOverallRank');
+    if (overallEl) {
+      const ov = dr.daily_overall;
+      if (ov) {
+        overallEl.textContent = `Rank #${ov.rank} · Top ${formatPercentile(ov.percentile)}%`;
+        overallEl.style.display = 'inline-block';
+      } else {
+        overallEl.textContent = '';
+        overallEl.style.display = 'none';
       }
     }
-
-    // Team #1 label
-    if (tr?.rank === 1 && tr.total > 1) {
-      const lbl = document.createElement('span');
-      lbl.className = 'reward-label team';
-      lbl.textContent = 'Team #1';
-      container.appendChild(lbl);
-    }
-
-    // Global tier label
-    if (gt?.tier) {
-      const lbl = document.createElement('span');
-      lbl.className = `reward-label ${gt.tier}`;
-      const tierText = { top1: 'Top 1%', top10: 'Top 10%', top25: 'Top 25%', top50: 'Top 50%' };
-      lbl.textContent = tierText[gt.tier] || `Top ${gt.percentile.toFixed(0)}%`;
-      container.appendChild(lbl);
-    }
+  } catch (e) {
+    console.error('Failed to load daily ranks:', e);
   }
 }
 
@@ -1272,10 +1298,18 @@ function updateStats(hourlyData) {
   animateValue(document.getElementById('statPeakAgents'), previousPeakAgents, maxSessions, v => v + '\u00d7');
   previousPeakAgents = maxSessions;
 
-  animateValue(document.getElementById('statHourlyStreak'), previousHourlyStreak, currentHourlyStreak, v => v + 'h');
-  previousHourlyStreak = currentHourlyStreak;
+  // Compute peak consecutive active hours
+  let peakStreak = 0, curStreak = 0;
+  for (const d of hourlyData) {
+    if (d.sessions.length > 0) { curStreak++; if (curStreak > peakStreak) peakStreak = curStreak; }
+    else curStreak = 0;
+  }
+  currentPeakStreak = peakStreak;
 
-  document.getElementById('statEstSpend').textContent = formatCost(currentEstSpend);
+  animateValue(document.getElementById('statHourlyStreak'), previousHourlyStreak, currentPeakStreak, v => v + 'h');
+  previousHourlyStreak = currentPeakStreak;
+
+  document.getElementById('statEstSpend').textContent = currentDailyCost;
 }
 
 // ── Date formatting (V5: "MAR 15, 2026") ──
@@ -1351,7 +1385,6 @@ async function loadDayByIndex(index) {
     const hourlyData = processHourlyData(lastMergedHistograms, localDateStr);
     lastHourlyData = hourlyData;
     renderHeatmap(document.getElementById('heatmapSvg'), hourlyData, localDateStr === localDateISO(new Date()));
-    updateStats(hourlyData);
 
     // Compute accurate token total from per-hour concurrency data (timezone-correct)
     const localMidnight = new Date(localDateStr + 'T00:00:00');
@@ -1369,8 +1402,18 @@ async function loadDayByIndex(index) {
       heatmapByDate[localDateStr].tokens = hourlyTokens;
     }
 
+    // Compute daily cost
+    if (totalTokens > 0 && hourlyTokens > 0 && currentEstSpend > 0) {
+      currentDailyCost = formatCost(currentEstSpend * (hourlyTokens / totalTokens));
+    } else {
+      currentDailyCost = '$0';
+    }
+
+    updateStats(hourlyData);
+
     notifyHeight();
     loadRewards();
+    loadDailyRanks();
   } catch (e) {
     console.error('Failed to load concurrency data:', e);
   }
@@ -1823,8 +1866,7 @@ async function copyCardAsImage() {
   const gridHeight = maxRows * (cellH + gap) - gap;
 
   // Get display data from DOM
-  const usernameRaw = document.getElementById('username').childNodes[0].textContent.replace('@', '').trim();
-  const username = usernameRaw || 'anonymous';
+  const displayText = document.getElementById('username').textContent.trim() || 'anonymous';
   const dateText = document.getElementById('dayLabel').textContent;
 
   // Get avatar data URL from the DOM img element
@@ -1832,42 +1874,65 @@ async function copyCardAsImage() {
   const avatarSrc = (avatarEl && avatarEl.style.display !== 'none' && avatarEl.src) ? avatarEl.src : null;
   const avatarDataUrl = (avatarSrc && avatarSrc.startsWith('data:')) ? avatarSrc : null;
 
+  // Overall rank text
+  const overallRankEl = document.getElementById('userOverallRank');
+  const rankText = overallRankEl ? overallRankEl.textContent : '';
+
   // Layout Y positions (text sizes scaled ~2x from widget to match 687px card width)
-  const topY = 40, usernameY = 76;
-  const divider1Y = 96;
-  const gridLabelY = 126, gridTopY = 148;
+  const headerBarH = 84;
+  const gridLabelY = headerBarH + 44, gridTopY = headerBarH + 66;
   const gridBottomY = gridTopY + gridHeight + 28;
   const divider2Y = gridBottomY + 12;
   const statsY = divider2Y + 20;
-  const statsHeight = 96;
+  const statsHeight = 78;
   const divider3Y = statsY + statsHeight + 12;
   const footerY = divider3Y + 30;
   const cardH = footerY + 24;
 
-  const fontStack = "SF Mono, Menlo, Consolas, Liberation Mono, Courier New, monospace";
+  const fontStack = "'SF Mono', Menlo, Consolas, 'Liberation Mono', 'Courier New', monospace";
   let s = '';
   s += `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${cardW} ${cardH}" width="${cardW * 2}" height="${cardH * 2}" font-family="${fontStack}">`;
+  s += `<style>@font-face{font-family:'SF Mono';src:local('SF Mono Regular'),local('SFMono-Regular');font-weight:400}@font-face{font-family:'SF Mono';src:local('SF Mono Semibold'),local('SFMono-Semibold');font-weight:600}@font-face{font-family:'SF Mono';src:local('SF Mono Bold'),local('SFMono-Bold');font-weight:700}@font-face{font-family:'Menlo';src:local('Menlo Regular'),local('Menlo-Regular');font-weight:400}@font-face{font-family:'Menlo';src:local('Menlo Bold'),local('Menlo-Bold');font-weight:700}</style>`;
+
+  // Single consolidated <defs> block
+  const hasAvatar = !!avatarDataUrl;
+  const avatarSize = 42;
+  const avatarX = 24, avatarCY = headerBarH / 2;
+  {
+    let defs = '<defs>';
+    if (hasAvatar) defs += `<clipPath id="widgetAvatarClip"><circle cx="${avatarX + avatarSize / 2}" cy="${avatarCY}" r="${avatarSize / 2}"/></clipPath>`;
+    defs += `<linearGradient id="v5LG" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgb(245,170,100)"/><stop offset="100%" stop-color="rgb(210,70,15)"/></linearGradient>`;
+    defs += '</defs>';
+    s += defs;
+  }
+
   s += `<rect width="${cardW}" height="${cardH}" rx="16" ry="16" fill="#ffffff"/>`;
 
-  // Avatar + Header + username
-  const hasAvatar = !!avatarDataUrl;
-  const textX = hasAvatar ? 108 : 30;
-  if (hasAvatar) {
-    s += `<defs><clipPath id="widgetAvatarClip"><circle cx="62" cy="52" r="32"/></clipPath></defs>`;
-    s += `<image href="${avatarDataUrl}" x="30" y="20" width="64" height="64" clip-path="url(#widgetAvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
-  }
-  const headerCenterY = hasAvatar ? 52 : 50;
-  s += `<text x="${textX}" y="${headerCenterY}" fill="#1a1a1a" font-size="36" font-weight="700" dominant-baseline="central">@${escHtml(username)}</text>`;
+  // Orange header bar
+  s += `<rect width="${cardW}" height="${headerBarH}" rx="16" ry="16" fill="#E8692D"/>`;
+  s += `<rect y="${headerBarH - 16}" width="${cardW}" height="16" fill="#E8692D"/>`;
 
-  // Date (top right)
-  s += `<text x="${cardW - 30}" y="${headerCenterY}" fill="#8a8480" font-size="22" font-weight="600" letter-spacing="2" text-anchor="end" dominant-baseline="central">${escHtml(dateText)}</text>`;
+  // Avatar + username (white on orange)
+  const textX = hasAvatar ? avatarX + avatarSize + 12 : 30;
+  if (hasAvatar) {
+    s += `<image href="${avatarDataUrl}" x="${avatarX}" y="${avatarCY - avatarSize / 2}" width="${avatarSize}" height="${avatarSize}" clip-path="url(#widgetAvatarClip)" preserveAspectRatio="xMidYMid slice"/>`;
+    s += `<circle cx="${avatarX + avatarSize / 2}" cy="${avatarCY}" r="${avatarSize / 2}" fill="none" stroke="#ffffff" stroke-opacity="0.5" stroke-width="1"/>`;
+  }
+  const nameY = rankText ? avatarCY - 8 : avatarCY;
+  s += `<text x="${textX}" y="${nameY}" fill="#ffffff" font-size="28" font-weight="700" dominant-baseline="central">${escHtml(displayText)}</text>`;
+  if (rankText) {
+    s += `<rect x="${textX}" y="${avatarCY + 6}" width="${rankText.length * 8.5 + 16}" height="20" rx="10" fill="#ffffff" fill-opacity="0.9"/>`;
+    s += `<text x="${textX + 8}" y="${avatarCY + 16}" fill="#E8692D" font-size="12" font-weight="700" letter-spacing="0.4" dominant-baseline="central">${escHtml(rankText)}</text>`;
+  }
+
+  // Date (top right, on orange)
+  s += `<text x="${cardW - 30}" y="${avatarCY}" fill="#ffffff" fill-opacity="0.85" font-size="20" font-weight="600" letter-spacing="2" text-anchor="end" dominant-baseline="central">${escHtml(dateText)}</text>`;
 
   // Grid label + legend
   s += `<text x="30" y="${gridLabelY}" fill="#8a8480" font-size="18" font-weight="700" letter-spacing="2">AGENT ACTIVITY TIMELINE</text>`;
   const legendW = 100, legendH = 14;
   const gridRightEdge = gridMarginLeft + 23 * (cellW + gap) + cellW;
   const legendY = gridLabelY - 14;
-  s += `<defs><linearGradient id="v5LG" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgb(245,170,100)"/><stop offset="100%" stop-color="rgb(210,70,15)"/></linearGradient></defs>`;
   s += `<text x="${gridRightEdge}" y="${legendY + legendH - 1}" fill="#8a8480" font-size="14" font-weight="600" text-anchor="end">HIGH</text>`;
   const highTW = 38, legendX = gridRightEdge - highTW - legendW;
   s += `<rect x="${legendX}" y="${legendY}" width="${legendW}" height="${legendH}" rx="4" ry="4" fill="url(#v5LG)"/>`;
@@ -1918,14 +1983,23 @@ async function copyCardAsImage() {
 
   // Stats row
   const colW = (cardW - 60) / 3;
-  const sLabels = ['CURRENT STREAK', 'CONCURRENT AGENTS', 'EST. SPEND'];
-  const spendDisplay = currentEstSpend >= 1000 ? '$' + (currentEstSpend / 1000).toFixed(1) + 'K' : '$' + currentEstSpend.toFixed(2);
-  const sValues = [currentHourlyStreak + 'h', maxSessions + '\u00d7', spendDisplay];
+  const sLabels = ['TOP STREAK', 'MAX AGENTS', 'EST. BURN'];
+  const sValues = [currentPeakStreak + 'h', maxSessions + '\u00d7', currentDailyCost];
   const sColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
+  const sIcons = [
+    '<path d="M12 1C9.2 6.4 5 10.5 5 15a7 7 0 0 0 14 0c0-4.5-4.2-8.6-7-14zm0 19a3 3 0 0 1-3-3c0-2 1.5-3.5 3-5.5 1.5 2 3 3.5 3 5.5a3 3 0 0 1-3 3z" fill="#8a8480"/>',
+    '<rect x="2" y="3" width="20" height="18" rx="2" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="6 9 10 13 6 17" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="17" x2="18" y2="17" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+    '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+  ];
+  const iconSz = 14, iconGap = 4;
   for (let i = 0; i < 3; i++) {
     const cx = 30 + colW * i + colW / 2;
-    s += `<text x="${cx}" y="${statsY + 26}" fill="#8a8480" font-size="16" font-weight="700" letter-spacing="1.5" text-anchor="middle">${sLabels[i]}</text>`;
-    s += `<text x="${cx}" y="${statsY + 72}" fill="${sColors[i]}" font-size="36" font-weight="700" text-anchor="middle">${sValues[i]}</text>`;
+    const textW = sLabels[i].length * 11;
+    const groupW = iconSz + iconGap + textW;
+    const groupX = cx - groupW / 2;
+    s += `<svg x="${groupX}" y="${statsY + 13}" width="${iconSz}" height="${iconSz}" viewBox="0 0 24 24">${sIcons[i]}</svg>`;
+    s += `<text x="${groupX + iconSz + iconGap}" y="${statsY + 26}" fill="#8a8480" font-size="16" font-weight="700" letter-spacing="1.5" text-anchor="start">${sLabels[i]}</text>`;
+    s += `<text x="${cx}" y="${statsY + 62}" fill="${sColors[i]}" font-size="36" font-weight="700" text-anchor="middle">${sValues[i]}</text>`;
     if (i < 2) {
       const divX = 30 + colW * (i + 1);
       s += `<line x1="${divX}" y1="${statsY + 8}" x2="${divX}" y2="${statsY + statsHeight - 8}" stroke="#c8c0b8" stroke-width="1"/>`;
