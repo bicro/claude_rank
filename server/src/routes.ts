@@ -959,14 +959,21 @@ async function handleGetDailyRanks(userHash: string, url: URL): Promise<Response
 
   const db = getDb();
 
-  let ranks: Record<string, any>;
-  if (period === "week") {
-    ranks = await getWeeklyRanksForUser(db, userHash, target);
-  } else {
-    ranks = await getDailyRanksForUser(db, userHash, target);
-  }
+  try {
+    const linkedHashes = await getLinkedHashes(db, userHash);
 
-  return json({ date: target, period, ranks });
+    let ranks: Record<string, any>;
+    if (period === "week") {
+      ranks = await getWeeklyRanksForUser(db, userHash, target);
+    } else {
+      ranks = await getDailyRanksForUser(db, userHash, target, linkedHashes);
+    }
+
+    return json({ date: target, period, ranks });
+  } catch (e) {
+    console.error('getDailyRanksForUser failed:', e);
+    return json({ date: target, period, ranks: {} });
+  }
 }
 
 async function handleGetUserRewards(userHash: string, url: URL): Promise<Response> {

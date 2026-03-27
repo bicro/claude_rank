@@ -388,6 +388,8 @@
                         // Extract best rank for card pill
                         const dr = dailyRanksResp.ranks || {};
                         const bestRankForPill = dr.daily_overall || dr.peak_concurrency || dr.daily_tokens || dr.active_mins;
+                        console.log('[rank-debug] dailyRanksResp:', JSON.stringify(dailyRanksResp));
+                        console.log('[rank-debug] bestRankForPill:', bestRankForPill);
 
                         renderBurnClockV2(dayConcurrency, profile.username, localDateStr, yesterdayConcurrency, yesterdayStr, offset === 0, displayName, bestRankForPill);
 

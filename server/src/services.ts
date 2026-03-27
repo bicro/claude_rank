@@ -144,8 +144,9 @@ export async function getUserRanksWithPercentiles(db: DbClient, userHash: string
   return result;
 }
 
-export async function getDailyRanksForUser(db: DbClient, userHash: string, targetDate: string): Promise<Record<string, any>> {
+export async function getDailyRanksForUser(db: DbClient, userHash: string, targetDate: string, linkedHashes?: string[]): Promise<Record<string, any>> {
   const ranks: Record<string, any> = {};
+  const myHashes = new Set(linkedHashes && linkedHashes.length > 0 ? linkedHashes : [userHash]);
 
   // daily_tokens rank
   const tokenRows = await db.query(
@@ -154,9 +155,8 @@ export async function getDailyRanksForUser(db: DbClient, userHash: string, targe
 
   let userTokens: number | null = null;
   for (const row of tokenRows) {
-    if (row.user_hash === userHash) {
-      userTokens = row.daily_tokens;
-      break;
+    if (myHashes.has(row.user_hash)) {
+      userTokens = (userTokens || 0) + row.daily_tokens;
     }
   }
 
@@ -206,18 +206,27 @@ export async function getDailyRanksForUser(db: DbClient, userHash: string, targe
     }
   }
 
-  const myStats = userStats[userHash];
+  let myStats = { peak: 0, active_mins: 0, concurrent_mins: 0 };
+  for (const h of myHashes) {
+    const s = userStats[h];
+    if (s) {
+      if (s.peak > myStats.peak) myStats.peak = s.peak;
+      myStats.active_mins += s.active_mins;
+      myStats.concurrent_mins += s.concurrent_mins;
+    }
+  }
+  const hasStats = myStats.peak > 0;
   const activeUsers = Object.values(userStats).filter(s => s.peak > 0);
   const totalConc = activeUsers.length;
 
-  if (myStats && myStats.peak > 0) {
+  if (hasStats) {
     const higher = activeUsers.filter(s => s.peak > myStats.peak).length;
     ranks.peak_concurrency = rankEntry(higher + 1, totalConc);
   } else {
     ranks.peak_concurrency = null;
   }
 
-  if (myStats && myStats.active_mins > 0) {
+  if (myStats.active_mins > 0) {
     const activeList = Object.values(userStats).filter(s => s.active_mins > 0);
     const higher = activeList.filter(s => s.active_mins > myStats.active_mins).length;
     ranks.active_mins = rankEntry(higher + 1, activeList.length);
@@ -225,7 +234,7 @@ export async function getDailyRanksForUser(db: DbClient, userHash: string, targe
     ranks.active_mins = null;
   }
 
-  if (myStats && myStats.concurrent_mins > 0) {
+  if (myStats.concurrent_mins > 0) {
     const concList = Object.values(userStats).filter(s => s.concurrent_mins > 0);
     const higher = concList.filter(s => s.concurrent_mins > myStats.concurrent_mins).length;
     ranks.concurrent_mins = rankEntry(higher + 1, concList.length);
@@ -240,9 +249,8 @@ export async function getDailyRanksForUser(db: DbClient, userHash: string, targe
 
   let userStreak: number | null = null;
   for (const row of streakRows) {
-    if (row.user_hash === userHash) {
-      userStreak = row.peak_hourly_streak;
-      break;
+    if (myHashes.has(row.user_hash)) {
+      userStreak = Math.max(userStreak || 0, row.peak_hourly_streak);
     }
   }
 
@@ -264,9 +272,14 @@ export async function getDailyRanksForUser(db: DbClient, userHash: string, targe
     score: (r.daily_tokens / 1_000_000) * 0.40 + r.daily_messages * 0.27 + r.daily_tool_calls * 0.33,
   }));
 
-  const myScore = scored.find(s => s.user_hash === userHash);
-  if (myScore && myScore.score > 0) {
-    const higher = scored.filter(s => s.score > myScore.score).length;
+  let myTotalScore = 0;
+  for (const s of scored) {
+    if (myHashes.has(s.user_hash)) {
+      myTotalScore += s.score;
+    }
+  }
+  if (myTotalScore > 0) {
+    const higher = scored.filter(s => s.score > myTotalScore).length;
     ranks.daily_overall = rankEntry(higher + 1, scored.length);
   } else {
     ranks.daily_overall = null;
