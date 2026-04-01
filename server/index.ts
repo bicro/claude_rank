@@ -1,6 +1,7 @@
 import { auth } from "./src/auth";
 import { migrate } from "./src/migrate";
 import { handleApiRequest } from "./src/routes";
+import { refreshSeedUsersDaily } from "./src/seed-daily";
 import { join } from "path";
 
 await migrate();
@@ -127,3 +128,11 @@ console.log(`ClaudeRank running on ${server.url}`);
 console.log(`  Website: ${server.url}`);
 console.log(`  Auth:    ${server.url}api/auth`);
 console.log(`  API:     ${server.url}api (native)`);
+
+// Refresh seed users daily — run once after 10s, then every 6 hours
+setTimeout(() => {
+  refreshSeedUsersDaily().catch((err) => console.error("[seed-daily] Error:", err));
+  setInterval(() => {
+    refreshSeedUsersDaily().catch((err) => console.error("[seed-daily] Error:", err));
+  }, 6 * 60 * 60 * 1000);
+}, 10_000);
