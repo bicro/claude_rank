@@ -149,12 +149,12 @@ jobs:
           dir /s desktop\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\ || echo "No bundle dir"
         shell: cmd
 
-      - name: Upload Windows MSI
+      - name: Upload Windows NSIS installer
         uses: actions/upload-artifact@v4
         with:
-          name: clauderank-windows-msi
-          path: desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
-          if-no-files-found: warn
+          name: clauderank-windows-nsis
+          path: desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          if-no-files-found: error
 
       - name: Upload Windows updater artifact
         uses: actions/upload-artifact@v4
@@ -163,7 +163,6 @@ jobs:
           path: |
             desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
             desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe.sig
-            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi.sig
           if-no-files-found: warn
 
   build-linux:
@@ -237,7 +236,7 @@ jobs:
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: clauderank-windows-msi
+          name: clauderank-windows-nsis
           path: ./artifacts
 
       - name: Download Linux AppImage artifact
@@ -276,7 +275,7 @@ jobs:
       - name: Rename artifacts for release
         run: |
           mv ./artifacts/*.dmg ./artifacts/ClaudeRank-macOS.dmg
-          mv ./artifacts/*.msi ./artifacts/ClaudeRank-Windows.msi
+          mv ./artifacts/*.exe ./artifacts/ClaudeRank-Windows-Setup.exe
           mv ./artifacts/*.AppImage ./artifacts/ClaudeRank-Linux.AppImage
           mv ./artifacts/*.deb ./artifacts/ClaudeRank-Linux.deb
 
@@ -345,7 +344,7 @@ jobs:
             Commit: ${{ github.sha }}
           files: |
             ./artifacts/ClaudeRank-macOS.dmg
-            ./artifacts/ClaudeRank-Windows.msi
+            ./artifacts/ClaudeRank-Windows-Setup.exe
             ./artifacts/ClaudeRank-Linux.AppImage
             ./artifacts/ClaudeRank-Linux.deb
             ./artifacts/latest.json
