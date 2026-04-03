@@ -16,6 +16,7 @@ import {
   evaluateAchievements,
 } from "./services";
 import { recomputeUserMetrics, getLinkedHashes } from "./aggregate";
+import { mergeAllDeviceHistograms } from "./concurrency";
 
 const MIN_PEAK_MINUTES = 2;
 
@@ -668,24 +669,20 @@ async function handleGetUserProfile(userHash: string, request: Request): Promise
   const pool = getPool();
   const ph = hashes.map((_, i) => `$${i + 1}`).join(", ");
   const { rows: concurrencyRows } = await pool.query(
-    `SELECT histogram FROM concurrency_histogram
+    `SELECT user_hash, snapshot_hour, histogram FROM concurrency_histogram
      WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1} AND snapshot_hour <= $${hashes.length + 2}`,
     [...hashes, todayStart, todayEnd],
   );
 
+  const mergedHistograms = mergeAllDeviceHistograms(concurrencyRows as any[]);
+
   let maxConcurrent = 0;
   let concurrentMins = 0;
-  for (const row of concurrencyRows as any[]) {
-    try {
-      const histogram = row.histogram ? JSON.parse(row.histogram) : {};
-      for (const [sessionsStr, minutes] of Object.entries(histogram)) {
-        const sessionCount = parseInt(sessionsStr, 10);
-        const mins = minutes as number;
-        if (sessionCount > maxConcurrent && (sessionCount <= 1 || mins >= MIN_PEAK_MINUTES)) maxConcurrent = sessionCount;
-        if (sessionCount > 1) concurrentMins += mins;
-      }
-    } catch {
-      continue;
+  for (const histogram of Object.values(mergedHistograms)) {
+    for (const [sessionsStr, minutes] of Object.entries(histogram)) {
+      const sessionCount = parseInt(sessionsStr, 10);
+      if (sessionCount > maxConcurrent && (sessionCount <= 1 || minutes >= MIN_PEAK_MINUTES)) maxConcurrent = sessionCount;
+      if (sessionCount > 1) concurrentMins += minutes;
     }
   }
 
@@ -1232,35 +1229,20 @@ async function handleGetConcurrency(userHash: string, url: URL): Promise<Respons
   const pool = getPool();
   const ph = hashes.map((_, i) => `$${i + 1}`).join(", ");
   const { rows } = await pool.query(
-    `SELECT snapshot_hour, histogram FROM concurrency_histogram
+    `SELECT user_hash, snapshot_hour, histogram FROM concurrency_histogram
      WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1}`,
     [...hashes, startTimeStr],
   );
 
-  // Merge histograms across devices, then extract peak per hour
-  const hourHistograms: Record<string, Record<string, number>> = {};
-  for (const row of rows as any[]) {
-    try {
-      const histogram = row.histogram ? JSON.parse(row.histogram) : {};
-      const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
-      const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
-      const hourKey = `${snapshotDate}:${hour}`;
-      if (!hourHistograms[hourKey]) hourHistograms[hourKey] = {};
-      for (const [sessionsStr, minutes] of Object.entries(histogram)) {
-        hourHistograms[hourKey][sessionsStr] = (hourHistograms[hourKey][sessionsStr] ?? 0) + (minutes as number);
-      }
-    } catch {
-      continue;
-    }
-  }
+  // Convolve histograms across devices, then extract peak per hour
+  const hourHistograms = mergeAllDeviceHistograms(rows as any[]);
 
   const perHour: Record<string, number> = {};
   for (const [hourKey, histogram] of Object.entries(hourHistograms)) {
     let peak = 0;
     for (const [sessionsStr, minutes] of Object.entries(histogram)) {
       const s = parseInt(sessionsStr, 10);
-      const mins = minutes as number;
-      if (s > peak && (s <= 1 || mins >= MIN_PEAK_MINUTES)) peak = s;
+      if (s > peak && (s <= 1 || minutes >= MIN_PEAK_MINUTES)) peak = s;
     }
     perHour[hourKey] = peak;
   }
@@ -1852,7 +1834,7 @@ async function handleSync(request: Request): Promise<Response> {
 
       const ph2 = allHashes.map((_, i) => `$${i + 1}`).join(", ");
       const { rows: histRows } = await pool.query(
-        `SELECT histogram FROM concurrency_histogram
+        `SELECT user_hash, snapshot_hour, histogram FROM concurrency_histogram
          WHERE user_hash IN (${ph2}) AND snapshot_hour >= $${allHashes.length + 1} AND snapshot_hour <= $${allHashes.length + 2}`,
         [...allHashes, dayStart, dayEnd],
       );
@@ -1861,21 +1843,9 @@ async function handleSync(request: Request): Promise<Response> {
       let totalAgentMins = 0;
       let concurrentMinsAgg = 0;
 
-      // Merge histograms per hour, then compute aggregates
-      const perHourMerged: Record<string, Record<string, number>> = {};
-      for (const row of histRows as any[]) {
-        try {
-          const histogram = row.histogram ? JSON.parse(row.histogram) : {};
-          // Use a single merged bucket per hour
-          const hourKey = "merged";
-          if (!perHourMerged[hourKey]) perHourMerged[hourKey] = {};
-          for (const [sessionsStr, minutes] of Object.entries(histogram)) {
-            perHourMerged[hourKey][sessionsStr] = (perHourMerged[hourKey][sessionsStr] ?? 0) + (minutes as number);
-          }
-        } catch { continue; }
-      }
+      // Convolve histograms across devices per hour, then compute aggregates
+      const perHourMerged = mergeAllDeviceHistograms(histRows as any[]);
 
-      // Compute from merged histograms
       for (const histogram of Object.values(perHourMerged)) {
         for (const [sessionsStr, minutes] of Object.entries(histogram)) {
           const sessionCount = parseInt(sessionsStr, 10);

@@ -1,4 +1,5 @@
 import type { DbClient } from "./db";
+import { mergeDeviceHistogramsForHour } from "./concurrency";
 
 // ─── Pricing ────────────────────────────────────────────────────────────────
 
@@ -171,50 +172,64 @@ export async function getDailyRanksForUser(db: DbClient, userHash: string, targe
     ranks.daily_spend = null;
   }
 
-  // concurrency metrics
+  // concurrency metrics — convolve histograms across linked devices per hour
   const dayStart = `${targetDate}T00:00:00`;
   const dayEnd = `${targetDate}T23:59:59`;
 
   const concRows = await db.query(
-    "SELECT user_hash, histogram FROM concurrency_histogram WHERE snapshot_hour >= ? AND snapshot_hour <= ?"
+    "SELECT user_hash, snapshot_hour, histogram FROM concurrency_histogram WHERE snapshot_hour >= ? AND snapshot_hour <= ?"
   ).all(dayStart, dayEnd) as any[];
 
-  const userStats: Record<string, { peak: number; active_mins: number; concurrent_mins: number }> = {};
+  // Build device→primary mapping so linked devices are merged
+  const allUsers = await db.query(
+    "SELECT user_hash, linked_to FROM users"
+  ).all() as any[];
+  const deviceToPrimary: Record<string, string> = {};
+  for (const u of allUsers) {
+    deviceToPrimary[u.user_hash] = u.linked_to || u.user_hash;
+  }
+
+  // Group rows by (primary_user, hour, device)
+  const byPrimaryHourDevice: Record<string, Record<string, Record<string, Record<string, number>>>> = {};
   for (const row of concRows) {
-    let histogram: Record<string, number> = {};
+    let histogram: Record<string, number>;
     try {
       histogram = row.histogram ? JSON.parse(row.histogram) : {};
     } catch {
       continue;
     }
-    const uh = row.user_hash;
-    if (!userStats[uh]) {
-      userStats[uh] = { peak: 0, active_mins: 0, concurrent_mins: 0 };
+    const primary = deviceToPrimary[row.user_hash] ?? row.user_hash;
+    const hourKey = row.snapshot_hour;
+    if (!byPrimaryHourDevice[primary]) byPrimaryHourDevice[primary] = {};
+    if (!byPrimaryHourDevice[primary][hourKey]) byPrimaryHourDevice[primary][hourKey] = {};
+    byPrimaryHourDevice[primary][hourKey][row.user_hash] = histogram;
+  }
+
+  // For each primary user, convolve per-hour device histograms and compute stats
+  const userStats: Record<string, { peak: number; active_mins: number; concurrent_mins: number }> = {};
+  for (const [primary, hourMap] of Object.entries(byPrimaryHourDevice)) {
+    if (!userStats[primary]) {
+      userStats[primary] = { peak: 0, active_mins: 0, concurrent_mins: 0 };
     }
-    for (const [sessionsStr, minutes] of Object.entries(histogram)) {
-      const sessionCount = parseInt(sessionsStr, 10);
-      const mins = minutes as number;
-      if (sessionCount > userStats[uh].peak && (sessionCount <= 1 || mins >= MIN_PEAK_MINUTES)) {
-        userStats[uh].peak = sessionCount;
-      }
-      if (sessionCount >= 1) {
-        userStats[uh].active_mins += mins;
-      }
-      if (sessionCount > 1) {
-        userStats[uh].concurrent_mins += mins;
+    for (const deviceMap of Object.values(hourMap)) {
+      const combined = mergeDeviceHistogramsForHour(Object.values(deviceMap));
+      for (const [sessionsStr, minutes] of Object.entries(combined)) {
+        const sessionCount = parseInt(sessionsStr, 10);
+        if (sessionCount > userStats[primary].peak && (sessionCount <= 1 || minutes >= MIN_PEAK_MINUTES)) {
+          userStats[primary].peak = sessionCount;
+        }
+        if (sessionCount >= 1) {
+          userStats[primary].active_mins += minutes;
+        }
+        if (sessionCount > 1) {
+          userStats[primary].concurrent_mins += minutes;
+        }
       }
     }
   }
 
-  let myStats = { peak: 0, active_mins: 0, concurrent_mins: 0 };
-  for (const h of myHashes) {
-    const s = userStats[h];
-    if (s) {
-      if (s.peak > myStats.peak) myStats.peak = s.peak;
-      myStats.active_mins += s.active_mins;
-      myStats.concurrent_mins += s.concurrent_mins;
-    }
-  }
+  const primaryHash = deviceToPrimary[userHash] ?? userHash;
+  let myStats = userStats[primaryHash] ?? { peak: 0, active_mins: 0, concurrent_mins: 0 };
   const hasStats = myStats.peak > 0;
   const activeUsers = Object.values(userStats).filter(s => s.peak > 0);
   const totalConc = activeUsers.length;
