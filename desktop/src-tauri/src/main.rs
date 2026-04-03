@@ -981,6 +981,14 @@ fn main() {
             info!("=== ClaudeRank Widget Starting ===");
 
             // Create tray menu
+            let version = app.config().version.clone().unwrap_or_default();
+            let version_item = MenuItem::with_id(
+                app,
+                "version",
+                format!("ClaudeRank v{}", version),
+                false,
+                None::<&str>,
+            )?;
             let toggle_item =
                 MenuItem::with_id(app, "toggle", "Show Widget", true, None::<&str>)?;
             let reset_item =
@@ -993,7 +1001,7 @@ fn main() {
             *state.toggle_menu_item.lock().unwrap() = Some(toggle_item.clone());
             *state.update_menu_item.lock().unwrap() = Some(update_item.clone());
 
-            let menu = Menu::with_items(app, &[&toggle_item, &reset_item, &update_item, &quit_item])?;
+            let menu = Menu::with_items(app, &[&version_item, &toggle_item, &reset_item, &update_item, &quit_item])?;
 
             let tray_png = image::load_from_memory(include_bytes!("../icons/tray-icon.png"))
                 .expect("failed to decode tray icon PNG");
