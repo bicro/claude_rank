@@ -1154,29 +1154,16 @@ async function handleGetConcurrency(userHash: string, url: URL): Promise<Respons
     const pool = getPool();
     const ph = hashes.map((_, i) => `$${i + 1}`).join(", ");
     const { rows } = await pool.query(
-      `SELECT snapshot_hour, histogram FROM concurrency_histogram
+      `SELECT user_hash, snapshot_hour, histogram FROM concurrency_histogram
        WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1} AND snapshot_hour <= $${hashes.length + 2}`,
       [...hashes, dayStart, dayEnd],
     );
 
-    // Merge histograms: sum minute counts per session-count key per hour
+    // Merge histograms across devices using convolution
+    const mergedHistograms = mergeAllDeviceHistograms(rows as any[]);
     const perHour: Record<string, any> = {};
-    for (const row of rows as any[]) {
-      try {
-        const histogram = row.histogram ? JSON.parse(row.histogram) : {};
-        const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
-        const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
-        const hourKey = `${snapshotDate}:${hour}`;
-        if (!perHour[hourKey]) {
-          perHour[hourKey] = { histogram: {}, tokens: 0 };
-        }
-        // Sum histogram entries across devices
-        for (const [sessionsStr, minutes] of Object.entries(histogram)) {
-          perHour[hourKey].histogram[sessionsStr] = (perHour[hourKey].histogram[sessionsStr] ?? 0) + (minutes as number);
-        }
-      } catch {
-        continue;
-      }
+    for (const [hourKey, histogram] of Object.entries(mergedHistograms)) {
+      perHour[hourKey] = { histogram, tokens: 0 };
     }
 
     // Fetch hourly token data across all linked devices
