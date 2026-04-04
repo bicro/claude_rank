@@ -25,7 +25,7 @@
   }
   body:active { cursor: grabbing; }
   button, a, input, select, textarea,
-  .view-toggle-btn, .team-member-row, .user-identity,
+  .view-toggle-btn, .team-member-card, .user-identity,
   .copy-btn, .team-action-btn, .team-invite-btn, .confirm-btn,
   .date-nav-btn, .team-period-btn, .footer-link, .user-menu-item,
   .spinner-cancel { cursor: pointer; }
@@ -102,17 +102,41 @@
     flex-direction: column;
     gap: 0;
   }
-  .team-member-row {
-    display: flex;
-    align-items: center;
+  .team-member-card {
     padding: 8px 4px;
     border-bottom: 1px solid var(--divider);
-    gap: 8px;
     cursor: pointer;
     transition: background 0.1s;
   }
-  .team-member-row:last-child { border-bottom: none; }
-  .team-member-row:hover { background: var(--pill-bg); border-radius: 6px; }
+  .team-member-card:last-child { border-bottom: none; }
+  .team-member-card:hover { background: var(--pill-bg); border-radius: 6px; }
+  .team-member-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .team-member-timeline svg {
+    width: 100%;
+    display: block;
+    margin-top: 4px;
+  }
+  .team-day-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+  .team-day-nav button {
+    background: none; border: none; color: var(--text-secondary);
+    font-size: 11px; cursor: pointer; padding: 2px 4px; font-family: inherit;
+  }
+  .team-day-nav button:hover { color: var(--text-primary); }
+  .team-day-nav button:disabled { opacity: 0.3; cursor: default; }
+  .team-day-label {
+    font-size: 10px; color: var(--text-secondary); font-weight: 700;
+    letter-spacing: 1px;
+  }
   .team-member-rank {
     font-size: 10px;
     font-weight: 700;
@@ -953,7 +977,7 @@ function postToParent(data) {
 }
 
 // ── Drag: mousedown on non-interactive areas starts window drag ──
-const INTERACTIVE = 'button, a, input, select, textarea, [onclick], .view-toggle-btn, .team-member-row, .user-identity, .copy-btn, .team-action-btn, .team-invite-btn, .confirm-btn, .date-nav-btn, .team-period-btn, .footer-link, .user-menu-item, .spinner-cancel';
+const INTERACTIVE = 'button, a, input, select, textarea, [onclick], .view-toggle-btn, .team-member-card, .user-identity, .copy-btn, .team-action-btn, .team-invite-btn, .confirm-btn, .date-nav-btn, .team-period-btn, .footer-link, .user-menu-item, .spinner-cancel';
 document.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
   if (e.target.closest(INTERACTIVE)) return;
@@ -1208,6 +1232,60 @@ function getV5Color(intensity) {
   const r1 = 245, g1 = 170, b1 = 100;
   const r2 = 210, g2 = 70, b2 = 15;
   return `rgb(${Math.round(r1 + (r2 - r1) * intensity)},${Math.round(g1 + (g2 - g1) * intensity)},${Math.round(b1 + (b2 - b1) * intensity)})`;
+}
+
+// ── Render compact team timeline (no labels, just grid cells) ──
+function renderTeamTimeline(svgEl, hourlyData, isToday) {
+  const container = svgEl.parentElement;
+  const totalW = container.clientWidth || 300;
+  const gap = 1;
+  const cellW = (totalW - 23 * gap) / 24;
+  const cellH = cellW;
+
+  let maxSessions = 0;
+  for (const d of hourlyData) {
+    if (d.sessions.length > maxSessions) maxSessions = d.sessions.length;
+  }
+  const maxRows = Math.max(1, maxSessions);
+  const gridHeight = maxRows * (cellH + gap) - gap;
+  const markerH = 2;
+  const svgH = gridHeight + markerH + 2;
+
+  svgEl.setAttribute('viewBox', `0 0 ${totalW} ${svgH}`);
+
+  const emptyColor = getComputedStyle(document.documentElement).getPropertyValue('--empty-cell').trim() || '#d8d2ca';
+  const now = new Date();
+  const currentHour = now.getHours();
+  let s = '';
+
+  for (let col = 0; col < 24; col++) {
+    const data = hourlyData[col];
+    const isFuture = isToday && col > currentHour;
+    // Empty cells
+    for (let row = 0; row < maxRows; row++) {
+      const x = col * (cellW + gap);
+      const y = (maxRows - 1 - row) * (cellH + gap);
+      s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" fill="${emptyColor}" fill-opacity="${isFuture ? 0.25 : 0.5}"/>`;
+    }
+    // Active cells
+    for (const session of data.sessions) {
+      if (session.index > maxRows) continue;
+      const row = session.index - 1;
+      const x = col * (cellW + gap);
+      const y = (maxRows - 1 - row) * (cellH + gap);
+      s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" fill="${getV5Color(session.intensity || 0.5)}"/>`;
+    }
+  }
+
+  // Longest streak underline
+  const streak = findLongestStreak(hourlyData);
+  if (streak) {
+    const sx = streak.start * (cellW + gap);
+    const sw = (streak.end - streak.start) * (cellW + gap) + cellW;
+    s += `<rect x="${sx}" y="${gridHeight + 2}" width="${sw}" height="${markerH}" rx="1" fill="${getV5Color(0.8)}"/>`;
+  }
+
+  svgEl.innerHTML = s;
 }
 
 function findLongestStreak(hourlyData) {
@@ -1620,6 +1698,7 @@ toggleTeam.addEventListener('click', switchToTeam);
 let teamPeriod = '1d';
 let cachedTeamInfo = null;
 let cachedTeamMembers = null;
+let teamTimelineDate = localDateISO(new Date()); // day shown in team timelines
 
 async function loadTeamView() {
   const container = document.getElementById('teamContent');
@@ -1741,37 +1820,102 @@ async function loadTeamPeriodData() {
 
   try {
     let memberData;
+    const today = localDateISO(new Date());
+
+    // Fetch concurrency for all UTC dates covering the selected local day, then merge
+    const utcDates = utcDatesForLocalDay(teamTimelineDate);
+    const burnResps = await Promise.all(utcDates.map(d =>
+      fetch(`/api/teams/${currentTeamHash}/burn?date=${d}&days=1`).then(r => r.json()).catch(() => ({ members: [] }))
+    ));
+    // Merge concurrency across UTC dates per member
+    const concMap = {};
+    for (const resp of burnResps) {
+      for (const bm of (resp.members || [])) {
+        if (!bm.concurrency) continue;
+        if (!concMap[bm.user_hash]) concMap[bm.user_hash] = {};
+        Object.assign(concMap[bm.user_hash], bm.concurrency);
+      }
+    }
+
     if (teamPeriod === 'lifetime') {
-      memberData = await Promise.all(cachedTeamMembers.map(async m => {
+      const profiles = await Promise.all(cachedTeamMembers.map(async m => {
         try {
           const p = await fetch(`/api/users/${m.user_hash}`).then(r => r.json());
           return { ...m, display_name: p.display_name || m.display_name, tokens: p.metrics?.total_tokens || 0, avatar_url: p.avatar_url };
         } catch { return { ...m, tokens: 0, avatar_url: null }; }
       }));
+      memberData = profiles.map(m => ({ ...m, concurrency: concMap[m.user_hash] || null }));
     } else {
       const days = { '1d': 1, '1w': 7, '1m': 30 }[teamPeriod];
-      const today = localDateISO(new Date());
       const burn = await fetch(`/api/teams/${currentTeamHash}/burn?date=${today}&days=${days}`).then(r => r.json());
-      memberData = (burn.members || []).map(m => ({ ...m, tokens: m.daily_tokens || 0 }));
+      memberData = (burn.members || []).map(m => ({ ...m, tokens: m.daily_tokens || 0, concurrency: concMap[m.user_hash] || null }));
     }
     memberData.sort((a, b) => b.tokens - a.tokens);
 
-    let html = '';
+    // Day nav for timelines
+    const isTimelineToday = teamTimelineDate === today;
+    const fmtDayLabel = (ds) => {
+      if (ds === today) return 'TODAY';
+      const d = new Date(ds + 'T12:00:00');
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toUpperCase();
+    };
+
+    let html = `<div class="team-day-nav">
+      <button id="teamDayPrev" title="Previous day">&#9664;</button>
+      <span class="team-day-label" id="teamDayLabel">${fmtDayLabel(teamTimelineDate)}</span>
+      <button id="teamDayNext" title="Next day"${isTimelineToday ? ' disabled' : ''}>&#9654;</button>
+    </div>`;
+
     memberData.forEach((m, i) => {
       const name = m.display_name || m.username || 'Anonymous';
       const isYou = m.user_hash === userHash;
-      html += `<div class="team-member-row" data-hash="${m.user_hash}">
-        <span class="team-member-rank">${i + 1}</span>
-        ${m.avatar_url ? `<img class="team-member-avatar" src="${m.avatar_url}" alt="">` : ''}
-        <span class="team-member-name">${escHtml(name)}${isYou ? ' (you)' : ''}</span>
-        <span class="team-member-tokens">${formatNumber(m.tokens)}</span>
+      html += `<div class="team-member-card" data-hash="${m.user_hash}">
+        <div class="team-member-header">
+          <span class="team-member-rank">${i + 1}</span>
+          ${m.avatar_url ? `<img class="team-member-avatar" src="${m.avatar_url}" alt="">` : ''}
+          <span class="team-member-name">${escHtml(name)}${isYou ? ' (you)' : ''}</span>
+          <span class="team-member-tokens">${formatNumber(m.tokens)}</span>
+        </div>
+        <div class="team-member-timeline" id="timeline-${m.user_hash}"><svg></svg></div>
       </div>`;
     });
     listEl.innerHTML = html || '<div class="loading">No members</div>';
     notifyHeight();
 
+    // Day nav click handlers
+    const prevBtn = document.getElementById('teamDayPrev');
+    const nextBtn = document.getElementById('teamDayNext');
+    if (prevBtn) prevBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const d = new Date(teamTimelineDate + 'T12:00:00');
+      d.setDate(d.getDate() - 1);
+      teamTimelineDate = localDateISO(d);
+      loadTeamPeriodData();
+    });
+    if (nextBtn) nextBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const d = new Date(teamTimelineDate + 'T12:00:00');
+      d.setDate(d.getDate() + 1);
+      const next = localDateISO(d);
+      if (next > today) return;
+      teamTimelineDate = next;
+      loadTeamPeriodData();
+    });
+
+    // Render activity timelines
+    memberData.forEach(m => {
+      if (!m.concurrency) return;
+      const svgEl = document.querySelector(`#timeline-${m.user_hash} svg`);
+      if (!svgEl) return;
+      const hourlyData = processHourlyData(m.concurrency, teamTimelineDate);
+      const hasActivity = hourlyData.some(d => d.sessions.length > 0);
+      if (!hasActivity) { svgEl.parentElement.style.display = 'none'; return; }
+      renderTeamTimeline(svgEl, hourlyData, isTimelineToday);
+    });
+    notifyHeight();
+
     // Click member → open profile
-    listEl.querySelectorAll('.team-member-row').forEach(row => {
+    listEl.querySelectorAll('.team-member-card').forEach(row => {
       row.addEventListener('click', () => {
         const h = row.getAttribute('data-hash');
         const url = window.location.origin + '/profile.html?hash=' + h;
