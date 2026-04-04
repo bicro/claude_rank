@@ -744,12 +744,15 @@
                         s += `<text x="30" y="${y}" fill="#8a8480" font-size="16" font-family="inherit" font-weight="600">A${row + 1}</text>`;
                     }
 
+                    const intV5Now = new Date();
+                    const intV5CurrentHour = intV5Now.getHours();
                     for (let col = 0; col < 24; col++) {
                         const data = hourlyData[col];
+                        const isFuture = isToday && col > intV5CurrentHour;
                         for (let row = 0; row < maxRows; row++) {
                             const x = gridMarginLeft + col * (cellW + gap);
                             const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
-                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#e0ddd9" opacity="0.8"/>`;
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#e0ddd9" opacity="${isFuture ? 0.25 : 0.8}"/>`;
                         }
                         for (const session of data.sessions) {
                             if (session.index > maxRows) continue;
@@ -757,6 +760,22 @@
                             const x = gridMarginLeft + col * (cellW + gap);
                             const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
                             s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${getV5Color(session.intensity || 0.5)}"/>`;
+                        }
+                    }
+
+                    {
+                        let _bestStart = -1, _bestLen = 0, _curStart = -1, _curLen = 0;
+                        for (let i = 0; i < hourlyData.length; i++) {
+                            if (hourlyData[i].sessions.length > 0) {
+                                if (_curLen === 0) _curStart = i;
+                                _curLen++;
+                                if (_curLen > _bestLen) { _bestLen = _curLen; _bestStart = _curStart; }
+                            } else { _curLen = 0; }
+                        }
+                        if (_bestLen > 0) {
+                            const sx = gridMarginLeft + _bestStart * (cellW + gap);
+                            const sw = (_bestStart + _bestLen - 1 - _bestStart) * (cellW + gap) + cellW;
+                            s += `<rect x="${sx}" y="${gridTopY + gridHeight + 3}" width="${sw}" height="3" rx="1" fill="${getV5Color(0.8)}"/>`;
                         }
                     }
 
@@ -902,12 +921,16 @@
                         s += `<text x="30" y="${y}" fill="#999999" font-size="16" font-family="inherit" font-weight="600">A${row + 1}</text>`;
                     }
 
+                    const v6Now = new Date();
+                    const v6CurrentHour = v6Now.getHours();
+                    const v6IsToday = cardData.isToday !== false;
                     for (let col = 0; col < 24; col++) {
                         const data = hourlyData[col];
+                        const isFuture = v6IsToday && col > v6CurrentHour;
                         for (let row = 0; row < maxRows; row++) {
                             const x = gridMarginLeft + col * (cellW + gap);
                             const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
-                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#232323"/>`;
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#232323"${isFuture ? ' opacity="0.3"' : ''}/>`;
                         }
                         for (const session of data.sessions) {
                             if (session.index > maxRows) continue;
@@ -916,6 +939,24 @@
                             const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
                             s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="${getV6Color(session.intensity || 0.5)}"/>`;
                         }
+                    }
+
+                    function findLongestStreakV6(hData) {
+                        let bestStart = -1, bestLen = 0, curStart = -1, curLen = 0;
+                        for (let i = 0; i < hData.length; i++) {
+                            if (hData[i].sessions.length > 0) {
+                                if (curLen === 0) curStart = i;
+                                curLen++;
+                                if (curLen > bestLen) { bestLen = curLen; bestStart = curStart; }
+                            } else { curLen = 0; }
+                        }
+                        return bestLen > 0 ? { start: bestStart, end: bestStart + bestLen - 1 } : null;
+                    }
+                    const v6Streak = findLongestStreakV6(hourlyData);
+                    if (v6Streak) {
+                        const sx = gridMarginLeft + v6Streak.start * (cellW + gap);
+                        const sw = (v6Streak.end - v6Streak.start) * (cellW + gap) + cellW;
+                        s += `<rect x="${sx}" y="${gridTopY + gridHeight + 3}" width="${sw}" height="3" rx="1" fill="${getV6Color(0.8)}"/>`;
                     }
 
                     const xAxisY = gridTopY + gridHeight + 22;
@@ -1077,12 +1118,16 @@
                         s += `<text x="30" y="${y}" fill="#8a8480" font-size="16" font-weight="600">A${row + 1}</text>`;
                     }
 
+                    const v5Now = new Date();
+                    const v5CurrentHour = v5Now.getHours();
+                    const v5IsToday = cardData.isToday !== false;
                     for (let col = 0; col < 24; col++) {
                         const data = hourlyData[col];
+                        const isFuture = v5IsToday && col > v5CurrentHour;
                         for (let row = 0; row < maxRows; row++) {
                             const x = gridMarginLeft + col * (cellW + gap);
                             const y = gridTopY + (maxRows - 1 - row) * (cellH + gap);
-                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#e0ddd9" opacity="0.8"/>`;
+                            s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" ry="3" fill="#e0ddd9" opacity="${isFuture ? 0.25 : 0.8}"/>`;
                         }
                         for (const session of data.sessions) {
                             if (session.index > maxRows) continue;
@@ -1093,10 +1138,22 @@
                         }
                     }
 
-                    const currentHourCol = hourlyData.findIndex(d => d.isCurrent);
-                    if (currentHourCol >= 0) {
-                        const markerX = gridMarginLeft + currentHourCol * (cellW + gap);
-                        s += `<rect x="${markerX}" y="${gridTopY + gridHeight + 3}" width="${cellW}" height="3" rx="1" fill="${getV5Color(0.8)}"/>`;
+                    function findLongestStreakV5(hData) {
+                        let bestStart = -1, bestLen = 0, curStart = -1, curLen = 0;
+                        for (let i = 0; i < hData.length; i++) {
+                            if (hData[i].sessions.length > 0) {
+                                if (curLen === 0) curStart = i;
+                                curLen++;
+                                if (curLen > bestLen) { bestLen = curLen; bestStart = curStart; }
+                            } else { curLen = 0; }
+                        }
+                        return bestLen > 0 ? { start: bestStart, end: bestStart + bestLen - 1 } : null;
+                    }
+                    const v5Streak = findLongestStreakV5(hourlyData);
+                    if (v5Streak) {
+                        const sx = gridMarginLeft + v5Streak.start * (cellW + gap);
+                        const sw = (v5Streak.end - v5Streak.start) * (cellW + gap) + cellW;
+                        s += `<rect x="${sx}" y="${gridTopY + gridHeight + 3}" width="${sw}" height="3" rx="1" fill="${getV5Color(0.8)}"/>`;
                     }
 
                     const xAxisY = gridTopY + gridHeight + 22;

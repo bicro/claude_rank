@@ -1210,6 +1210,20 @@ function getV5Color(intensity) {
   return `rgb(${Math.round(r1 + (r2 - r1) * intensity)},${Math.round(g1 + (g2 - g1) * intensity)},${Math.round(b1 + (b2 - b1) * intensity)})`;
 }
 
+function findLongestStreak(hourlyData) {
+  let bestStart = -1, bestLen = 0, curStart = -1, curLen = 0;
+  for (let i = 0; i < hourlyData.length; i++) {
+    if (hourlyData[i].sessions.length > 0) {
+      if (curLen === 0) curStart = i;
+      curLen++;
+      if (curLen > bestLen) { bestLen = curLen; bestStart = curStart; }
+    } else {
+      curLen = 0;
+    }
+  }
+  return bestLen > 0 ? { start: bestStart, end: bestStart + bestLen - 1 } : null;
+}
+
 // ── Render heatmap (widget scale) ──
 // V5 original: cellW=22, cellH=22, gap=3, marginLeft=60, marginRight=30 → 687px
 // Widget:      cellW=11, cellH=11, gap=2, marginLeft=22, marginRight=6  → 338px
@@ -1242,9 +1256,12 @@ function renderHeatmap(svgEl, hourlyData, isToday) {
   }
 
   // Grid cells
+  const now = new Date();
+  const currentHour = now.getHours();
   for (let col = 0; col < 24; col++) {
     const data = hourlyData[col];
     const baseDelay = col * 15;
+    const isFuture = isToday && col > currentHour;
     // Empty cells
     for (let row = 0; row < maxRows; row++) {
       const x = marginLeft + col * (cellW + gap);
@@ -1252,7 +1269,7 @@ function renderHeatmap(svgEl, hourlyData, isToday) {
       const cx = x + cellW / 2;
       const cy = y + cellH / 2;
       const d = baseDelay + row * 10;
-      s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="#d8d2ca" opacity="0" style="transform-origin:${cx}px ${cy}px;animation:cellBlipIn 0.3s ${d}ms ease-out forwards"/>`;
+      s += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="#d8d2ca" fill-opacity="${isFuture ? 0.25 : 1}" opacity="0" style="transform-origin:${cx}px ${cy}px;animation:cellBlipIn 0.3s ${d}ms ease-out forwards"/>`;
     }
     // Active cells
     for (const session of data.sessions) {
@@ -1266,11 +1283,15 @@ function renderHeatmap(svgEl, hourlyData, isToday) {
       const d = baseDelay + row * 10 + 200;
       s += `<rect class="hm-cell" x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" ry="2" fill="${color}" data-hour="${data.hour}" data-sessions="${data.sessions.length}" style="cursor:default;opacity:0;transform-origin:${cx}px ${cy}px;animation:cellBlipIn 0.3s ${d}ms ease-out forwards,cellColorFlash 0.4s ${d}ms ease-out forwards"/>`;
     }
-    // Current hour marker
-    if (data.isCurrent) {
-      const x = marginLeft + col * (cellW + gap);
-      s += `<rect x="${x}" y="${gridHeight + 2}" width="${cellW}" height="2" rx="1" fill="${getV5Color(0.8)}" opacity="0" style="transform-origin:${x + cellW / 2}px ${gridHeight + 3}px;animation:markerSlideIn 0.3s ${baseDelay + 300}ms ease-out forwards"/>`;
-    }
+  }
+
+  // Longest streak underline
+  const streak = findLongestStreak(hourlyData);
+  if (streak) {
+    const sx = marginLeft + streak.start * (cellW + gap);
+    const sw = (streak.end - streak.start) * (cellW + gap) + cellW;
+    const baseDelay = streak.start * 15 + 300;
+    s += `<rect x="${sx}" y="${gridHeight + 2}" width="${sw}" height="2" rx="1" fill="${getV5Color(0.8)}" opacity="0" style="transform-origin:${sx + sw / 2}px ${gridHeight + 3}px;animation:markerSlideIn 0.3s ${baseDelay}ms ease-out forwards"/>`;
   }
 
   // Time axis labels
