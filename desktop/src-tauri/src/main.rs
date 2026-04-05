@@ -1106,6 +1106,19 @@ fn main() {
                 });
             }
 
+            // Enable autostart on first launch only (respect user choice after that)
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let marker = app.path().app_data_dir().unwrap().join(".autostart-initialized");
+                if !marker.exists() {
+                    let autostart = app.autolaunch();
+                    let _ = autostart.enable();
+                    info!("[setup] autostart enabled by default (first launch)");
+                    let _ = std::fs::create_dir_all(marker.parent().unwrap());
+                    let _ = std::fs::write(&marker, "1");
+                }
+            }
+
             // Start stats file watcher
             stats::watcher::FileWatcher::start(
                 app.handle().clone(),

@@ -42,12 +42,12 @@
     border-radius: 16px 16px 0 0;
     pointer-events: none;
   }
-  .btn-close {
+  .btn-close, .btn-settings {
     background: none; border: none; color: #fff; cursor: pointer;
     font-size: 14px; padding: 2px 6px; border-radius: 6px;
     pointer-events: auto;
   }
-  .btn-close:hover { background: rgba(255,255,255,0.2); color: #fff; }
+  .btn-close:hover, .btn-settings:hover { background: rgba(255,255,255,0.2); color: #fff; }
 
   .no-drag { -webkit-app-region: no-drag; app-region: no-drag; }
 
@@ -63,6 +63,7 @@
 <body>
 <div class="panel">
   <div class="drag-strip drag-region">
+    <button class="btn-settings no-drag" id="btnSettings" title="Settings" style="position:absolute;left:12px">&#9881;</button>
     <button class="btn-close no-drag" id="btnHide" title="Hide (Alt+Space)">&#x2715;</button>
   </div>
   <iframe id="widgetFrame" class="widget-iframe no-drag"></iframe>
@@ -124,6 +125,11 @@ listen('overlay-visibility-changed', (event) => {
 // ── Hide button ──
 document.getElementById('btnHide').addEventListener('click', () => invoke('hide_overlay'));
 
+// ── Settings button ──
+document.getElementById('btnSettings').addEventListener('click', () => {
+  frame.contentWindow?.postMessage({ type: 'toggle-settings' }, '*');
+});
+
 // ── Bridge: receive messages from widget iframe ──
 const DRAG_STRIP_HEIGHT = 0;
 window.addEventListener('message', async (e) => {
@@ -148,6 +154,19 @@ window.addEventListener('message', async (e) => {
   }
   if (e.data.type === 'hide') {
     invoke('hide_overlay').catch(err => console.error('Failed to hide:', err));
+  }
+  if (e.data.type === 'get-autostart') {
+    invoke('get_autostart_enabled').then(enabled => {
+      frame.contentWindow?.postMessage({ type: 'autostart-status', enabled }, '*');
+    }).catch(err => console.error('Failed to get autostart:', err));
+  }
+  if (e.data.type === 'set-autostart' && typeof e.data.enabled === 'boolean') {
+    invoke('set_autostart_enabled', { enabled: e.data.enabled }).then(() => {
+      frame.contentWindow?.postMessage({ type: 'autostart-status', enabled: e.data.enabled }, '*');
+    }).catch(err => console.error('Failed to set autostart:', err));
+  }
+  if (e.data.type === 'check-update') {
+    invoke('check_update').catch(err => console.error('Failed to check update:', err));
   }
   if (e.data.type === 'resize' && e.data.height > 0) {
     const win = getCurrentWindow();

@@ -81,6 +81,80 @@
   .team-view { display: none; }
   .team-view.active { display: block; }
   .solo-view.hidden { display: none; }
+
+  /* ── Settings view ── */
+  .settings-view { display: none; }
+  .settings-view.active { display: block; padding: 8px 0; }
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+  }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #333;
+  }
+  .settings-desc {
+    font-size: 10px;
+    color: #888;
+    margin-top: 2px;
+  }
+  .toggle-switch {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+  .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #ccc;
+    border-radius: 20px;
+    transition: background 0.2s;
+  }
+  .toggle-slider::before {
+    content: '';
+    position: absolute;
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+  .toggle-switch input:checked + .toggle-slider {
+    background: var(--accent);
+  }
+  .toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(16px);
+  }
+  .settings-action-btn {
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border: 1px solid rgba(0,0,0,0.12);
+    border-radius: 6px;
+    background: #fff;
+    color: #333;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .settings-action-btn:hover {
+    background: #f0f0f0;
+  }
   .team-header-info {
     text-align: center;
     margin-bottom: 12px;
@@ -956,6 +1030,34 @@
     </div>
   </div>
 
+  <!-- Settings view (hidden by default) -->
+  <div class="settings-view" id="settingsView">
+    <div class="settings-row">
+      <div>
+        <div class="settings-label">Launch at Start</div>
+        <div class="settings-desc">Start ClaudeRank when your computer starts</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="autostartToggle">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="settings-row">
+      <div>
+        <div class="settings-label">Check for Updates</div>
+        <div class="settings-desc">Check if a new version is available</div>
+      </div>
+      <button class="settings-action-btn" id="checkUpdateBtn">Check</button>
+    </div>
+    <div class="settings-row">
+      <div>
+        <div class="settings-label">GitHub</div>
+        <div class="settings-desc">View source code, report issues, contribute</div>
+      </div>
+      <button class="settings-action-btn" id="openGithubBtn">Open</button>
+    </div>
+  </div>
+
 </div>
 
 <script type="module">
@@ -1674,25 +1776,63 @@ const toggleTeam = document.getElementById('toggleTeam');
 const soloView = document.getElementById('soloView');
 const teamView = document.getElementById('teamView');
 
-function switchToSolo() {
-  toggleSolo.classList.add('active');
+const settingsView = document.getElementById('settingsView');
+const autostartToggle = document.getElementById('autostartToggle');
+let settingsActive = false;
+
+function deactivateAllTabs() {
+  toggleSolo.classList.remove('active');
   toggleTeam.classList.remove('active');
-  soloView.classList.remove('hidden');
+  soloView.classList.add('hidden');
   teamView.classList.remove('active');
+  settingsView.classList.remove('active');
+  settingsActive = false;
+}
+
+function switchToSolo() {
+  deactivateAllTabs();
+  toggleSolo.classList.add('active');
+  soloView.classList.remove('hidden');
   notifyHeight();
 }
 
 function switchToTeam() {
+  deactivateAllTabs();
   toggleTeam.classList.add('active');
-  toggleSolo.classList.remove('active');
-  soloView.classList.add('hidden');
   teamView.classList.add('active');
   loadTeamView();
   notifyHeight();
 }
 
+function switchToSettings() {
+  if (settingsActive) {
+    // Toggle back to solo
+    switchToSolo();
+    return;
+  }
+  deactivateAllTabs();
+  settingsActive = true;
+  settingsView.classList.add('active');
+  window.parent.postMessage({ type: 'get-autostart' }, '*');
+  notifyHeight();
+}
+
 toggleSolo.addEventListener('click', switchToSolo);
 toggleTeam.addEventListener('click', switchToTeam);
+
+// Autostart toggle
+autostartToggle.addEventListener('change', () => {
+  window.parent.postMessage({ type: 'set-autostart', enabled: autostartToggle.checked }, '*');
+});
+
+document.getElementById('checkUpdateBtn').addEventListener('click', () => {
+  window.parent.postMessage({ type: 'check-update' }, '*');
+});
+
+document.getElementById('openGithubBtn').addEventListener('click', () => {
+  window.parent.postMessage({ type: 'open-url', url: 'https://github.com/bicro/claude_rank' }, '*');
+});
+
 
 // ── Team view ──
 let teamPeriod = '1d';
@@ -2346,6 +2486,12 @@ document.getElementById('linkFull').addEventListener('click', (e) => {
 
 // ── Refresh when desktop sync completes ──
 window.addEventListener('message', async (e) => {
+  if (e.data?.type === 'autostart-status') {
+    autostartToggle.checked = e.data.enabled;
+  }
+  if (e.data?.type === 'toggle-settings') {
+    switchToSettings();
+  }
   if (e.data?.type === 'sync-complete') {
     console.log('[widget] sync-complete received, reloading data…');
     await loadProfile();
