@@ -177,13 +177,13 @@
     gap: 0;
   }
   .team-member-card {
-    padding: 8px 4px;
+    padding: 10px 4px 12px;
     border-bottom: 1px solid var(--divider);
     cursor: pointer;
     transition: background 0.1s;
   }
   .team-member-card:last-child { border-bottom: none; }
-  .team-member-card:hover { background: var(--pill-bg); border-radius: 6px; }
+  .team-member-card:hover .team-member-name { color: var(--accent); }
   .team-member-header {
     display: flex;
     align-items: center;
@@ -194,6 +194,57 @@
     display: block;
     margin-top: 4px;
   }
+  .team-member-heatmap {
+    position: relative;
+    margin-top: 8px;
+  }
+  .team-member-heatmap svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .team-member-stats {
+    margin-top: 8px;
+  }
+  .team-member-stats .stats-row {
+    padding: 2px 0;
+  }
+  .team-member-stats .stat-value {
+    font-size: 14px;
+  }
+  .team-member-empty {
+    margin-top: 6px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    text-align: center;
+    letter-spacing: 0.5px;
+    opacity: 0.7;
+  }
+  .team-member-scroll {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .team-member-scroll.scrollable {
+    overflow-y: auto;
+    margin-right: -4px;
+    padding-right: 4px;
+  }
+  .team-member-scroll.scrollable::-webkit-scrollbar {
+    width: 6px;
+  }
+  .team-member-scroll.scrollable::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .team-member-scroll.scrollable::-webkit-scrollbar-thumb {
+    background: var(--divider);
+    border-radius: 3px;
+  }
+  .team-member-scroll.scrollable::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+  }
+  /* Hide user-row when team view is active */
+  .team-view-active .user-row { display: none; }
   .team-day-nav {
     display: flex;
     align-items: center;
@@ -1492,8 +1543,9 @@ function renderHeatmap(svgEl, hourlyData, isToday) {
 
   svgEl.innerHTML = s;
 
-  // Tooltip
-  const tooltip = document.getElementById('heatmapTooltip');
+  // Tooltip — look up within the container so each heatmap has its own
+  const tooltip = container.querySelector('.heatmap-tooltip');
+  if (!tooltip) return;
   svgEl.querySelectorAll('.hm-cell').forEach(cell => {
     cell.addEventListener('mouseenter', (e) => {
       const hr = parseInt(e.target.getAttribute('data-hour'));
@@ -1797,6 +1849,7 @@ function deactivateAllTabs() {
 
 function switchToSolo() {
   deactivateAllTabs();
+  document.body.classList.remove('team-view-active');
   toggleSolo.classList.add('active');
   soloView.classList.remove('hidden');
   notifyHeight();
@@ -1804,6 +1857,7 @@ function switchToSolo() {
 
 function switchToTeam() {
   deactivateAllTabs();
+  document.body.classList.add('team-view-active');
   toggleTeam.classList.add('active');
   teamView.classList.add('active');
   loadTeamView();
@@ -1988,14 +2042,14 @@ async function loadTeamPeriodData() {
       const profiles = await Promise.all(cachedTeamMembers.map(async m => {
         try {
           const p = await fetch(`/api/users/${m.user_hash}`).then(r => r.json());
-          return { ...m, display_name: p.display_name || m.display_name, tokens: p.metrics?.total_tokens || 0, avatar_url: p.avatar_url };
-        } catch { return { ...m, tokens: 0, avatar_url: null }; }
+          return { ...m, display_name: p.display_name || m.display_name, tokens: p.metrics?.total_tokens || 0, estimated_spend: p.metrics?.estimated_spend || 0, avatar_url: p.avatar_url };
+        } catch { return { ...m, tokens: 0, estimated_spend: 0, avatar_url: null }; }
       }));
       memberData = profiles.map(m => ({ ...m, concurrency: concMap[m.user_hash] || null }));
     } else {
       const days = { '1d': 1, '1w': 7, '1m': 30 }[teamPeriod];
       const burn = await fetch(`/api/teams/${currentTeamHash}/burn?date=${today}&days=${days}`).then(r => r.json());
-      memberData = (burn.members || []).map(m => ({ ...m, tokens: m.daily_tokens || 0, concurrency: concMap[m.user_hash] || null }));
+      memberData = (burn.members || []).map(m => ({ ...m, tokens: m.daily_tokens || 0, estimated_spend: m.estimated_spend || 0, concurrency: concMap[m.user_hash] || null }));
     }
     memberData.sort((a, b) => b.tokens - a.tokens);
 
@@ -2011,7 +2065,8 @@ async function loadTeamPeriodData() {
       <button id="teamDayPrev" title="Previous day">&#9664;</button>
       <span class="team-day-label" id="teamDayLabel">${fmtDayLabel(teamTimelineDate)}</span>
       <button id="teamDayNext" title="Next day"${isTimelineToday ? ' disabled' : ''}>&#9654;</button>
-    </div>`;
+    </div>
+    <div class="team-member-scroll" id="teamMemberScroll">`;
 
     memberData.forEach((m, i) => {
       const name = m.display_name || m.username || 'Anonymous';
@@ -2023,9 +2078,29 @@ async function loadTeamPeriodData() {
           <span class="team-member-name">${escHtml(name)}${isYou ? ' (you)' : ''}</span>
           <span class="team-member-tokens">${formatNumber(m.tokens)}</span>
         </div>
-        <div class="team-member-timeline" id="timeline-${m.user_hash}"><svg></svg></div>
+        <div class="team-member-heatmap" id="heatmap-${m.user_hash}">
+          <svg></svg>
+          <div class="heatmap-tooltip"></div>
+        </div>
+        <div class="team-member-stats stats-section">
+          <div class="stats-row">
+            <div class="stat-col">
+              <div class="stat-label"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1C9.2 6.4 5 10.5 5 15a7 7 0 0 0 14 0c0-4.5-4.2-8.6-7-14zm0 19a3 3 0 0 1-3-3c0-2 1.5-3.5 3-5.5 1.5 2 3 3.5 3 5.5a3 3 0 0 1-3 3z"/></svg> TOP STREAK</div>
+              <div class="stat-value-row"><span class="stat-value accent" id="tmStreak-${m.user_hash}">0h</span></div>
+            </div>
+            <div class="stat-col">
+              <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><polyline points="6 9 10 13 6 17"/><line x1="12" y1="17" x2="18" y2="17"/></svg> MAX AGENTS</div>
+              <div class="stat-value-row"><span class="stat-value" id="tmAgents-${m.user_hash}">0&times;</span></div>
+            </div>
+            <div class="stat-col">
+              <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> EST. BURN</div>
+              <div class="stat-value-row"><span class="stat-value" id="tmBurn-${m.user_hash}">$0</span></div>
+            </div>
+          </div>
+        </div>
       </div>`;
     });
+    html += `</div>`;
     listEl.innerHTML = html || '<div class="loading">No members</div>';
     notifyHeight();
 
@@ -2049,17 +2124,63 @@ async function loadTeamPeriodData() {
       loadTeamPeriodData();
     });
 
-    // Render activity timelines
+    // Render full heatmap + stats per member
     memberData.forEach(m => {
-      if (!m.concurrency) return;
-      const svgEl = document.querySelector(`#timeline-${m.user_hash} svg`);
-      if (!svgEl) return;
-      const hourlyData = processHourlyData(m.concurrency, teamTimelineDate);
+      const heatmapContainer = document.getElementById(`heatmap-${m.user_hash}`);
+      const svgEl = heatmapContainer ? heatmapContainer.querySelector('svg') : null;
+      const streakEl = document.getElementById(`tmStreak-${m.user_hash}`);
+      const agentsEl = document.getElementById(`tmAgents-${m.user_hash}`);
+      const burnEl = document.getElementById(`tmBurn-${m.user_hash}`);
+
+      const hourlyData = m.concurrency ? processHourlyData(m.concurrency, teamTimelineDate) : [];
       const hasActivity = hourlyData.some(d => d.sessions.length > 0);
-      if (!hasActivity) { svgEl.parentElement.style.display = 'none'; return; }
-      renderTeamTimeline(svgEl, hourlyData, isTimelineToday);
+
+      if (!hasActivity) {
+        if (heatmapContainer) {
+          heatmapContainer.innerHTML = '<div class="team-member-empty">NO ACTIVITY</div>';
+        }
+        if (streakEl) streakEl.textContent = '0h';
+        if (agentsEl) agentsEl.textContent = '0\u00d7';
+        if (burnEl) burnEl.textContent = formatCost(m.estimated_spend || 0);
+        return;
+      }
+
+      if (svgEl) renderHeatmap(svgEl, hourlyData, isTimelineToday);
+
+      // Compute stats from hourlyData
+      let maxSessions = 0;
+      for (const d of hourlyData) {
+        if (d.sessions.length > maxSessions) maxSessions = d.sessions.length;
+      }
+      let peakStreak = 0, curStreak = 0;
+      for (const d of hourlyData) {
+        if (d.sessions.length > 0) { curStreak++; if (curStreak > peakStreak) peakStreak = curStreak; }
+        else curStreak = 0;
+      }
+
+      if (streakEl) streakEl.textContent = peakStreak + 'h';
+      if (agentsEl) agentsEl.textContent = maxSessions + '\u00d7';
+      if (burnEl) burnEl.textContent = formatCost(m.estimated_spend || 0);
     });
     notifyHeight();
+
+    // Cap the member list to show top 3 cards + scroll for the rest
+    requestAnimationFrame(() => {
+      const scrollEl = document.getElementById('teamMemberScroll');
+      if (!scrollEl) return;
+      const cards = scrollEl.querySelectorAll('.team-member-card');
+      if (cards.length > 3) {
+        const third = cards[2];
+        // offsetTop is relative to scrollEl (position:relative)
+        const maxH = third.offsetTop + third.offsetHeight;
+        scrollEl.style.maxHeight = maxH + 'px';
+        scrollEl.classList.add('scrollable');
+      } else {
+        scrollEl.style.maxHeight = '';
+        scrollEl.classList.remove('scrollable');
+      }
+      notifyHeight();
+    });
 
     // Click member → open profile
     listEl.querySelectorAll('.team-member-card').forEach(row => {
