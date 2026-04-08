@@ -173,6 +173,11 @@ fn set_autostart_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+fn get_app_version(app: AppHandle) -> String {
+    app.config().version.clone().unwrap_or_default()
+}
+
 #[command]
 async fn open_logs_folder(app: tauri::AppHandle) -> Result<(), String> {
     let log_dir = app.path().app_log_dir()
@@ -1196,6 +1201,7 @@ fn main() {
             open_url,
             get_autostart_enabled,
             set_autostart_enabled,
+            get_app_version,
             is_debug_mode,
             notify_drag_start,
             open_overlay_devtools,

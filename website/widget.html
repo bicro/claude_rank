@@ -1056,6 +1056,12 @@
       </div>
       <button class="settings-action-btn" id="openGithubBtn">Open</button>
     </div>
+    <div class="settings-row">
+      <div>
+        <div class="settings-label">Version</div>
+        <div class="settings-desc" id="appVersionText">—</div>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -1814,6 +1820,7 @@ function switchToSettings() {
   settingsActive = true;
   settingsView.classList.add('active');
   window.parent.postMessage({ type: 'get-autostart' }, '*');
+  window.parent.postMessage({ type: 'get-app-version' }, '*');
   notifyHeight();
 }
 
@@ -2488,6 +2495,10 @@ document.getElementById('linkFull').addEventListener('click', (e) => {
 window.addEventListener('message', async (e) => {
   if (e.data?.type === 'autostart-status') {
     autostartToggle.checked = e.data.enabled;
+  }
+  if (e.data?.type === 'app-version' && typeof e.data.version === 'string') {
+    const el = document.getElementById('appVersionText');
+    if (el) el.textContent = e.data.version ? 'v' + e.data.version : '—';
   }
   if (e.data?.type === 'toggle-settings') {
     switchToSettings();

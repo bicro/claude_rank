@@ -168,6 +168,11 @@ window.addEventListener('message', async (e) => {
   if (e.data.type === 'check-update') {
     invoke('check_update').catch(err => console.error('Failed to check update:', err));
   }
+  if (e.data.type === 'get-app-version') {
+    invoke('get_app_version').then(version => {
+      frame.contentWindow?.postMessage({ type: 'app-version', version }, '*');
+    }).catch(err => console.error('Failed to get app version:', err));
+  }
   if (e.data.type === 'resize' && e.data.height > 0) {
     const win = getCurrentWindow();
     try {
