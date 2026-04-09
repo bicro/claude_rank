@@ -48,6 +48,10 @@
     pointer-events: auto;
   }
   .btn-close:hover, .btn-settings:hover { background: rgba(255,255,255,0.2); color: #fff; }
+  .btn-settings {
+    position: absolute;
+    left: 12px;
+  }
 
   .no-drag { -webkit-app-region: no-drag; app-region: no-drag; }
 
@@ -63,7 +67,7 @@
 <body>
 <div class="panel">
   <div class="drag-strip drag-region">
-    <button class="btn-settings no-drag" id="btnSettings" title="Settings" style="position:absolute;left:12px">&#9881;</button>
+    <button class="btn-settings no-drag" id="btnSettings" title="Settings">&#9881;</button>
     <button class="btn-close no-drag" id="btnHide" title="Hide (Alt+Space)">&#x2715;</button>
   </div>
   <iframe id="widgetFrame" class="widget-iframe no-drag"></iframe>

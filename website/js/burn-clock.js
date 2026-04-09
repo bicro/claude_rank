@@ -53,6 +53,14 @@ function escHtml(s) {
     return d.innerHTML;
 }
 
+function formatNum(n) {
+    n = n || 0;
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    return n.toLocaleString();
+}
+
 function getV5Color(intensity) {
     const r1 = 245, g1 = 170, b1 = 100;
     const r2 = 210, g2 = 70, b2 = 15;
@@ -194,15 +202,19 @@ export function renderShareableCardV5(svg, hourlyData, sessions, cardData) {
     s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#c8c0b8" stroke-width="1"/>`;
 
     const colW = (cardW - 60) / 3;
-    const statsLabels = ['TOP STREAK', 'PEAK AGENT COUNT', 'EST. BURN'];
+    const statsLabels = ['EST. BURN', 'PEAK AGENT COUNT', 'TOP STREAK'];
     const peakStreakVal = cardData.peakStreak != null ? cardData.peakStreak : 0;
-    const statsValues = [peakStreakVal + 'h', maxSessions + '\u00d7', cardData.costText || '$0'];
+    const statsValues = [formatNum(cardData.dayTokens || 0), maxSessions + '\u00d7', peakStreakVal + 'h'];
+    const statsSubValues = [cardData.costText || '$0', '', ''];
     const statsColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
 
     for (let i = 0; i < 3; i++) {
         const cx = 30 + colW * i + colW / 2;
         s += `<text x="${cx}" y="${statsY + 18}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="700" letter-spacing="1" text-anchor="middle">${statsLabels[i]}</text>`;
         s += `<text id="v5Stat${i}" x="${cx}" y="${statsY + 50}" fill="${statsColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
+        if (statsSubValues[i]) {
+            s += `<text x="${cx}" y="${statsY + 64}" fill="#8a8480" font-size="10" font-family="inherit" font-weight="600" text-anchor="middle">${statsSubValues[i]}</text>`;
+        }
         if (i < 2) {
             const divX = 30 + colW * (i + 1);
             s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#c8c0b8" stroke-width="1"/>`;
@@ -308,15 +320,19 @@ export function renderShareableCardV6(svg, hourlyData, sessions, cardData) {
     s += `<line x1="30" y1="${divider2Y}" x2="${cardW - 30}" y2="${divider2Y}" stroke="#333333" stroke-width="1"/>`;
 
     const colW = (cardW - 60) / 3;
-    const statsLabels = ['TOP STREAK', 'PEAK AGENT COUNT', 'EST. BURN'];
+    const statsLabels = ['EST. BURN', 'PEAK AGENT COUNT', 'TOP STREAK'];
     const peakStreakVal = cardData.peakStreak != null ? cardData.peakStreak : 0;
-    const statsValues = [peakStreakVal + 'h', maxSessions + '\u00d7', cardData.costText || '$0'];
+    const statsValues = [formatNum(cardData.dayTokens || 0), maxSessions + '\u00d7', peakStreakVal + 'h'];
+    const statsSubValues = [cardData.costText || '$0', '', ''];
     const statsColors = ['#E8692D', '#ececec', '#ececec'];
 
     for (let i = 0; i < 3; i++) {
         const cx = 30 + colW * i + colW / 2;
         s += `<text x="${cx}" y="${statsY + 18}" fill="#999999" font-size="10" font-family="inherit" font-weight="700" letter-spacing="1" text-anchor="middle">${statsLabels[i]}</text>`;
         s += `<text id="v5Stat${i}" x="${cx}" y="${statsY + 50}" fill="${statsColors[i]}" font-size="24" font-family="monospace" font-weight="700" text-anchor="middle">${statsValues[i]}</text>`;
+        if (statsSubValues[i]) {
+            s += `<text x="${cx}" y="${statsY + 64}" fill="#999999" font-size="10" font-family="inherit" font-weight="600" text-anchor="middle">${statsSubValues[i]}</text>`;
+        }
         if (i < 2) {
             const divX = 30 + colW * (i + 1);
             s += `<line x1="${divX}" y1="${statsY + 4}" x2="${divX}" y2="${statsY + statsHeight - 4}" stroke="#333333" stroke-width="1"/>`;

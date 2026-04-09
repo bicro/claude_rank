@@ -212,6 +212,9 @@
   .team-member-stats .stat-value {
     font-size: 14px;
   }
+  .team-member-stats .stat-sub-value {
+    font-size: 9px;
+  }
   .team-member-empty {
     margin-top: 6px;
     font-size: 10px;
@@ -780,6 +783,13 @@
     color: var(--text-primary);
   }
   .stat-value.accent { color: var(--accent); }
+  .stat-sub-value {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.3px;
+    margin-top: -1px;
+  }
   .stat-pb {
     font-size: 9px;
     font-weight: 600;
@@ -1035,11 +1045,12 @@
   <div class="stats-section">
     <div class="stats-row">
       <div class="stat-col">
-        <div class="stat-label"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1C9.2 6.4 5 10.5 5 15a7 7 0 0 0 14 0c0-4.5-4.2-8.6-7-14zm0 19a3 3 0 0 1-3-3c0-2 1.5-3.5 3-5.5 1.5 2 3 3.5 3 5.5a3 3 0 0 1-3 3z"/></svg> TOP STREAK</div>
+        <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> EST. BURN</div>
         <div class="stat-value-row">
-          <span class="stat-value accent" id="statHourlyStreak">0h</span>
+          <span class="stat-value accent" id="statEstTokens">0</span>
+          <div class="stat-sub-value" id="statEstSpend">$0</div>
         </div>
-        <div class="stat-pb" id="pbStreak"></div>
+        <div class="stat-pb" id="pbSpend"></div>
       </div>
       <div class="stat-col">
         <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><polyline points="6 9 10 13 6 17"/><line x1="12" y1="17" x2="18" y2="17"/></svg> MAX AGENTS</div>
@@ -1049,11 +1060,11 @@
         <div class="stat-pb" id="pbAgents"></div>
       </div>
       <div class="stat-col">
-        <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> EST. BURN</div>
+        <div class="stat-label"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1C9.2 6.4 5 10.5 5 15a7 7 0 0 0 14 0c0-4.5-4.2-8.6-7-14zm0 19a3 3 0 0 1-3-3c0-2 1.5-3.5 3-5.5 1.5 2 3 3.5 3 5.5a3 3 0 0 1-3 3z"/></svg> TOP STREAK</div>
         <div class="stat-value-row">
-          <span class="stat-value" id="statEstSpend">$0</span>
+          <span class="stat-value" id="statHourlyStreak">0h</span>
         </div>
-        <div class="stat-pb" id="pbSpend"></div>
+        <div class="stat-pb" id="pbStreak"></div>
       </div>
     </div>
   </div>
@@ -1167,6 +1178,7 @@ let currentHourlyStreak = 0;
 let currentEstSpend = 0;
 let currentPeakStreak = 0;
 let currentDailyCost = '$0';
+let currentDailyTokens = 0;
 let rewardsData = null;
 let toastQueue = [];
 let toastActive = false;
@@ -1594,6 +1606,7 @@ function updateStats(hourlyData) {
   animateValue(document.getElementById('statHourlyStreak'), previousHourlyStreak, currentPeakStreak, v => v + 'h');
   previousHourlyStreak = currentPeakStreak;
 
+  document.getElementById('statEstTokens').textContent = formatNumber(currentDailyTokens);
   document.getElementById('statEstSpend').textContent = currentDailyCost;
 }
 
@@ -1686,6 +1699,7 @@ async function loadDayByIndex(index) {
       heatmapByDate[localDateStr] = heatmapByDate[localDateStr] || {};
       heatmapByDate[localDateStr].tokens = hourlyTokens;
     }
+    currentDailyTokens = hourlyTokens;
 
     // Compute daily cost
     if (totalTokens > 0 && hourlyTokens > 0 && currentEstSpend > 0) {
@@ -2085,16 +2099,19 @@ async function loadTeamPeriodData() {
         <div class="team-member-stats stats-section">
           <div class="stats-row">
             <div class="stat-col">
-              <div class="stat-label"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1C9.2 6.4 5 10.5 5 15a7 7 0 0 0 14 0c0-4.5-4.2-8.6-7-14zm0 19a3 3 0 0 1-3-3c0-2 1.5-3.5 3-5.5 1.5 2 3 3.5 3 5.5a3 3 0 0 1-3 3z"/></svg> TOP STREAK</div>
-              <div class="stat-value-row"><span class="stat-value accent" id="tmStreak-${m.user_hash}">0h</span></div>
+              <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> EST. BURN</div>
+              <div class="stat-value-row">
+                <span class="stat-value accent" id="tmBurn-${m.user_hash}">0</span>
+                <div class="stat-sub-value" id="tmBurnSub-${m.user_hash}">$0</div>
+              </div>
             </div>
             <div class="stat-col">
               <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><polyline points="6 9 10 13 6 17"/><line x1="12" y1="17" x2="18" y2="17"/></svg> MAX AGENTS</div>
               <div class="stat-value-row"><span class="stat-value" id="tmAgents-${m.user_hash}">0&times;</span></div>
             </div>
             <div class="stat-col">
-              <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> EST. BURN</div>
-              <div class="stat-value-row"><span class="stat-value" id="tmBurn-${m.user_hash}">$0</span></div>
+              <div class="stat-label"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1C9.2 6.4 5 10.5 5 15a7 7 0 0 0 14 0c0-4.5-4.2-8.6-7-14zm0 19a3 3 0 0 1-3-3c0-2 1.5-3.5 3-5.5 1.5 2 3 3.5 3 5.5a3 3 0 0 1-3 3z"/></svg> TOP STREAK</div>
+              <div class="stat-value-row"><span class="stat-value" id="tmStreak-${m.user_hash}">0h</span></div>
             </div>
           </div>
         </div>
@@ -2131,6 +2148,7 @@ async function loadTeamPeriodData() {
       const streakEl = document.getElementById(`tmStreak-${m.user_hash}`);
       const agentsEl = document.getElementById(`tmAgents-${m.user_hash}`);
       const burnEl = document.getElementById(`tmBurn-${m.user_hash}`);
+      const burnSubEl = document.getElementById(`tmBurnSub-${m.user_hash}`);
 
       const hourlyData = m.concurrency ? processHourlyData(m.concurrency, teamTimelineDate) : [];
       const hasActivity = hourlyData.some(d => d.sessions.length > 0);
@@ -2141,7 +2159,8 @@ async function loadTeamPeriodData() {
         }
         if (streakEl) streakEl.textContent = '0h';
         if (agentsEl) agentsEl.textContent = '0\u00d7';
-        if (burnEl) burnEl.textContent = formatCost(m.estimated_spend || 0);
+        if (burnEl) burnEl.textContent = formatNumber(m.tokens || 0);
+        if (burnSubEl) burnSubEl.textContent = formatCost(m.estimated_spend || 0);
         return;
       }
 
@@ -2160,7 +2179,8 @@ async function loadTeamPeriodData() {
 
       if (streakEl) streakEl.textContent = peakStreak + 'h';
       if (agentsEl) agentsEl.textContent = maxSessions + '\u00d7';
-      if (burnEl) burnEl.textContent = formatCost(m.estimated_spend || 0);
+      if (burnEl) burnEl.textContent = formatNumber(m.tokens || 0);
+      if (burnSubEl) burnSubEl.textContent = formatCost(m.estimated_spend || 0);
     });
     notifyHeight();
 
@@ -2464,13 +2484,14 @@ async function copyCardAsImage() {
 
   // Stats row
   const colW = (cardW - 60) / 3;
-  const sLabels = ['TOP STREAK', 'MAX AGENTS', 'EST. BURN'];
-  const sValues = [currentPeakStreak + 'h', maxSessions + '\u00d7', currentDailyCost];
+  const sLabels = ['EST. BURN', 'MAX AGENTS', 'TOP STREAK'];
+  const sValues = [formatNumber(currentDailyTokens), maxSessions + '\u00d7', currentPeakStreak + 'h'];
+  const sSubValues = [currentDailyCost, '', ''];
   const sColors = ['#E8692D', '#1a1a1a', '#1a1a1a'];
   const sIcons = [
-    '<path d="M12 1C9.2 6.4 5 10.5 5 15a7 7 0 0 0 14 0c0-4.5-4.2-8.6-7-14zm0 19a3 3 0 0 1-3-3c0-2 1.5-3.5 3-5.5 1.5 2 3 3.5 3 5.5a3 3 0 0 1-3 3z" fill="#8a8480"/>',
+    '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
     '<rect x="2" y="3" width="20" height="18" rx="2" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="6 9 10 13 6 17" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="17" x2="18" y2="17" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
-    '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="none" stroke="#8a8480" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+    '<path d="M12 1C9.2 6.4 5 10.5 5 15a7 7 0 0 0 14 0c0-4.5-4.2-8.6-7-14zm0 19a3 3 0 0 1-3-3c0-2 1.5-3.5 3-5.5 1.5 2 3 3.5 3 5.5a3 3 0 0 1-3 3z" fill="#8a8480"/>'
   ];
   const iconSz = 22, iconGap = 4;
   for (let i = 0; i < 3; i++) {
@@ -2481,6 +2502,9 @@ async function copyCardAsImage() {
     s += `<svg x="${groupX}" y="${statsY + 12}" width="${iconSz}" height="${iconSz}" viewBox="0 0 24 24">${sIcons[i]}</svg>`;
     s += `<text x="${groupX + iconSz + iconGap}" y="${statsY + 30}" fill="#8a8480" font-size="20" font-weight="700" letter-spacing="1.6" text-anchor="start">${sLabels[i]}</text>`;
     s += `<text x="${cx}" y="${statsY + 74}" fill="${sColors[i]}" font-size="36" font-weight="700" text-anchor="middle">${sValues[i]}</text>`;
+    if (sSubValues[i]) {
+      s += `<text x="${cx}" y="${statsY + 96}" fill="#8a8480" font-size="16" font-weight="600" text-anchor="middle">${sSubValues[i]}</text>`;
+    }
     if (i < 2) {
       const divX = 30 + colW * (i + 1);
       s += `<line x1="${divX}" y1="${statsY + 8}" x2="${divX}" y2="${statsY + statsHeight - 8}" stroke="#c8c0b8" stroke-width="1"/>`;
