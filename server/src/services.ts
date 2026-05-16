@@ -257,21 +257,29 @@ export async function getDailyRanksForUser(db: DbClient, userHash: string, targe
     ranks.concurrent_mins = null;
   }
 
-  // hourly_streak rank
+  // hourly_streak rank — group by primary user so linked-device rows count once.
+  // A primary user with multiple linked devices may have peak_hourly_streak written
+  // under several user_hashes (historical sync code + the v1 backfill); collapse
+  // them to one row per primary so total/higher denominators aren't inflated.
   const streakRows = await db.query(
-    "SELECT user_hash, peak_hourly_streak FROM metrics_history WHERE snapshot_date = ? AND peak_hourly_streak > 0"
+    `SELECT COALESCE(u.linked_to, u.user_hash) as user_hash, MAX(mh.peak_hourly_streak) as peak_hourly_streak
+     FROM metrics_history mh JOIN users u ON u.user_hash = mh.user_hash
+     WHERE mh.snapshot_date = ? AND mh.peak_hourly_streak > 0
+     GROUP BY COALESCE(u.linked_to, u.user_hash)
+     HAVING MAX(mh.peak_hourly_streak) > 0`
   ).all(targetDate) as any[];
 
   let userStreak: number | null = null;
   for (const row of streakRows) {
     if (myHashes.has(row.user_hash)) {
-      userStreak = Math.max(userStreak || 0, row.peak_hourly_streak);
+      userStreak = Number(row.peak_hourly_streak);
+      break;
     }
   }
 
   if (userStreak !== null && userStreak > 0) {
     const total = streakRows.length;
-    const higher = streakRows.filter(r => r.peak_hourly_streak > userStreak!).length;
+    const higher = streakRows.filter(r => Number(r.peak_hourly_streak) > userStreak!).length;
     ranks.hourly_streak = rankEntry(higher + 1, total);
   } else {
     ranks.hourly_streak = null;

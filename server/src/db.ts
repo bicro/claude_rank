@@ -279,6 +279,68 @@ export async function initDb(): Promise<void> {
     `);
   } catch { /* backfill already ran or no data */ }
 
+  // One-time backfill: reconstruct historical peak_hourly_streak from metrics_hourly.
+  // Before this migration, peak_hourly_streak only captured streaks that were active
+  // *at sync time*. Users who completed long streaks (e.g. 46h) before the column
+  // existed have 0 stored, so the lifetime leaderboard's MAX(peak_hourly_streak)
+  // misses them. Replay metrics_hourly per primary-user (unioning all linked
+  // devices) to find each consecutive-UTC-hour run, then write the run length to
+  // every date the run touched. Idempotent via GREATEST so it's safe to re-run.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS migrations_log (
+      key TEXT PRIMARY KEY,
+      ran_at TEXT NOT NULL
+    )
+  `);
+  const { rows: bfRows } = await pool.query(
+    `SELECT 1 FROM migrations_log WHERE key = 'backfill_peak_hourly_streak_v1'`
+  );
+  if (bfRows.length === 0) {
+    try {
+      await pool.query(`
+        WITH primary_to_devices AS (
+          SELECT COALESCE(linked_to, user_hash) AS primary_hash, user_hash AS device_hash FROM users
+        ),
+        distinct_hours_per_primary AS (
+          SELECT DISTINCT p2d.primary_hash, mh.snapshot_hour::timestamp AS hour_ts
+          FROM metrics_hourly mh
+          JOIN primary_to_devices p2d ON p2d.device_hash = mh.user_hash
+          WHERE mh.total_messages > 0 OR mh.total_tokens > 0
+        ),
+        ranked AS (
+          SELECT primary_hash, hour_ts,
+            hour_ts - (INTERVAL '1 hour' * ROW_NUMBER() OVER (PARTITION BY primary_hash ORDER BY hour_ts)) AS run_group
+          FROM distinct_hours_per_primary
+        ),
+        run_extents AS (
+          SELECT primary_hash, run_group, COUNT(*) AS run_len, MIN(hour_ts) AS run_start, MAX(hour_ts) AS run_end
+          FROM ranked GROUP BY primary_hash, run_group
+        ),
+        run_date_expansion AS (
+          SELECT primary_hash, run_len,
+            TO_CHAR(d, 'YYYY-MM-DD') AS run_date
+          FROM run_extents r,
+          LATERAL generate_series(DATE_TRUNC('day', r.run_start), DATE_TRUNC('day', r.run_end), '1 day') AS d
+        ),
+        peak_per_user_date AS (
+          SELECT primary_hash, run_date, MAX(run_len)::int AS peak_streak
+          FROM run_date_expansion GROUP BY primary_hash, run_date
+        )
+        INSERT INTO metrics_history (user_hash, snapshot_date, peak_hourly_streak)
+        SELECT primary_hash, run_date, peak_streak FROM peak_per_user_date WHERE peak_streak > 0
+        ON CONFLICT (user_hash, snapshot_date) DO UPDATE SET
+          peak_hourly_streak = GREATEST(COALESCE(metrics_history.peak_hourly_streak, 0), EXCLUDED.peak_hourly_streak)
+      `);
+      await pool.query(
+        `INSERT INTO migrations_log (key, ran_at) VALUES ('backfill_peak_hourly_streak_v1', $1)
+         ON CONFLICT (key) DO NOTHING`,
+        [new Date().toISOString()],
+      );
+    } catch (e) {
+      console.error("[db] peak_hourly_streak backfill failed", e);
+    }
+  }
+
   // Backfill device_metrics from user_metrics for existing solo users
   await pool.query(`
     INSERT INTO device_metrics (device_hash, total_tokens, total_messages, total_sessions, total_tool_calls,

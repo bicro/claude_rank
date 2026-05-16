@@ -1869,9 +1869,20 @@ async function handleSync(request: Request): Promise<Response> {
     const hourlyStreak = aggMetrics?.current_hourly_streak ?? 0;
 
     await pool.query(
-      `UPDATE metrics_history SET daily_spend = $1, peak_hourly_streak = GREATEST(COALESCE(peak_hourly_streak, 0), $2)
-       WHERE user_hash = $3 AND snapshot_date = $4`,
-      [dailySpend, hourlyStreak, req.user_hash, today],
+      `UPDATE metrics_history SET daily_spend = $1
+       WHERE user_hash = $2 AND snapshot_date = $3`,
+      [dailySpend, req.user_hash, today],
+    );
+
+    // peak_hourly_streak is stored on the primary's metrics_history row so the
+    // lifetime/daily leaderboards can MAX() across linked devices. Upsert because
+    // a row for (primaryHash, today) may not exist yet when a secondary device syncs.
+    await pool.query(
+      `INSERT INTO metrics_history (user_hash, snapshot_date, peak_hourly_streak)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_hash, snapshot_date) DO UPDATE SET
+         peak_hourly_streak = GREATEST(COALESCE(metrics_history.peak_hourly_streak, 0), EXCLUDED.peak_hourly_streak)`,
+      [primaryHash, today, hourlyStreak],
     );
   }
 
@@ -2004,16 +2015,33 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
       countSql = `SELECT COUNT(*) as cnt FROM metrics_history mh JOIN users u ON mh.user_hash = u.user_hash WHERE mh.snapshot_date = $1 AND u.linked_to IS NULL AND mh.daily_messages > 0`;
       countParams = [dateParam];
     } else if (category === "hourly_streak") {
+      // Peak hourly streak that touched `dateParam`, unioned across the primary
+      // and any linked device hashes. peak_hourly_streak is written per-day at
+      // sync time, so MAX() returns the longest consecutive-hour run recorded
+      // on that snapshot_date.
       rows = await db.query(
         `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
-          um.current_hourly_streak as value, um.weighted_score
-        FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
-        WHERE u.linked_to IS NULL AND um.current_hourly_streak > 0
-        ORDER BY um.current_hourly_streak DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
+          MAX(mh.peak_hourly_streak) as value, um.weighted_score
+        FROM users u
+        JOIN user_metrics um ON u.user_hash = um.user_hash
+        JOIN metrics_history mh ON mh.user_hash IN (
+          SELECT user_hash FROM users WHERE user_hash = u.user_hash OR linked_to = u.user_hash
+        )
+        WHERE u.linked_to IS NULL AND mh.snapshot_date = ?
+        GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score
+        HAVING MAX(mh.peak_hourly_streak) > 0
+        ORDER BY value DESC, um.weighted_score DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
         LIMIT ? OFFSET ?`
-      ).all(limit, offset) as any[];
-      countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL AND um.current_hourly_streak > 0`;
-      countParams = [];
+      ).all(dateParam, limit, offset) as any[];
+      countSql = `SELECT COUNT(*) as cnt FROM (
+        SELECT u.user_hash FROM users u
+        JOIN metrics_history mh ON mh.user_hash IN (
+          SELECT user_hash FROM users WHERE user_hash = u.user_hash OR linked_to = u.user_hash
+        )
+        WHERE u.linked_to IS NULL AND mh.snapshot_date = $1
+        GROUP BY u.user_hash HAVING MAX(mh.peak_hourly_streak) > 0
+      ) sub`;
+      countParams = [dateParam];
     } else {
       // consistency — same for daily and alltime
       rows = await db.query(
@@ -2128,15 +2156,30 @@ async function handleGetLeaderboard(category: string, url: URL): Promise<Respons
     ).all(limit, offset) as any[];
     countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL`;
   } else if (category === "hourly_streak") {
+    // Lifetime peak hourly streak: MAX across every recorded daily peak, unioned
+    // across the primary user and all their linked device hashes.
     rows = await db.query(
       `SELECT u.user_hash, u.username, u.display_name, u.avatar_url,
-        um.current_hourly_streak as value, um.weighted_score
-      FROM users u JOIN user_metrics um ON u.user_hash = um.user_hash
-      WHERE u.linked_to IS NULL AND um.current_hourly_streak > 0
-      ORDER BY um.current_hourly_streak DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
+        MAX(mh.peak_hourly_streak) as value, um.weighted_score
+      FROM users u
+      JOIN user_metrics um ON u.user_hash = um.user_hash
+      JOIN metrics_history mh ON mh.user_hash IN (
+        SELECT user_hash FROM users WHERE user_hash = u.user_hash OR linked_to = u.user_hash
+      )
+      WHERE u.linked_to IS NULL
+      GROUP BY u.user_hash, u.username, u.display_name, u.avatar_url, um.weighted_score
+      HAVING MAX(mh.peak_hourly_streak) > 0
+      ORDER BY value DESC, um.weighted_score DESC, CASE WHEN u.user_hash LIKE 'seed-%' THEN 1 ELSE 0 END
       LIMIT ? OFFSET ?`
     ).all(limit, offset) as any[];
-    countSql = `SELECT COUNT(*) as cnt FROM user_metrics um JOIN users u ON u.user_hash = um.user_hash WHERE u.linked_to IS NULL AND um.current_hourly_streak > 0`;
+    countSql = `SELECT COUNT(*) as cnt FROM (
+      SELECT u.user_hash FROM users u
+      JOIN metrics_history mh ON mh.user_hash IN (
+        SELECT user_hash FROM users WHERE user_hash = u.user_hash OR linked_to = u.user_hash
+      )
+      WHERE u.linked_to IS NULL
+      GROUP BY u.user_hash HAVING MAX(mh.peak_hourly_streak) > 0
+    ) sub`;
   } else {
     // consistency
     rows = await db.query(
