@@ -11,6 +11,7 @@ const CATEGORY_LABELS = {
   concurrency_time: "Concurrency Time",
   consistency: "Consistency",
   messages: "Messages",
+  hourly_streak: "Hourly Streak",
 };
 
 export async function renderLeaderboard(category = "tokens", limit = 20) {

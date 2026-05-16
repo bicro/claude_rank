@@ -18,6 +18,14 @@ const BOLD = "\x1b[1m";
 const ORANGE = "\x1b[38;5;208m";
 const CYAN = "\x1b[36m";
 
+const TIER_EMOJI = {
+  Bronze: "🥉",
+  Silver: "🥈",
+  Gold: "🥇",
+  Platinum: "💠",
+  Diamond: "💎",
+};
+
 function loadCachedProfile() {
   try {
     const raw = readFileSync(PROFILE_CACHE, "utf-8");
@@ -283,6 +291,11 @@ async function main() {
   const m = profile.metrics || profile;
   const rank = profile.ranks?.weighted?.rank;
   const streak = m.current_streak ?? 0;
+  const hourlyStreak = m.current_hourly_streak ?? 0;
+  const maxConcurrent = m.max_concurrent ?? 0;
+  const displayName = profile.display_name || profile.username || null;
+  const tierName = profile.tier?.tier || null;
+  const tierEmoji = tierName ? (TIER_EMOJI[tierName] || "") : "";
 
   const stats = loadStatsData();
   const tokens = todayTokens(stats);
@@ -291,9 +304,15 @@ async function main() {
 
   const parts = [];
   parts.push(`${DIM}──${RESET} ${BOLD}${ORANGE}Claude Rank${RESET} ${DIM}──${RESET}`);
-  if (rank) parts.push(`${CYAN}#${rank} Globally${RESET}`);
+  if (tierName) parts.push(`${tierEmoji ? tierEmoji + " " : ""}${tierName}`.trim());
+  if (rank) {
+    const namePrefix = displayName ? `${displayName} · ` : "";
+    parts.push(`${CYAN}${namePrefix}#${rank} Globally${RESET}`);
+  }
   if (streak > 0) parts.push(`🔥${streak}d`);
+  if (hourlyStreak > 0) parts.push(`⏱${hourlyStreak}h`);
   parts.push(`${ORANGE}⚡ ${tokenStr}${RESET} tokens today`);
+  if (maxConcurrent > 1) parts.push(`🧵×${maxConcurrent}`);
   parts.push(`~${cost}`);
 
   const output = [parts.join(` ${DIM}│${RESET} `)];
