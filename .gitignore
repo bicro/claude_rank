@@ -57,3 +57,5 @@ backend/.env
 *.db-shm
 *.db-wal
 desktop/src-tauri/gen/schemas/macOS-schema.json
+
+.claude/settings.local.json
