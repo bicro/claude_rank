@@ -37,6 +37,30 @@ export function estimateCost(tokenBreakdown: Record<string, any>): number {
   return Math.round(cost * 100) / 100;
 }
 
+// ─── Subscription plan pricing ────────────────────────────────────────────────
+// Clients auto-detect the plan from ~/.claude.json (oauthAccount.organizationRateLimitTier
+// / organizationType) and send the raw strings. We map them to a monthly USD price here so
+// pricing can change without shipping a new plugin/desktop release. Matched by substring to
+// survive tier-string prefix changes. Returns null for unknown/API-key users (stat hidden).
+const PLAN_PRICING: { match: string; usd: number }[] = [
+  { match: "max_20x", usd: 200 },
+  { match: "max_5x", usd: 100 },
+  { match: "pro", usd: 20 },
+];
+
+export function mapPlanToUsd(plan: {
+  organization_type?: string | null;
+  rate_limit_tier?: string | null;
+  billing_type?: string | null;
+} | null | undefined): number | null {
+  if (!plan) return null;
+  // Only subscription billing has a flat monthly price; API-key/usage billing does not.
+  if (plan.billing_type && !plan.billing_type.includes("subscription")) return null;
+  const signal = `${plan.rate_limit_tier ?? ""} ${plan.organization_type ?? ""}`.toLowerCase();
+  const hit = PLAN_PRICING.find(p => signal.includes(p.match));
+  return hit ? hit.usd : null;
+}
+
 // ─── Ranking ────────────────────────────────────────────────────────────────
 
 const WEIGHTED_FORMULA = {

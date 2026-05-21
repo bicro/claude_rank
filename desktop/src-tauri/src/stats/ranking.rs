@@ -114,6 +114,20 @@ pub(crate) struct SyncPayload {
     tool_names: Option<Vec<String>>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     full_reparse: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    plan: Option<Plan>,
+}
+
+/// Auto-detected subscription plan signals read from ~/.claude.json (oauthAccount).
+/// The server maps these raw strings to a monthly USD price for the "plan value" stat.
+#[derive(Debug, Serialize)]
+struct Plan {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    organization_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rate_limit_tier: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    billing_type: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -350,8 +364,30 @@ impl RankingEngine {
             prompts: None,       // Populated from sessions if enabled
             tool_names: None,    // Could be populated from stats
             full_reparse,
+            plan: detect_plan(),
         }
     }
+}
+
+/// Read the Claude subscription plan from ~/.claude.json (oauthAccount). Returns None for
+/// API-key users (no oauthAccount) or any read/parse failure — sync must never fail on this.
+fn detect_plan() -> Option<Plan> {
+    let path = dirs::home_dir()?.join(".claude.json");
+    let raw = std::fs::read_to_string(path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let oa = json.get("oauthAccount")?;
+    if oa.is_null() {
+        return None;
+    }
+    let as_str = |v: &serde_json::Value| v.as_str().map(|s| s.to_string());
+    Some(Plan {
+        organization_type: oa.get("organizationType").and_then(as_str),
+        rate_limit_tier: oa
+            .get("organizationRateLimitTier")
+            .and_then(as_str)
+            .or_else(|| oa.get("userRateLimitTier").and_then(as_str)),
+        billing_type: oa.get("billingType").and_then(as_str),
+    })
 }
 
 // ── File I/O ──

@@ -229,6 +229,12 @@
                                     <div class="value" data-raw="${m.total_tool_calls || 0}">0</div>
                                     ${rankDisplay(ranks.tools)}
                                 </div>
+                                ${profile.plan_value && profile.plan_value.ratio > 0 ? `
+                                <div class="stat-card" data-tooltip="How much your Claude Code usage is worth this month versus what you pay Anthropic: $${profile.plan_value.month_spend.toFixed(2)} of API-equivalent usage on your $${profile.plan_value.monthly_usd}/mo plan.">
+                                    <div class="label">Plan Value (this month)</div>
+                                    <div class="value" data-raw-ratio="${profile.plan_value.ratio}">0×</div>
+                                </div>
+                                ` : ''}
                             </div>
                         </div>
                         <div class="stat-category" data-tooltip="Peak number of Claude Code sessions running at the same time today.">
@@ -311,6 +317,10 @@
                     container.querySelectorAll('[data-raw-mins]').forEach(el => {
                         const target = parseInt(el.getAttribute('data-raw-mins'), 10);
                         if (target > 0) animateValue(el, 0, target, v => v + 'm');
+                    });
+                    container.querySelectorAll('[data-raw-ratio]').forEach(el => {
+                        const target = Math.round(parseFloat(el.getAttribute('data-raw-ratio')) * 10);
+                        if (target > 0) animateValue(el, 0, target, v => (v / 10).toFixed(1) + '×');
                     });
                 });
 

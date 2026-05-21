@@ -226,6 +226,18 @@ export async function initDb(): Promise<void> {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_linked_to ON users(linked_to)`);
   } catch { /* already exists */ }
 
+  // Subscription plan (auto-detected from ~/.claude.json oauthAccount on the client) for the
+  // "plan value" stat: current-month spend ÷ what the user pays Anthropic per month.
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_plan TEXT`);
+  } catch { /* already exists */ }
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS monthly_plan_usd DOUBLE PRECISION`);
+  } catch { /* already exists */ }
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_synced_at TEXT`);
+  } catch { /* already exists */ }
+
   // Add concurrency aggregate columns to metrics_history
   try {
     await pool.query(`ALTER TABLE metrics_history ADD COLUMN IF NOT EXISTS peak_concurrency INTEGER DEFAULT 0`);

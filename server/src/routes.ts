@@ -10,6 +10,7 @@ import {
   evaluateRankingBadges,
   evaluateTeamBadges,
   estimateCost,
+  mapPlanToUsd,
   getHotUsers,
   computePoints,
   computeStreak,
@@ -633,6 +634,7 @@ async function handleGetUserProfile(userHash: string, request: Request): Promise
         current_streak: 0, total_points: 0, level: 0, last_synced: null,
         max_concurrent: 0, concurrent_mins: 0, estimated_spend: 0,
       },
+      plan_value: null,
       ranks: {},
       tier: computeTier(0),
       badges: [],
@@ -698,6 +700,34 @@ async function handleGetUserProfile(userHash: string, request: Request): Promise
     }
   } catch {}
 
+  // Plan value: current calendar-month spend ÷ what the user pays Anthropic per month.
+  // Plan may be stored on any linked device row; spend sums daily_spend across all of them.
+  let planValue: { plan: string | null; monthly_usd: number; month_spend: number; ratio: number } | null = null;
+  try {
+    const monthPrefix = today.substring(0, 7); // YYYY-MM
+    const { rows: planRows } = await pool.query(
+      `SELECT subscription_plan, monthly_plan_usd FROM users
+       WHERE user_hash IN (${ph}) AND monthly_plan_usd IS NOT NULL
+       ORDER BY plan_synced_at DESC NULLS LAST LIMIT 1`,
+      [...hashes],
+    );
+    const monthlyUsd = Number(planRows[0]?.monthly_plan_usd ?? 0);
+    if (monthlyUsd > 0) {
+      const { rows: spendRows } = await pool.query(
+        `SELECT COALESCE(SUM(daily_spend), 0) AS month_spend FROM metrics_history
+         WHERE user_hash IN (${ph}) AND snapshot_date LIKE $${hashes.length + 1}`,
+        [...hashes, `${monthPrefix}-%`],
+      );
+      const monthSpend = Math.round(Number(spendRows[0]?.month_spend ?? 0) * 100) / 100;
+      planValue = {
+        plan: planRows[0].subscription_plan ?? null,
+        monthly_usd: monthlyUsd,
+        month_spend: monthSpend,
+        ratio: monthSpend / monthlyUsd,
+      };
+    }
+  } catch {}
+
   return json({
     user_hash: profileUser.user_hash,
     username: profileUser.username,
@@ -724,6 +754,7 @@ async function handleGetUserProfile(userHash: string, request: Request): Promise
       concurrent_mins: concurrentMins,
       estimated_spend: metrics?.estimated_spend ?? 0,
     },
+    plan_value: planValue,
     ranks,
     tier,
     badges: badges.map(b => ({
@@ -1573,6 +1604,17 @@ async function handleSync(request: Request): Promise<Response> {
     await db.query("UPDATE users SET sync_secret = ? WHERE user_hash = ?").run(req.sync_secret, req.user_hash);
   } else if (existingUser.sync_secret !== req.sync_secret) {
     return error("Forbidden", 403);
+  }
+
+  // Store auto-detected subscription plan (sent by plugin/desktop from ~/.claude.json).
+  // Only update when present so a sync from a client that couldn't read it doesn't wipe it.
+  if (req.plan && typeof req.plan === "object") {
+    const monthlyUsd = mapPlanToUsd(req.plan);
+    if (monthlyUsd !== null) {
+      await db.query(
+        "UPDATE users SET subscription_plan = ?, monthly_plan_usd = ?, plan_synced_at = ? WHERE user_hash = ?"
+      ).run(req.plan.rate_limit_tier ?? req.plan.organization_type ?? null, monthlyUsd, new Date().toISOString(), req.user_hash);
+    }
   }
 
   // Compute prompt uniqueness

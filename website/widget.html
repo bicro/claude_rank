@@ -1051,6 +1051,7 @@
           <div class="stat-sub-value" id="statEstSpend">$0</div>
         </div>
         <div class="stat-pb" id="pbSpend"></div>
+        <div class="stat-pb" id="planValue"></div>
       </div>
       <div class="stat-col">
         <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><polyline points="6 9 10 13 6 17"/><line x1="12" y1="17" x2="18" y2="17"/></svg> MAX AGENTS</div>
@@ -1785,6 +1786,19 @@ async function loadProfile() {
     totalTokens = m.total_tokens || 0;
     currentHourlyStreak = m.current_hourly_streak || 0;
     currentEstSpend = m.estimated_spend || 0;
+
+    // Plan value: this month's usage vs what the user pays Anthropic
+    const planValueEl = document.getElementById('planValue');
+    if (planValueEl) {
+      const pv = data.plan_value;
+      if (pv && pv.ratio > 0) {
+        const r = pv.ratio >= 10 ? Math.round(pv.ratio) : pv.ratio.toFixed(1);
+        planValueEl.textContent = `${r}× plan value`;
+        planValueEl.title = `${formatCost(pv.month_spend)} of usage this month on your $${pv.monthly_usd}/mo plan`;
+      } else {
+        planValueEl.textContent = '';
+      }
+    }
 
     document.getElementById('linkFull').href = window.location.origin;
   } catch (e) {
