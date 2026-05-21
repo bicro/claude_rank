@@ -314,6 +314,11 @@ async function main() {
   parts.push(`${ORANGE}⚡ ${tokenStr}${RESET} tokens today`);
   if (maxConcurrent > 1) parts.push(`🧵×${maxConcurrent}`);
   parts.push(`~${cost}`);
+  const pv = profile.plan_value;
+  if (pv && pv.ratio > 0) {
+    const r = pv.ratio >= 10 ? Math.round(pv.ratio) : pv.ratio.toFixed(1);
+    parts.push(`📈 ${r}× plan`);
+  }
 
   const output = [parts.join(` ${DIM}│${RESET} `)];
 

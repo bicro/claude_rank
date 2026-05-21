@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadOrCreateIdentity, saveIdentity, getLookupHash, CLAUDE_RANK_DIR } from "./lib/identity.mjs";
 import { loadStats } from "./lib/log-parser.mjs";
+import { detectPlan } from "./lib/plan.mjs";
 import { postSync, fetchUserProfile } from "./lib/api.mjs";
 
 const PROFILE_CACHE = join(CLAUDE_RANK_DIR, "profile-cache.json");
@@ -79,6 +80,7 @@ export async function buildAndSync(config, stats) {
     prompt_hashes: stats.promptHashes || null,
     prompts: null,
     tool_names: stats.toolNames || null,
+    plan: detectPlan(),
   };
 
   const response = await postSync(payload);

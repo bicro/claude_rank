@@ -278,6 +278,11 @@ export async function renderProfile() {
   // Today summary
   out.push(`### Today`);
   out.push(`${fmtTokens(tokens)} tokens burned · ~${cost} est. cost`);
+  const pv = profile.plan_value;
+  if (pv && pv.ratio > 0) {
+    const r = pv.ratio >= 10 ? Math.round(pv.ratio) : pv.ratio.toFixed(1);
+    out.push(`Plan value: ${r}× — $${pv.month_spend.toFixed(2)} of usage this month on your $${pv.monthly_usd}/mo plan`);
+  }
   out.push("");
 
   // Activity timeline (from local stats, not API)
