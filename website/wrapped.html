@@ -17,272 +17,463 @@
     <meta id="ogImage" property="og:image" content="">
     <meta id="twImage" property="twitter:image" content="">
     <style>
-        .wrapped-page {
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 32px 24px 120px;
+        /* ╔═══════════════════════════════════════════════════╗
+           Cinematic Wrapped — local tokens
+           Page-scoped overrides; do not affect rest of site.
+           ╚═══════════════════════════════════════════════════╝ */
+        :root {
+            --accent-deep: #c2521e;
+            --bg-page-end: #f0ece4;
+            --shadow-card: 0 4px 14px rgba(0,0,0,0.06);
+            --shadow-pop: 0 18px 50px rgba(0,0,0,0.18);
         }
 
-        .wrapped-hero {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 24px;
-            margin-bottom: 32px;
-            text-align: center;
-        }
-        .wrapped-hero img {
-            display: block;
-            width: 100%;
-            max-width: 100%;
-            height: auto;
-            border-radius: 12px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-        }
-        [data-theme="dark"] .wrapped-hero img {
-            box-shadow: 0 4px 24px rgba(0,0,0,0.4);
-        }
-
-        .wrapped-eyebrow {
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
-        }
-        .wrapped-title {
-            font-size: 28px;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-            margin-bottom: 4px;
-        }
-        .wrapped-subtitle {
-            color: var(--accent);
-            font-size: 14px;
-            font-weight: 700;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            margin-bottom: 24px;
-        }
-
-        .wrapped-section {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 24px;
-            margin-bottom: 20px;
-        }
-        .wrapped-section h2 {
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            color: var(--text-secondary);
-            margin-bottom: 16px;
-        }
-
-        .stat-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 20px;
-        }
-        .stat-cell {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        .stat-cell .label {
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            color: var(--text-secondary);
-        }
-        .stat-cell .value {
-            font-size: 28px;
-            font-weight: 700;
+        body.wrapped {
+            margin: 0; padding: 0;
+            font-family: 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+            overflow-x: hidden;
+            background: #0e0e0e;
             color: var(--text-primary);
-            line-height: 1.1;
+            min-height: 100vh;
         }
-        .stat-cell .value.accent { color: var(--accent); }
-        .stat-cell .sub {
-            font-size: 12px;
-            color: var(--text-secondary);
-        }
-        .stat-cell .delta {
-            font-size: 13px;
-            font-weight: 600;
-        }
-        .stat-cell .delta.up { color: var(--green); }
-        .stat-cell .delta.down { color: var(--red); }
+        html.wrapped-html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+        body.wrapped a { text-decoration: none; }
 
-        .heatmap-wrap {
-            overflow-x: auto;
+        /* progress rail (fixed) */
+        .rail {
+            position: fixed; right: 22px; top: 50%; transform: translateY(-50%);
+            z-index: 50; display: flex; flex-direction: column; gap: 10px;
         }
-        .heatmap-grid {
-            display: grid;
-            grid-template-columns: 32px repeat(24, 1fr);
-            gap: 2px;
-            min-width: 540px;
-        }
-        .heatmap-grid .hdr {
-            font-size: 9px;
-            color: var(--text-secondary);
-            font-weight: 600;
-            text-align: center;
-            align-self: end;
-            padding-bottom: 4px;
-        }
-        .heatmap-grid .dow-label {
-            font-size: 10px;
-            color: var(--text-secondary);
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-        }
-        .heatmap-cell {
-            aspect-ratio: 1.4 / 1;
-            border-radius: 2px;
-            background: var(--bg-hover);
-        }
-        .heatmap-cell.l0 { background: var(--bg-hover); }
-        .heatmap-cell.l1 { background: rgba(232, 105, 45, 0.20); }
-        .heatmap-cell.l2 { background: rgba(232, 105, 45, 0.40); }
-        .heatmap-cell.l3 { background: rgba(232, 105, 45, 0.65); }
-        .heatmap-cell.l4 { background: rgba(232, 105, 45, 0.90); }
-
-        .flex-line {
-            font-size: 18px;
-            font-weight: 600;
-            line-height: 1.5;
-        }
-        .flex-line .accent { color: var(--accent); }
-
-        .wrapped-actions {
-            position: sticky;
-            bottom: 16px;
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            margin-top: 24px;
-            z-index: 5;
-        }
-        .wrapped-actions button {
-            background: var(--text-primary);
-            color: var(--bg-primary);
-            border: none;
-            padding: 12px 22px;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            border-radius: 8px;
+        .rail .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: rgba(255,255,255,0.30);
+            border: 1px solid rgba(255,255,255,0.50);
             cursor: pointer;
-            font-family: inherit;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transition: all 0.25s ease;
         }
-        .wrapped-actions button.secondary {
-            background: var(--bg-card);
+        .rail .dot[data-light="dark"] {
+            background: rgba(0,0,0,0.18);
+            border-color: rgba(0,0,0,0.4);
+        }
+        .rail .dot.active { transform: scale(1.7); background: var(--accent); border-color: var(--accent); }
+
+        /* Top brand badge */
+        .brandbadge {
+            position: fixed; top: 22px; left: 24px; z-index: 50;
+            display: flex; align-items: center; gap: 10px;
+            color: #fff; font-weight: 700; letter-spacing: 2px; font-size: 11px;
+            text-transform: uppercase;
+            mix-blend-mode: difference;
+        }
+        .brandbadge img { width: 18px; height: 18px; filter: invert(1); }
+        .pageno {
+            position: fixed; top: 22px; right: 60px; z-index: 50;
+            color: #fff; font-weight: 700; letter-spacing: 2px; font-size: 11px;
+            mix-blend-mode: difference;
+        }
+
+        /* Section base */
+        section.chap {
+            height: 100vh; height: 100svh; min-height: 600px;
+            width: 100vw;
+            scroll-snap-align: start;
+            display: flex; align-items: center; justify-content: center;
+            position: relative;
+            overflow: hidden;
+            padding: 0 6vw;
+        }
+        section.chap .inner { width: 100%; max-width: 1200px; position: relative; z-index: 2; }
+
+        /* Eyebrow text */
+        .eb {
+            font-size: 12px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
+            color: var(--text-secondary);
+            display: inline-flex; align-items: center; gap: 10px;
+            margin-bottom: 18px;
+        }
+        .eb::before {
+            content: ""; width: 28px; height: 1px; background: currentColor;
+        }
+        section.chap[data-theme="dark"] .eb { color: #999; }
+        section.chap[data-theme="hot"] .eb { color: rgba(255,255,255,0.7); }
+
+        /* Headline */
+        .hl {
+            font-size: clamp(48px, 7vw, 96px);
+            font-weight: 800; line-height: 0.96; letter-spacing: -2px;
+            margin: 0 0 22px;
+            text-wrap: balance;
             color: var(--text-primary);
+        }
+        .hl .accent { color: var(--accent); }
+        section.chap[data-theme="dark"] .hl { color: #fff; }
+        section.chap[data-theme="hot"] .hl { color: #fff; }
+
+        /* Sub copy */
+        .sub {
+            font-size: 17px; font-weight: 500; max-width: 600px;
+            line-height: 1.55; color: var(--text-secondary);
+        }
+        section.chap[data-theme="dark"] .sub { color: #aaa; }
+        section.chap[data-theme="hot"] .sub { color: rgba(255,255,255,0.78); }
+
+        /* Mega numeral */
+        .mega {
+            font-size: clamp(140px, 28vw, 420px);
+            font-weight: 800;
+            letter-spacing: -10px;
+            line-height: 0.82;
+            font-variant-numeric: tabular-nums;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        section.chap[data-theme="dark"] .mega { color: #fff; }
+        section.chap[data-theme="hot"] .mega { color: #fff; }
+        .mega .unit {
+            font-size: 0.16em; letter-spacing: 4px; vertical-align: super;
+            margin-left: 10px;
+            color: var(--text-secondary);
+            font-weight: 700;
+        }
+        section.chap[data-theme="dark"] .mega .unit { color: #888; }
+        section.chap[data-theme="hot"] .mega .unit { color: rgba(255,255,255,0.6); }
+
+        /* ╔═══ CHAPTER 0 · COVER ═══╗ */
+        #c0 { background: linear-gradient(180deg, #fff 0%, var(--bg-page-end) 100%); }
+        #c0 .cover-eyebrow {
+            font-size: 12px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase;
+            color: var(--text-secondary);
+            display: flex; align-items: center; gap: 10px;
+            justify-content: center;
+        }
+        #c0 .cover-eyebrow::before, #c0 .cover-eyebrow::after {
+            content: ""; flex: 1; max-width: 80px; height: 1px; background: var(--text-secondary);
+        }
+        #c0 .title {
+            font-size: clamp(80px, 18vw, 280px);
+            font-weight: 800; letter-spacing: -8px;
+            line-height: 0.85;
+            margin: 24px 0;
+            text-align: center;
+            color: var(--text-primary);
+        }
+        #c0 .title .yr { color: var(--accent); }
+        #c0 .meta {
+            display: flex; gap: 28px; justify-content: center; flex-wrap: wrap;
+            font-size: 13px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-top: 20px;
+        }
+        #c0 .meta b { color: var(--text-primary); }
+        #c0 .scroll-cue {
+            position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%);
+            color: var(--text-secondary); font-size: 11px; font-weight: 700;
+            letter-spacing: 2px; text-transform: uppercase;
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+        }
+        #c0 .scroll-cue .arr { animation: bob 1.6s ease-in-out infinite; }
+        @keyframes bob {
+            0%,100% { transform: translateY(0); } 50% { transform: translateY(6px); }
+        }
+        #c0 .echo {
+            position: absolute; left: 0; right: 0; top: 50%;
+            transform: translateY(-50%);
+            font-size: clamp(80px, 18vw, 280px);
+            font-weight: 800; letter-spacing: -8px;
+            line-height: 0.85;
+            text-align: center;
+            pointer-events: none;
+            color: var(--accent);
+            opacity: 0.05;
+            will-change: transform;
+        }
+        #c0 .echo.e1 { color: #111; }
+
+        /* ╔═══ CHAPTER 1 · MESSAGES ═══╗ */
+        #c1 { background: var(--bg-page-end); }
+        #c1 .row { display: grid; grid-template-columns: 1.2fr 1fr; gap: 60px; align-items: center; }
+        @media (max-width: 800px) { #c1 .row { grid-template-columns: 1fr; gap: 30px; } }
+        #c1 .megaCount {
+            font-size: clamp(120px, 22vw, 320px);
+            font-weight: 800; letter-spacing: -8px; line-height: 0.85;
+            font-variant-numeric: tabular-nums;
+            color: var(--text-primary);
+        }
+        #c1 .delta {
+            display: inline-flex; align-items: baseline; gap: 8px;
+            padding: 10px 18px; border-radius: 8px;
+            background: #fff; box-shadow: var(--shadow-card);
+            font-size: 18px; font-weight: 800; color: var(--green);
+            margin-top: 24px;
+        }
+        #c1 .delta.down { color: var(--red); }
+        #c1 .delta .ago { color: var(--text-secondary); font-weight: 600; font-size: 13px; margin-left: 6px; letter-spacing: 1px; text-transform: uppercase; }
+
+        /* ╔═══ CHAPTER 2 · TOKENS (HOT) ═══╗ */
+        #c2 { background: linear-gradient(160deg, var(--accent) 0%, var(--accent-deep) 100%); color: #fff; }
+        #c2 .glow {
+            position: absolute; inset: -50%;
+            background: radial-gradient(circle at 30% 50%, rgba(255,255,255,0.20), transparent 50%),
+                        radial-gradient(circle at 80% 70%, rgba(255,255,255,0.12), transparent 45%);
+            pointer-events: none;
+        }
+        #c2 .layout { display: grid; grid-template-columns: 1.4fr 1fr; gap: 60px; align-items: center; }
+        @media (max-width: 800px) { #c2 .layout { grid-template-columns: 1fr; } }
+        #c2 .megaCount {
+            font-size: clamp(120px, 24vw, 360px);
+            font-weight: 800; letter-spacing: -10px; line-height: 0.85;
+            font-variant-numeric: tabular-nums;
+            color: #fff;
+        }
+        #c2 .megaCount .unit { font-size: 0.17em; opacity: 0.7; letter-spacing: 4px; margin-left: 8px; }
+        #c2 .receipt {
+            background: rgba(0,0,0,0.18);
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 14px; padding: 22px;
+            font-size: 13px; line-height: 1.85;
+            backdrop-filter: blur(4px);
+        }
+        #c2 .receipt .ln {
+            display: grid; grid-template-columns: 1fr auto; gap: 14px;
+            border-bottom: 1px dashed rgba(255,255,255,0.18);
+            padding: 6px 0;
+        }
+        #c2 .receipt .ln:last-child { border: none; padding-top: 10px; font-weight: 800; }
+        #c2 .receipt .ln .l { color: rgba(255,255,255,0.85); }
+        #c2 .receipt .ln .r { font-variant-numeric: tabular-nums; }
+        #c2 .receipt .head { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,0.6); margin-bottom: 10px; }
+
+        /* ╔═══ CHAPTER 3 · VS LAST MONTH ═══╗ */
+        #c3 { background: var(--bg-page-end); }
+        #c3 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+        @media (max-width: 800px) { #c3 .split { grid-template-columns: 1fr; } }
+        #c3 .card {
+            background: #fff; border-radius: 18px;
+            padding: 28px 30px; box-shadow: var(--shadow-card);
             border: 1px solid var(--border);
         }
-        .wrapped-actions button:hover { opacity: 0.85; }
-        .wrapped-actions .toast {
-            position: absolute;
-            bottom: 100%;
-            margin-bottom: 8px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--text-primary);
-            color: var(--bg-primary);
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 11px;
-            letter-spacing: 1px;
-            opacity: 0;
-            transition: opacity 0.2s;
-            pointer-events: none;
-            white-space: nowrap;
+        #c3 .card.prev { opacity: 0.55; }
+        #c3 .card h3 { margin: 0 0 4px; font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-secondary); }
+        #c3 .card .month { font-size: 28px; font-weight: 800; letter-spacing: -1px; margin: 0 0 24px; color: var(--text-primary); }
+        #c3 .card .month.now { color: var(--accent); }
+        #c3 .stat-line {
+            display: grid; grid-template-columns: 110px 1fr 90px;
+            gap: 14px; align-items: center;
+            padding: 10px 0;
+            border-top: 1px solid var(--border);
+            font-size: 13px;
         }
-        .wrapped-actions .toast.show { opacity: 1; }
+        #c3 .stat-line:first-of-type { border-top: none; }
+        #c3 .stat-line .lab { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-secondary); }
+        #c3 .stat-line .v { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+        #c3 .stat-line .ring {
+            height: 6px; background: var(--bg-card); border-radius: 999px; overflow: hidden;
+        }
+        #c3 .stat-line .ring i {
+            display: block; height: 100%; background: var(--accent); border-radius: 999px;
+            width: 0; transition: width 1.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+        }
+        #c3 .card.prev .stat-line .ring i { background: var(--text-secondary); }
 
-        .empty-state {
-            text-align: center;
-            padding: 80px 24px;
-            color: var(--text-secondary);
+        /* ╔═══ CHAPTER 4 · HEATMAP (DARK) ═══╗ */
+        #c4 { background: #0e0e0e; color: #fff; }
+        #c4 .hm-grid { display: grid; grid-template-columns: 1fr 1.4fr; gap: 60px; align-items: center; }
+        @media (max-width: 1000px) { #c4 .hm-grid { grid-template-columns: 1fr; } }
+        #c4 .map-card {
+            background: #1a1a1a; border-radius: 18px; padding: 22px 24px;
+            border: 1px solid #2a2a2a;
         }
-        .empty-state h2 {
+        #c4 .map-card .head {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 14px;
+            font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #888;
+        }
+        #c4 .map-card .legend { display: flex; align-items: center; gap: 8px; }
+        #c4 .map-card .legend .g { width: 80px; height: 10px; border-radius: 3px; background: linear-gradient(to right, #4a3322, var(--accent-deep)); }
+        #c4 .cell { transition: opacity 0.5s ease, transform 0.5s ease; transform-origin: center; transform-box: fill-box; }
+        #c4 .cell.empty { fill: #232323; opacity: 0.8; }
+        #c4 .cell.q1 { fill: #5a3220; }
+        #c4 .cell.q2 { fill: #8a4422; }
+        #c4 .cell.q3 { fill: #c25620; }
+        #c4 .cell.q4 { fill: var(--accent-deep); }
+        #c4 .cell.reveal-pending { opacity: 0; transform: scale(0.4); }
+        #c4 .cell.peak { stroke: #fff; stroke-width: 1.5px; }
+        #c4 .peak-tag {
+            display: inline-block; padding: 6px 12px;
+            background: var(--accent); color: #fff;
+            border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: 2px;
+        }
+
+        /* ╔═══ CHAPTER 5 · BUSIEST DAY ═══╗ */
+        #c5 { background: var(--bg-page-end); }
+        #c5 .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 50px; align-items: center; }
+        @media (max-width: 900px) { #c5 .grid { grid-template-columns: 1fr; } }
+        #c5 .dayMega {
+            font-size: clamp(140px, 22vw, 300px);
+            font-weight: 800; letter-spacing: -10px; line-height: 0.85;
+            font-variant-numeric: tabular-nums;
             color: var(--text-primary);
-            font-size: 20px;
-            margin-bottom: 8px;
-            letter-spacing: 1px;
+            margin-top: 20px;
         }
+        #c5 .dayMega .accent { color: var(--accent); }
+        #c5 .ticket {
+            background: #fff; border-radius: 16px; padding: 26px 28px;
+            box-shadow: var(--shadow-card); border: 1px solid var(--border);
+            position: relative; overflow: hidden;
+        }
+        #c5 .ticket::before, #c5 .ticket::after {
+            content: ""; position: absolute; width: 24px; height: 24px;
+            background: var(--bg-page-end);
+            border-radius: 50%; left: 50%; transform: translateX(-50%);
+        }
+        #c5 .ticket::before { top: -12px; }
+        #c5 .ticket::after  { bottom: -12px; }
+        #c5 .ticket .d {
+            font-size: 14px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 4px;
+        }
+        #c5 .ticket .dt {
+            font-size: 56px; font-weight: 800; letter-spacing: -2px; line-height: 1;
+            color: var(--text-primary); margin-bottom: 18px;
+        }
+        #c5 .ticket .dt .day { color: var(--accent); }
+        #c5 .ticket hr { border: none; border-top: 1px dashed var(--border); margin: 18px 0; }
+        #c5 .ticket .trow {
+            display: grid; grid-template-columns: 1fr auto;
+            gap: 14px; padding: 6px 0;
+            font-size: 13px;
+        }
+        #c5 .ticket .trow .l { color: var(--text-secondary); font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; font-size: 11px; }
+        #c5 .ticket .trow .r { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+        #c5 .ticket .trow .r.hot { color: var(--accent); }
 
-        .month-nav {
-            display: flex;
-            justify-content: center;
-            gap: 12px;
-            margin-bottom: 16px;
-            font-size: 11px;
-            letter-spacing: 2px;
-            text-transform: uppercase;
+        /* ╔═══ CHAPTER 6 · CONCURRENCY (DARK) ═══╗ */
+        #c6 { background: #111; color: #fff; }
+        #c6 .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+        @media (max-width: 900px) { #c6 .layout { grid-template-columns: 1fr; } }
+        #c6 .megaRow {
+            display: flex; align-items: baseline; gap: 16px;
+            margin: 8px 0 16px;
+            color: #fff;
+            font-weight: 800; font-variant-numeric: tabular-nums;
         }
-        .month-nav a {
+        #c6 .megaRow .n { font-size: clamp(160px, 28vw, 380px); letter-spacing: -10px; line-height: 0.85; }
+        #c6 .megaRow .x { font-size: 80px; color: var(--accent); letter-spacing: -3px; }
+        #c6 .agents {
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        #c6 .agents .agent {
+            display: grid; grid-template-columns: 50px 1fr auto;
+            gap: 14px; align-items: center;
+            background: #1a1a1a; border: 1px solid #2a2a2a;
+            border-radius: 10px; padding: 12px 16px;
+            font-size: 12px;
+            opacity: 0; transform: translateX(-20px);
+            transition: opacity 0.5s ease, transform 0.5s ease;
+        }
+        #c6 .agents .agent.in { opacity: 1; transform: translateX(0); }
+        #c6 .agents .agent .id { color: var(--accent); font-weight: 800; letter-spacing: 1px; }
+        #c6 .agents .agent .task { color: #ddd; font-weight: 500; }
+        #c6 .agents .agent .task b { color: #fff; font-weight: 700; }
+        #c6 .agents .agent .dur { color: #888; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+        /* ╔═══ CHAPTER 7 · SHARE ═══╗ */
+        #c8 { background: var(--bg-page-end); }
+        #c8 .layout { display: grid; grid-template-columns: 1.1fr 1fr; gap: 60px; align-items: center; }
+        @media (max-width: 900px) { #c8 .layout { grid-template-columns: 1fr; } }
+        #c8 .share-card {
+            background: #fff; color: var(--text-primary); border-radius: 20px; padding: 0;
+            box-shadow: var(--shadow-pop);
+            border: 1px solid var(--border);
+            transform: perspective(1200px) rotateY(-4deg) rotateX(2deg);
+            transition: transform 0.5s ease;
+            position: relative; overflow: hidden;
+        }
+        #c8 .share-card:hover { transform: perspective(1200px) rotateY(0) rotateX(0); }
+        #c8 .share-card img.og { display: block; width: 100%; height: auto; }
+
+        #c8 .actions { display: flex; flex-direction: column; gap: 12px; }
+        #c8 .actions button, #c8 .actions a {
+            border: 1px solid var(--border); background: #fff; color: var(--text-primary);
+            border-radius: 10px; padding: 16px 20px;
+            text-align: left; font-family: inherit; cursor: pointer;
+            display: flex; justify-content: space-between; align-items: center;
+            transition: all 150ms ease;
+            text-decoration: none;
+        }
+        #c8 .actions button:hover, #c8 .actions a:hover { transform: translateY(-2px); box-shadow: var(--shadow-card); border-color: #b0a89e; }
+        #c8 .actions .l { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+        #c8 .actions .r { color: var(--text-secondary); font-size: 16px; }
+        #c8 .actions button.primary { background: #111; color: #fff; border-color: #111; }
+        #c8 .actions button.primary .r { color: #fff; }
+        #c8 .actions .toast {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: #111; color: #fff;
+            padding: 10px 18px; border-radius: 8px;
+            font-size: 11px; letter-spacing: 2px; text-transform: uppercase; font-weight: 700;
+            opacity: 0; transition: opacity 0.2s;
+            pointer-events: none; z-index: 60;
+        }
+        #c8 .actions .toast.show { opacity: 1; }
+
+        /* ── Reveal classes ─────────────────────────────────── */
+        .r-up { opacity: 0; transform: translateY(40px); transition: opacity 0.9s ease, transform 0.9s cubic-bezier(0.2,0.7,0.2,1); }
+        .r-left { opacity: 0; transform: translateX(-30px); transition: opacity 0.9s ease, transform 0.9s cubic-bezier(0.2,0.7,0.2,1); }
+        .r-up.in, .r-left.in { opacity: 1; transform: none; }
+        .d1 { transition-delay: 0.10s; }
+        .d2 { transition-delay: 0.22s; }
+        .d3 { transition-delay: 0.34s; }
+        .d4 { transition-delay: 0.46s; }
+        .d5 { transition-delay: 0.58s; }
+
+        /* Empty / error state */
+        .empty-state {
+            min-height: 100vh; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            text-align: center; padding: 40px 24px;
+            background: linear-gradient(180deg, #fff 0%, var(--bg-page-end) 100%);
+        }
+        .empty-state .eb { color: var(--text-secondary); }
+        .empty-state h2 {
+            font-size: clamp(32px, 5vw, 56px); font-weight: 800; letter-spacing: -1px;
+            color: var(--text-primary); margin: 12px 0 8px;
+        }
+        .empty-state p { color: var(--text-secondary); font-size: 15px; margin-bottom: 24px; }
+        .empty-state .month-nav { display: flex; gap: 18px; }
+        .empty-state .month-nav a {
             color: var(--text-secondary);
-            padding: 6px 12px;
-            border-radius: 6px;
+            padding: 8px 14px; border-radius: 8px;
+            border: 1px solid var(--border);
+            font-size: 11px; letter-spacing: 2px; text-transform: uppercase; font-weight: 700;
         }
-        .month-nav a:hover { background: var(--bg-hover); color: var(--text-primary); text-decoration: none; }
+        .empty-state .month-nav a:hover { background: #fff; color: var(--text-primary); }
     </style>
 </head>
-<body class="page-profile">
-    <header class="site-header">
-        <h1><a href="/" style="color:inherit;text-decoration:none"><img src="images/logo.png" alt="ClaudeRank logo" class="site-logo">CLAUDERANK</a></h1>
-        <nav class="header-nav" id="headerNav">
-            <a href="/leaderboard">Leaderboard</a>
-            <button id="themeToggle">dark mode</button>
-        </nav>
-        <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle menu">
-            <span></span><span></span><span></span>
-        </button>
-    </header>
-
-    <div class="wrapped-page" id="wrappedRoot">
+<body class="wrapped">
+    <div id="wrappedRoot">
         <div class="empty-state"><h2>Loading wrapped…</h2></div>
     </div>
 
     <script type="module">
-        import { getUserByUsername, getUserWrapped, formatNumber, formatCost } from './js/api.js?v=2';
+        import { getUserByUsername, getUserWrapped, formatNumber, formatCost } from './js/api.js?v=3';
 
         const $ = (id) => document.getElementById(id);
         const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
 
-        // Theme toggle (mirror profile.html behavior)
-        const themeToggle = $('themeToggle');
-        function setThemeLabel() {
-            const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-            if (themeToggle) themeToggle.textContent = dark ? 'light mode' : 'dark mode';
+        const MONTH_ABBR = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+        const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const DOW_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        function fmtHour(h) {
+            if (h === 0) return '12am';
+            if (h < 12) return h + 'am';
+            if (h === 12) return '12pm';
+            return (h - 12) + 'pm';
         }
-        setThemeLabel();
-        themeToggle?.addEventListener('click', () => {
-            const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-            if (dark) {
-                document.documentElement.removeAttribute('data-theme');
-                localStorage.removeItem('theme');
-            } else {
-                document.documentElement.setAttribute('data-theme', 'dark');
-                localStorage.setItem('theme', 'dark');
-            }
-            setThemeLabel();
-        });
 
         const params = new URLSearchParams(window.location.search);
         const username = params.get('username');
         const userHashParam = params.get('hash');
         let ym = params.get('month');
 
-        // Default to last fully-complete month
         if (!ym) {
             const now = new Date();
             const prev = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
@@ -318,51 +509,32 @@
             return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
         }
 
-        function deltaSpan(pct) {
+        function deriveYearTag(s) {
+            // "MAR'26" style
+            const m = MONTH_ABBR[s.month.month - 1];
+            const yy = String(s.month.year).slice(-2);
+            return `${m}'${yy}`;
+        }
+
+        function backCalcPrev(curr, pct) {
+            if (pct == null) return 0;
+            if (pct === -100) return null;
+            const denom = 1 + pct / 100;
+            if (denom <= 0) return null;
+            return curr / denom;
+        }
+
+        function deltaPill(pct) {
             if (pct == null) return '';
-            const sign = pct >= 0 ? '+' : '';
-            const cls = pct >= 0 ? 'up' : 'down';
-            return `<span class="delta ${cls}">${sign}${pct}% vs last month</span>`;
-        }
-
-        const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        function fmtHour(h) {
-            if (h === 0) return '12am';
-            if (h < 12) return h + 'am';
-            if (h === 12) return '12pm';
-            return (h - 12) + 'pm';
-        }
-
-        function renderHeatmap(grid) {
-            let max = 0;
-            for (const row of grid) for (const v of row) if (v > max) max = v;
-            const cells = ['<div></div>'];
-            for (let h = 0; h < 24; h++) {
-                cells.push(`<div class="hdr">${(h % 3 === 0) ? fmtHour(h).replace('am','').replace('pm','') : ''}</div>`);
-            }
-            for (let dow = 0; dow < 7; dow++) {
-                cells.push(`<div class="dow-label">${DOW_NAMES[dow]}</div>`);
-                for (let h = 0; h < 24; h++) {
-                    const v = grid[dow][h];
-                    let lvl = 0;
-                    if (v > 0 && max > 0) {
-                        const r = v / max;
-                        if (r > 0.75) lvl = 4;
-                        else if (r > 0.5) lvl = 3;
-                        else if (r > 0.25) lvl = 2;
-                        else lvl = 1;
-                    }
-                    const title = `${DOW_NAMES[dow]} ${fmtHour(h)}: ${v} messages (UTC)`;
-                    cells.push(`<div class="heatmap-cell l${lvl}" title="${title}"></div>`);
-                }
-            }
-            return `<div class="heatmap-wrap"><div class="heatmap-grid">${cells.join('')}</div></div>
-                    <div style="font-size:10px;color:var(--text-secondary);margin-top:8px;letter-spacing:1px">UTC · darker = more messages</div>`;
+            const sign = pct >= 0 ? '▲ +' : '▼ ';
+            const cls = pct >= 0 ? '' : 'down';
+            return `<div class="delta r-up d3 ${cls}">${sign}${Math.abs(pct).toFixed(1)}%<span class="ago">vs prev month</span></div>`;
         }
 
         function renderWrapped(s) {
             const root = $('wrappedRoot');
             const displayName = s.user.display_name || s.user.username || 'anonymous';
+            const handle = s.user.username ? '@' + s.user.username : displayName;
             const ogImg = `${location.origin}/api/users/${s.user.user_hash}/wrapped/${s.month.ym}/og.png`;
 
             // Wire OG/twitter meta
@@ -379,126 +551,472 @@
             // Empty-state guard
             if (s.totals.active_days === 0) {
                 root.innerHTML = `
-                    <div class="month-nav">
-                        <a href="?username=${esc(s.user.username ?? '')}&month=${adjacentMonth(s.month.ym, -1)}">← prev month</a>
-                        <a href="?username=${esc(s.user.username ?? '')}&month=${adjacentMonth(s.month.ym, +1)}">next month →</a>
-                    </div>
                     <div class="empty-state">
+                        <div class="eb">Claude Rank · Wrapped</div>
                         <h2>No Claude activity in ${esc(s.month.label)}</h2>
-                        <p>Come back next month — once you've used Claude Code, your wrapped will appear here.</p>
+                        <p>Once you've used Claude Code, your wrapped will appear here.</p>
+                        <div class="month-nav">
+                            <a href="?username=${esc(s.user.username ?? '')}&month=${adjacentMonth(s.month.ym, -1)}">← prev month</a>
+                            <a href="?username=${esc(s.user.username ?? '')}&month=${adjacentMonth(s.month.ym, +1)}">next month →</a>
+                        </div>
                     </div>`;
                 return;
             }
 
-            const busiestBlock = s.busiest_day ? `
-                <div class="stat-cell">
-                    <span class="label">Busiest Day</span>
-                    <span class="value accent">${esc(s.busiest_day.date)}</span>
-                    <span class="sub">${formatNumber(s.busiest_day.tokens)} tokens · ${formatNumber(s.busiest_day.messages)} messages</span>
-                </div>` : '';
+            // Enable scroll-snap on html element
+            document.documentElement.classList.add('wrapped-html');
 
-            const powerBlock = s.power_hour ? `
-                <div class="stat-cell">
-                    <span class="label">Power Hour</span>
-                    <span class="value accent">${DOW_NAMES[s.power_hour.dow]} ${fmtHour(s.power_hour.hour)}</span>
-                    <span class="sub">${formatNumber(s.power_hour.messages)} messages all month, that hour (UTC)</span>
-                </div>` : '';
+            const yearTag = deriveYearTag(s);
+            const monthAbbr = MONTH_ABBR[s.month.month - 1];
+            const yy = String(s.month.year).slice(-2);
 
-            const flexBlock = s.concurrency_flex ? `
-                <div class="wrapped-section">
-                    <h2>Concurrency Flex</h2>
-                    <p class="flex-line">You ran <span class="accent">${s.concurrency_flex.peak_concurrency} agents at once</span>
-                        for <span class="accent">${s.concurrency_flex.minutes_at_peak} minutes</span>
-                        on <strong>${esc(s.concurrency_flex.date)}</strong>.</p>
-                </div>` : '';
+            // Decide which chapters render
+            const hasDelta = !!s.delta_vs_prev_month;
+            const hasBusy = !!s.busiest_day;
+            const hasConc = !!s.concurrency_flex;
 
-            const rankBlock = s.rank ? `
-                <div class="stat-cell">
-                    <span class="label">Global Rank</span>
-                    <span class="value accent">Top ${s.rank.percentile <= 1 ? '1' : Math.ceil(s.rank.percentile)}%</span>
-                    <span class="sub">#${s.rank.position.toLocaleString()} of ${s.rank.total_users.toLocaleString()} by tokens</span>
-                </div>` : `
-                <div class="stat-cell">
-                    <span class="label">Global Rank</span>
-                    <span class="value">—</span>
-                </div>`;
+            // ────────── Chapter 0 · COVER ──────────
+            const cover = `
+              <section class="chap" id="c0" data-theme="light" data-label="Cover">
+                <div class="inner" style="text-align:center;">
+                  <div class="echo e0">${yearTag}</div>
+                  <div class="echo e1">${yearTag}</div>
+                  <div class="cover-eyebrow r-up">Your Claude Code · Wrapped</div>
+                  <h1 class="title r-up d1">${monthAbbr}<span class="yr">'${yy}</span></h1>
+                  <div class="meta r-up d2">
+                    <span><b>${esc(handle)}</b></span>
+                    <span>·</span>
+                    <span><b>${formatNumber(s.totals.messages)}</b> MSGS</span>
+                    <span>·</span>
+                    <span><b>${formatNumber(s.totals.tokens)}</b> TOKENS</span>
+                    <span>·</span>
+                    <span><b>${formatCost(s.totals.estimated_spend)}</b> SPEND</span>
+                  </div>
+                  <div class="scroll-cue">
+                    <span>Scroll</span><span class="arr">↓</span>
+                  </div>
+                </div>
+              </section>`;
 
-            const planBlock = s.plan ? `
-                <div class="stat-cell">
-                    <span class="label">Plan Burn</span>
-                    <span class="value ${s.plan.utilization_pct > 100 ? 'accent' : ''}">${s.plan.utilization_pct}%</span>
-                    <span class="sub">${formatCost(s.totals.estimated_spend)} of $${s.plan.monthly_plan_usd} plan</span>
-                </div>` : '';
+            // ────────── Chapter 1 · MESSAGES ──────────
+            const avgPerActiveDay = s.totals.active_days > 0
+                ? Math.round(s.totals.messages / s.totals.active_days)
+                : 0;
+            const messagesChap = `
+              <section class="chap" id="c1" data-theme="light" data-label="Messages">
+                <div class="inner">
+                  <div class="row">
+                    <div>
+                      <div class="eb r-up">Chapter __EB1__ · Messages</div>
+                      <h2 class="hl r-up d1">You talked to Claude<br><span class="accent cnt" data-c="${s.totals.messages}">0</span> times.</h2>
+                      <p class="sub r-up d2">${avgPerActiveDay.toLocaleString()} a day on the days you logged in. You were active <b>${s.totals.active_days}</b> of ${s.month.days_in_month} days this month.</p>
+                      ${hasDelta ? deltaPill(s.delta_vs_prev_month.messages_pct) : ''}
+                    </div>
+                    <div class="megaCount r-up d2"><span class="cnt" data-c="${s.totals.messages}">0</span></div>
+                  </div>
+                </div>
+              </section>`;
 
-            const delta = s.delta_vs_prev_month;
+            // ────────── Chapter 2 · TOKENS (HOT) ──────────
+            // Tokens displayed in millions (or raw if < 1M)
+            const tokensM = s.totals.tokens / 1e6;
+            const tokensDisplayC = tokensM >= 1 ? tokensM.toFixed(1) : (s.totals.tokens / 1e3).toFixed(1);
+            const tokensUnit = tokensM >= 1 ? 'M' : 'K';
+            const tokensChap = `
+              <section class="chap" id="c2" data-theme="hot" data-label="Tokens">
+                <div class="glow"></div>
+                <div class="inner">
+                  <div class="layout">
+                    <div>
+                      <div class="eb r-up">Chapter __EB2__ · Tokens burned</div>
+                      <div class="megaCount r-up d1"><span class="cnt" data-c="${tokensDisplayC}" data-dp="1">0</span><span class="unit">${tokensUnit}</span></div>
+                      <h2 class="hl r-up d2" style="font-size:clamp(28px,4vw,44px); margin-top:8px;">tokens. That's ${formatCost(s.totals.estimated_spend)} of Anthropic money.</h2>
+                    </div>
+                    <div class="receipt r-up d3">
+                      <div class="head">// month receipt</div>
+                      <div class="ln"><span class="l">messages</span><span class="r">${formatNumber(s.totals.messages)}</span></div>
+                      <div class="ln"><span class="l">tool calls</span><span class="r">${formatNumber(s.totals.tool_calls)}</span></div>
+                      <div class="ln"><span class="l">sessions</span><span class="r">${formatNumber(s.totals.sessions)}</span></div>
+                      <div class="ln"><span class="l">active days</span><span class="r">${s.totals.active_days} / ${s.month.days_in_month}</span></div>
+                      <div class="ln"><span class="l">TOTAL</span><span class="r">${formatCost(s.totals.estimated_spend)}</span></div>
+                    </div>
+                  </div>
+                </div>
+              </section>`;
 
+            // ────────── Chapter 3 · VS LAST MONTH ──────────
+            let vsChap = '';
+            if (hasDelta) {
+                const d = s.delta_vs_prev_month;
+                const prevM = backCalcPrev(s.totals.messages, d.messages_pct);
+                const prevT = backCalcPrev(s.totals.tokens, d.tokens_pct);
+                const prevS = backCalcPrev(s.totals.estimated_spend, d.spend_pct);
+                const prevDate = new Date(Date.UTC(s.month.year, s.month.month - 2, 1));
+                const prevMonthAbbr = MONTH_ABBR[prevDate.getUTCMonth()];
+                const prevYy = String(prevDate.getUTCFullYear()).slice(-2);
+
+                // bar width: each metric's row uses max(curr, prev) as 100
+                const wM = Math.max(s.totals.messages, prevM || 0) || 1;
+                const wT = Math.max(s.totals.tokens, prevT || 0) || 1;
+                const wS = Math.max(s.totals.estimated_spend, prevS || 0) || 1;
+
+                // pick a headline pct: prefer tokens, fallback to messages
+                const headlinePct = d.tokens_pct ?? d.messages_pct ?? 0;
+                const headlineLabel = headlinePct >= 0 ? `<span class="accent">+${headlinePct.toFixed(1)}%</span> more` : `<span class="accent">${headlinePct.toFixed(1)}%</span> less`;
+
+                vsChap = `
+                  <section class="chap" id="c3" data-theme="light" data-label="Vs Prev">
+                    <div class="inner">
+                      <div class="r-up" style="text-align:center; margin-bottom: 38px;">
+                        <div class="eb">Chapter __EB3__ · Month over month</div>
+                        <h2 class="hl">You burned ${headlineLabel} Claude than ${prevMonthAbbr.charAt(0) + prevMonthAbbr.slice(1).toLowerCase()}.</h2>
+                      </div>
+                      <div class="split">
+                        <div class="card prev r-left d1">
+                          <h3>Last month</h3>
+                          <div class="month">${prevMonthAbbr} '${prevYy}</div>
+                          <div class="stat-line"><div class="lab">Messages</div><div class="ring"><i data-w="${Math.round(((prevM || 0) / wM) * 100)}"></i></div><div class="v">${formatNumber(Math.round(prevM || 0))}</div></div>
+                          <div class="stat-line"><div class="lab">Tokens</div><div class="ring"><i data-w="${Math.round(((prevT || 0) / wT) * 100)}"></i></div><div class="v">${formatNumber(Math.round(prevT || 0))}</div></div>
+                          <div class="stat-line"><div class="lab">Spend</div><div class="ring"><i data-w="${Math.round(((prevS || 0) / wS) * 100)}"></i></div><div class="v">${formatCost(prevS || 0)}</div></div>
+                        </div>
+                        <div class="card r-up d2">
+                          <h3>This month</h3>
+                          <div class="month now">${monthAbbr} '${yy}</div>
+                          <div class="stat-line"><div class="lab">Messages</div><div class="ring"><i data-w="${Math.round((s.totals.messages / wM) * 100)}"></i></div><div class="v">${formatNumber(s.totals.messages)}</div></div>
+                          <div class="stat-line"><div class="lab">Tokens</div><div class="ring"><i data-w="${Math.round((s.totals.tokens / wT) * 100)}"></i></div><div class="v">${formatNumber(s.totals.tokens)}</div></div>
+                          <div class="stat-line"><div class="lab">Spend</div><div class="ring"><i data-w="${Math.round((s.totals.estimated_spend / wS) * 100)}"></i></div><div class="v">${formatCost(s.totals.estimated_spend)}</div></div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>`;
+            }
+
+            // ────────── Chapter 4 · HEATMAP (DARK) ──────────
+            const ph = s.power_hour;
+            const phLabel = ph ? `${DOW_FULL[ph.dow]} · ${fmtHour(ph.hour).toUpperCase()}` : '';
+            const phSubline = ph
+                ? `Every cell is one hour of one day-of-week. Your peak fell on <b style="color:#fff;">${DOW_FULL[ph.dow]} at ${fmtHour(ph.hour)}</b> — outlined in white. You sent <b style="color:#fff;">${formatNumber(ph.messages)}</b> messages in that slot alone.`
+                : `Every cell is one hour of one day-of-week. Brighter = more messages.`;
+            const heatChap = `
+              <section class="chap" id="c4" data-theme="dark" data-label="Heatmap">
+                <div class="inner">
+                  <div class="hm-grid">
+                    <div>
+                      <div class="eb r-up">Chapter __EB4__ · When you Claude</div>
+                      <h2 class="hl r-up d1">Your month, <span class="accent">drawn in heat</span>.</h2>
+                      <p class="sub r-up d2">${phSubline}</p>
+                      ${ph ? `<div class="r-up d3" style="margin-top: 22px;">
+                        <span class="peak-tag">⏱ POWER HOUR · ${esc(phLabel)}</span>
+                      </div>` : ''}
+                    </div>
+                    <div class="map-card r-up d2">
+                      <div class="head">
+                        <span>7 DAYS × 24 HOURS · UTC</span>
+                        <span class="legend"><span>LOW</span><div class="g"></div><span>HIGH</span></span>
+                      </div>
+                      <svg id="heat2" viewBox="0 0 600 200" width="100%" style="display:block;height:auto;" xmlns="http://www.w3.org/2000/svg"></svg>
+                      <div style="display:flex; justify-content:space-between; margin-top:8px; font-size:9px; color:#888; font-weight:700; letter-spacing:1px;">
+                        <span>12AM</span><span>6AM</span><span>12PM</span><span>6PM</span><span>11PM</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>`;
+
+            // ────────── Chapter 5 · BUSIEST DAY ──────────
+            let busyChap = '';
+            if (hasBusy) {
+                const bd = s.busiest_day;
+                const dateObj = new Date(bd.date + 'T00:00:00Z');
+                const dayNum = dateObj.getUTCDate();
+                const dayMonthAbbr = MONTH_ABBR[dateObj.getUTCMonth()];
+                const dayOfWeek = DOW_FULL[dateObj.getUTCDay()];
+                const sharePct = s.totals.tokens > 0
+                    ? Math.round((bd.tokens / s.totals.tokens) * 1000) / 10
+                    : 0;
+                busyChap = `
+                  <section class="chap" id="c5" data-theme="light" data-label="Busiest day">
+                    <div class="inner">
+                      <div class="grid">
+                        <div>
+                          <div class="eb r-up">Chapter __EB5__ · The day you went the hardest</div>
+                          <h2 class="hl r-up d1">It was a <span class="accent">${dayOfWeek}</span>.</h2>
+                          <p class="sub r-up d2"><b>${formatNumber(bd.tokens)}</b> tokens. <b>${formatNumber(bd.messages)}</b> messages. That single day was <b>${sharePct}%</b> of your month's token burn.</p>
+                          <div class="dayMega r-up d3"><span class="accent">${dayNum}</span></div>
+                        </div>
+                        <div class="ticket r-up d2">
+                          <div class="d">// session report</div>
+                          <div class="dt">${dayMonthAbbr} <span class="day">${dayNum}</span></div>
+                          <hr>
+                          <div class="trow"><div class="l">Day of week</div><div class="r">${dayOfWeek}</div></div>
+                          <div class="trow"><div class="l">Messages</div><div class="r">${formatNumber(bd.messages)}</div></div>
+                          <div class="trow"><div class="l">Tokens</div><div class="r hot">${formatNumber(bd.tokens)}</div></div>
+                          <div class="trow"><div class="l">Share of month</div><div class="r">${sharePct}%</div></div>
+                          <hr>
+                          <div class="trow"><div class="l">Date</div><div class="r" style="font-size:11px;">${esc(bd.date)}</div></div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>`;
+            }
+
+            // ────────── Chapter 6 · CONCURRENCY (DARK) ──────────
+            let concChap = '';
+            if (hasConc) {
+                const cf = s.concurrency_flex;
+                const cfDate = new Date(cf.date + 'T00:00:00Z');
+                const cfDow = DOW_FULL[cfDate.getUTCDay()];
+                const cfMonth = MONTH_ABBR[cfDate.getUTCMonth()];
+                const cfDay = cfDate.getUTCDate();
+                const agentRows = Array.from({ length: cf.peak_concurrency }).map((_, i) => `
+                    <div class="agent">
+                      <div class="id">A${i + 1}</div>
+                      <div class="task">parallel <b>Claude Code</b> session</div>
+                      <div class="dur">${cf.minutes_at_peak}m</div>
+                    </div>`).join('');
+                concChap = `
+                  <section class="chap" id="c6" data-theme="dark" data-label="Concurrency">
+                    <div class="inner">
+                      <div class="layout">
+                        <div>
+                          <div class="eb r-up">Chapter __EB6__ · Peak concurrent agents</div>
+                          <h2 class="hl r-up d1">At your <span class="accent">peak</span>, you ran</h2>
+                          <div class="megaRow r-up d2">
+                            <span class="n cnt" data-c="${cf.peak_concurrency}">0</span><span class="x">agents</span>
+                          </div>
+                          <p class="sub r-up d3">All at once. ${cfDow}, ${cfMonth} ${cfDay} — ${cf.peak_concurrency} Claude Code sessions in parallel, holding for <b style="color:#fff;">${cf.minutes_at_peak} minutes</b>. Multi-agent flexing.</p>
+                        </div>
+                        <div class="agents" id="agentList">
+                          ${agentRows}
+                        </div>
+                      </div>
+                    </div>
+                  </section>`;
+            }
+
+            // ────────── Chapter 7 · SHARE ──────────
+            const rankLine = s.rank
+                ? `<div class="meta r-up d2" style="margin-top:24px;"><span><b>Top ${s.rank.percentile <= 1 ? '1' : Math.ceil(s.rank.percentile)}%</b> · #${s.rank.position.toLocaleString()} of ${s.rank.total_users.toLocaleString()}</span></div>`
+                : '';
+            const shareChap = `
+              <section class="chap" id="c8" data-theme="light" data-label="Share">
+                <div class="inner">
+                  <div class="layout">
+                    <div class="share-card r-up d1">
+                      <img class="og" src="${ogImg}" alt="${esc(displayName)} · Wrapped">
+                    </div>
+                    <div>
+                      <div class="eb r-up">Chapter __EBLAST__ · Take it with you</div>
+                      <h2 class="hl r-up d1">Flex it. <span class="accent">Mog</span> your tech lead.</h2>
+                      ${rankLine}
+                      <div class="actions r-up d2" style="margin-top: 28px;">
+                        <button id="btnShareX" class="primary"><span class="l">↗ Share to X</span><span class="r">@clauderank</span></button>
+                        <button id="btnCopy"><span class="l">📋 Copy share link</span><span class="r">→</span></button>
+                        <button id="btnDownload"><span class="l">⬇ Download PNG</span><span class="r">1200×630</span></button>
+                        <a href="?username=${esc(s.user.username ?? '')}&month=${adjacentMonth(s.month.ym, -1)}"><span class="l">← View ${adjacentMonth(s.month.ym, -1)}</span><span class="r">→</span></a>
+                        <a href="?username=${esc(s.user.username ?? '')}&month=${adjacentMonth(s.month.ym, +1)}"><span class="l">View ${adjacentMonth(s.month.ym, +1)} →</span><span class="r">→</span></a>
+                      </div>
+                      <div class="toast" id="shareToast">Link copied!</div>
+                    </div>
+                  </div>
+                </div>
+              </section>`;
+
+            // Assemble — number eyebrows after we know which chapters rendered
+            const chapters = [cover, messagesChap, tokensChap, vsChap, heatChap, busyChap, concChap, shareChap].filter(Boolean);
+            // Replace eyebrow placeholders with sequential numbers
+            let ebIdx = 1;
+            const numberedChapters = chapters.map((html) => {
+                // cover has no eyebrow placeholder — increment but don't substitute
+                // skip cover (index 0)
+                return html;
+            });
+            // Re-walk in order and substitute. Cover doesn't have a placeholder; the rest have __EBN__ tokens.
+            // We assigned __EB1__..__EB6__ + __EBLAST__ in the templates above. Map them in render order to 01..NN.
+            const placeholders = ['__EB1__', '__EB2__', '__EB3__', '__EB4__', '__EB5__', '__EB6__', '__EBLAST__'];
+            // The cover doesn't take an eyebrow number. Numbers start at 01 for chapter "Messages".
+            let n = 1;
+            let assembled = numberedChapters.join('');
+            placeholders.forEach((ph) => {
+                if (assembled.includes(ph)) {
+                    assembled = assembled.replace(ph, String(n).padStart(2, '0'));
+                    n++;
+                }
+            });
+
+            // Build rail + page counter shell
+            const totalSections = chapters.length;
             root.innerHTML = `
-                <div class="month-nav">
-                    <a href="?username=${esc(s.user.username ?? '')}&month=${adjacentMonth(s.month.ym, -1)}">← ${adjacentMonth(s.month.ym, -1)}</a>
-                    <span style="color:var(--text-secondary);padding:6px 12px">${esc(s.month.label)}</span>
-                    <a href="?username=${esc(s.user.username ?? '')}&month=${adjacentMonth(s.month.ym, +1)}">${adjacentMonth(s.month.ym, +1)} →</a>
-                </div>
+                <a class="brandbadge" href="/">
+                  <img src="images/logo.png" alt=""><span>CLAUDERANK · WRAPPED</span>
+                </a>
+                <div class="pageno"><span id="pn-cur">01</span> / <span id="pn-tot">${String(totalSections).padStart(2, '0')}</span></div>
+                <div class="rail" id="rail"></div>
+                ${assembled}`;
 
-                <div class="wrapped-hero">
-                    <div class="wrapped-eyebrow">Claude Rank · Wrapped</div>
-                    <div class="wrapped-title">${esc(displayName)}</div>
-                    <div class="wrapped-subtitle">${esc(s.month.label)}</div>
-                    <img src="${ogImg}" alt="${esc(displayName)}'s Wrapped" loading="eager">
-                </div>
+            // Build heatmap SVG cells from real data
+            buildHeatmap(s.heatmap_24x7, s.power_hour);
 
-                <div class="wrapped-section">
-                    <h2>The Headlines</h2>
-                    <div class="stat-row">
-                        <div class="stat-cell">
-                            <span class="label">Messages</span>
-                            <span class="value accent">${formatNumber(s.totals.messages)}</span>
-                            ${delta ? deltaSpan(delta.messages_pct) : ''}
-                        </div>
-                        <div class="stat-cell">
-                            <span class="label">Tokens</span>
-                            <span class="value accent">${formatNumber(s.totals.tokens)}</span>
-                            ${delta ? deltaSpan(delta.tokens_pct) : ''}
-                        </div>
-                        <div class="stat-cell">
-                            <span class="label">Spend</span>
-                            <span class="value accent">${formatCost(s.totals.estimated_spend)}</span>
-                            ${delta ? deltaSpan(delta.spend_pct) : ''}
-                        </div>
-                        <div class="stat-cell">
-                            <span class="label">Active Days</span>
-                            <span class="value">${s.totals.active_days} / ${s.month.days_in_month}</span>
-                            <span class="sub">${formatNumber(s.totals.tool_calls)} tool calls · ${formatNumber(s.totals.sessions)} sessions</span>
-                        </div>
-                    </div>
-                </div>
+            // Wire interactivity
+            wireRailAndScrollspy();
+            wireShareActions(s, ogImg);
+        }
 
-                <div class="wrapped-section">
-                    <h2>When You Claude</h2>
-                    <div class="stat-row" style="margin-bottom: 16px">
-                        ${busiestBlock}
-                        ${powerBlock}
-                    </div>
-                    ${renderHeatmap(s.heatmap_24x7)}
-                </div>
+        // ╔═══════════════════════════════════════════════════╗
+        // Rail + scrollspy + per-section FX
+        // ╚═══════════════════════════════════════════════════╝
+        function wireRailAndScrollspy() {
+            const rail = $('rail');
+            const sections = document.querySelectorAll('section.chap');
+            sections.forEach((s) => {
+                const d = document.createElement('div');
+                d.className = 'dot';
+                const t = s.dataset.theme;
+                if (t === 'light') d.dataset.light = 'dark';
+                d.title = s.dataset.label || '';
+                d.addEventListener('click', () => s.scrollIntoView({ behavior: 'smooth' }));
+                rail.appendChild(d);
+            });
 
-                ${flexBlock}
+            const dots = rail.querySelectorAll('.dot');
+            const io = new IntersectionObserver((entries) => {
+                for (const e of entries) {
+                    const i = [...sections].indexOf(e.target);
+                    if (e.isIntersecting && e.intersectionRatio > 0.55) {
+                        dots.forEach(d => d.classList.remove('active'));
+                        dots[i].classList.add('active');
+                        $('pn-cur').textContent = String(i + 1).padStart(2, '0');
+                        e.target.querySelectorAll('.r-up, .r-left').forEach(el => el.classList.add('in'));
+                        e.target.classList.add('in');
+                        runSectionFx(e.target);
+                    }
+                }
+            }, { threshold: [0.4, 0.6, 0.8] });
+            sections.forEach(s => io.observe(s));
 
-                <div class="wrapped-section">
-                    <h2>Where You Land</h2>
-                    <div class="stat-row">
-                        ${rankBlock}
-                        ${planBlock}
-                    </div>
-                </div>
+            // Cover parallax echoes
+            const e0 = document.querySelector('#c0 .echo.e0');
+            const e1 = document.querySelector('#c0 .echo.e1');
+            let ticking = false;
+            function update() {
+                const y = window.scrollY;
+                if (e0) e0.style.transform = `translateY(calc(-50% + ${(-y * 0.25).toFixed(1)}px)) translateX(${(y * 0.04).toFixed(1)}px)`;
+                if (e1) e1.style.transform = `translateY(calc(-50% + ${(-y * 0.5).toFixed(1)}px)) translateX(${(-y * 0.06).toFixed(1)}px)`;
+                ticking = false;
+            }
+            window.addEventListener('scroll', () => {
+                if (!ticking) { ticking = true; requestAnimationFrame(update); }
+            }, { passive: true });
 
-                <div class="wrapped-actions">
-                    <div class="toast" id="shareToast">Link copied!</div>
-                    <button id="btnDownload">Download Card</button>
-                    <button id="btnShare" class="secondary">Copy Link</button>
-                </div>
-            `;
+            // First section reveal (no scroll yet)
+            const first = sections[0];
+            if (first) {
+                first.querySelectorAll('.r-up, .r-left').forEach(el => el.classList.add('in'));
+                first.classList.add('in');
+                runSectionFx(first);
+            }
+        }
 
-            // Wire actions
+        function animateNum(el) {
+            if (el.dataset.done) return;
+            el.dataset.done = '1';
+            const target = parseFloat(el.dataset.c);
+            const dp = parseInt(el.dataset.dp || '0', 10);
+            const dur = 1500;
+            const t0 = performance.now();
+            function step(t) {
+                const k = Math.min(1, (t - t0) / dur);
+                const e = 1 - Math.pow(1 - k, 3);
+                const v = target * e;
+                el.textContent = dp > 0 ? v.toFixed(dp) : Math.round(v).toLocaleString();
+                if (k < 1) requestAnimationFrame(step);
+            }
+            requestAnimationFrame(step);
+        }
+
+        function runSectionFx(sec) {
+            if (sec.dataset.fxRun) return;
+            sec.dataset.fxRun = '1';
+            sec.querySelectorAll('.cnt').forEach(animateNum);
+            // Bar fills (ch3)
+            sec.querySelectorAll('.ring i').forEach((el, i) => {
+                setTimeout(() => { el.style.width = (el.dataset.w || 0) + '%'; }, 350 + i * 80);
+            });
+            if (sec.id === 'c4') revealHeatmap();
+            if (sec.id === 'c6') revealAgents();
+        }
+
+        function revealHeatmap() {
+            const cells = document.querySelectorAll('#heat2 .cell');
+            cells.forEach((c, i) => setTimeout(() => c.classList.remove('reveal-pending'), 4 * i + Math.random() * 200));
+        }
+        function revealAgents() {
+            document.querySelectorAll('#agentList .agent').forEach((el, i) => {
+                setTimeout(() => el.classList.add('in'), 350 + i * 110);
+            });
+        }
+
+        // ╔═══════════════════════════════════════════════════╗
+        // Heatmap SVG builder — 7 rows × 24 cols
+        // ╚═══════════════════════════════════════════════════╝
+        function buildHeatmap(grid, powerHour) {
+            const svg = document.getElementById('heat2');
+            if (!svg) return;
+            const DAYS = 7, HOURS = 24;
+            const padL = 36, padT = 6, padR = 6, padB = 6;
+            const w = 600, h = 200;
+            const cellW = (w - padL - padR) / HOURS;
+            const cellH = (h - padT - padB) / DAYS;
+            const gap = 2;
+
+            // find max across the grid for quartile classing
+            let max = 0;
+            for (const row of grid) for (const v of row) if (v > max) max = v;
+
+            function cls(v) {
+                if (max <= 0 || v <= 0) return 'empty';
+                const r = v / max;
+                if (r < 0.08) return 'empty';
+                if (r < 0.30) return 'q1';
+                if (r < 0.55) return 'q2';
+                if (r < 0.80) return 'q3';
+                return 'q4';
+            }
+
+            // Y-axis day labels
+            DOW_NAMES.forEach((lbl, i) => {
+                const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                t.setAttribute('x', '4');
+                t.setAttribute('y', padT + (i + 0.5) * cellH + 3);
+                t.setAttribute('fill', '#888');
+                t.setAttribute('font-size', '9');
+                t.setAttribute('font-weight', '700');
+                t.setAttribute('letter-spacing', '1');
+                t.textContent = lbl.toUpperCase();
+                svg.appendChild(t);
+            });
+
+            for (let d = 0; d < DAYS; d++) {
+                for (let hr = 0; hr < HOURS; hr++) {
+                    const v = grid[d] ? grid[d][hr] || 0 : 0;
+                    const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    r.setAttribute('x', padL + hr * cellW + gap / 2);
+                    r.setAttribute('y', padT + d * cellH + gap / 2);
+                    r.setAttribute('width', cellW - gap);
+                    r.setAttribute('height', cellH - gap);
+                    r.setAttribute('rx', '2');
+                    let klass = 'cell ' + cls(v) + ' reveal-pending';
+                    if (powerHour && d === powerHour.dow && hr === powerHour.hour) klass += ' peak';
+                    r.setAttribute('class', klass);
+                    svg.appendChild(r);
+                }
+            }
+        }
+
+        // ╔═══════════════════════════════════════════════════╗
+        // Share actions
+        // ╚═══════════════════════════════════════════════════╝
+        function wireShareActions(s, ogImg) {
             $('btnDownload')?.addEventListener('click', () => {
                 const a = document.createElement('a');
                 a.href = ogImg;
@@ -507,14 +1025,20 @@
                 a.click();
                 document.body.removeChild(a);
             });
-            $('btnShare')?.addEventListener('click', async () => {
-                const url = `${location.origin}/wrapped?username=${encodeURIComponent(s.user.username || '')}&month=${s.month.ym}`;
-                try {
-                    await navigator.clipboard.writeText(url);
-                } catch { /* clipboard may be blocked; fall through */ }
+
+            const shareUrl = `${location.origin}/wrapped?username=${encodeURIComponent(s.user.username || '')}&month=${s.month.ym}`;
+
+            $('btnCopy')?.addEventListener('click', async () => {
+                try { await navigator.clipboard.writeText(shareUrl); } catch { /* clipboard may be blocked */ }
                 const toast = $('shareToast');
                 toast.classList.add('show');
                 setTimeout(() => toast.classList.remove('show'), 1600);
+            });
+
+            $('btnShareX')?.addEventListener('click', () => {
+                const text = `My Claude Code Wrapped for ${s.month.label}: ${(s.totals.tokens / 1e6).toFixed(1)}M tokens, ${formatCost(s.totals.estimated_spend)} burned.`;
+                const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`;
+                window.open(url, '_blank', 'noopener');
             });
         }
 
