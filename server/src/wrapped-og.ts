@@ -4,12 +4,13 @@ import type { WrappedSummary } from "./wrapped";
 const CARD_W = 1200;
 const CARD_H = 630;
 
-// Palette pulled from the site's terminal aesthetic
-const BG = "#1a1a1a";
-const FG = "#f4f0ec";
+// Palette — light/cream + orange accent to match the cinematic wrapped page
+const BG = "#ffffff";
+const FG = "#111111";
 const MUTED = "#8a8480";
-const RULE = "#3a3530";
+const RULE = "#e0ddd9";
 const ACCENT = "#E8692D";
+const HEAT_EMPTY = "#f0ece4";
 
 const cache = new Map<string, { png: Uint8Array; expiresAt: number }>();
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1h
@@ -93,7 +94,11 @@ function buildSvg(summary: WrappedSummary): string {
 
   // Background
   svg += `<rect width="${CARD_W}" height="${CARD_H}" fill="${BG}"/>`;
-  // Subtle border
+  // Clip the accent stripe to the card outline so its top corners follow the rounded card.
+  svg += `<defs><clipPath id="cardClip"><rect x="20" y="20" width="${CARD_W - 40}" height="${CARD_H - 40}" rx="4"/></clipPath></defs>`;
+  // Top accent stripe — sits at the top of the rounded card, inside the border.
+  svg += `<g clip-path="url(#cardClip)"><rect x="20" y="20" width="${CARD_W - 40}" height="8" fill="${ACCENT}"/></g>`;
+  // Subtle border (drawn after so its stroke sits flush against the stripe top edge).
   svg += `<rect x="20" y="20" width="${CARD_W - 40}" height="${CARD_H - 40}" fill="none" stroke="${RULE}" stroke-width="2" rx="4"/>`;
 
   // Header eyebrow + title
@@ -130,9 +135,10 @@ function buildSvg(summary: WrappedSummary): string {
       const intensity = maxCell > 0 ? v / maxCell : 0;
       // Map 0..1 to dark gray → accent orange
       let fill: string;
-      if (v === 0) fill = "#262220";
+      if (v === 0) fill = HEAT_EMPTY;
       else {
-        const alpha = 0.25 + intensity * 0.75;
+        // Higher minimum alpha so low-intensity cells stay readable on white.
+        const alpha = 0.20 + intensity * 0.80;
         fill = `rgba(232, 105, 45, ${alpha.toFixed(3)})`;
       }
       const x = heatX + h * (cellW + gap);
