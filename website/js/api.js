@@ -47,6 +47,33 @@ export async function getUserHistory(userHash, days = 30) {
     return apiFetch(`/api/users/${userHash}/history?days=${days}`);
 }
 
+export async function getUserWrapped(userHash, ym) {
+    return apiFetch(`/api/users/${userHash}/wrapped/${ym}`);
+}
+
+export async function getWrappedStatus(userHash, syncSecret) {
+    const headers = {};
+    if (syncSecret) headers['X-Sync-Secret'] = syncSecret;
+    const resp = await fetch(`${API_BASE}/api/users/${userHash}/wrapped/status`, {
+        credentials: 'include',
+        headers,
+    });
+    if (!resp.ok) throw new Error(`API error ${resp.status}`);
+    return resp.json();
+}
+
+export async function markWrappedSeen(userHash, ym, syncSecret) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (syncSecret) headers['X-Sync-Secret'] = syncSecret;
+    const resp = await fetch(`${API_BASE}/api/users/${userHash}/wrapped/${ym}/seen`, {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+    });
+    if (!resp.ok) throw new Error(`API error ${resp.status}`);
+    return resp.json();
+}
+
 export async function getTeam(teamHash) {
     return apiFetch(`/api/teams/${teamHash}`);
 }

@@ -209,6 +209,13 @@ export async function initDb(): Promise<void> {
       linked_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS wrapped_views (
+      user_hash TEXT NOT NULL,
+      year_month TEXT NOT NULL,
+      viewed_at TEXT NOT NULL,
+      PRIMARY KEY(user_hash, year_month)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_metrics_history_user_hash ON metrics_history(user_hash);
     CREATE INDEX IF NOT EXISTS idx_metrics_hourly_user_hash ON metrics_hourly(user_hash);
     CREATE INDEX IF NOT EXISTS idx_concurrency_histogram_user_hash ON concurrency_histogram(user_hash);

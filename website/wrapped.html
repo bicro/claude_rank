@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wrapped · ClaudeRank</title>
+    <link rel="icon" type="image/png" href="images/logo.png">
+    <link rel="stylesheet" href="css/style.css">
+    <script>if(localStorage.getItem('theme')==='dark')document.documentElement.setAttribute('data-theme','dark');</script>
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="ClaudeRank">
+    <meta property="twitter:card" content="summary_large_image">
+    <meta id="ogTitle" property="og:title" content="Claude Rank Wrapped">
+    <meta id="twTitle" property="twitter:title" content="Claude Rank Wrapped">
+    <meta id="ogDesc" property="og:description" content="Monthly recap of Claude Code usage.">
+    <meta id="twDesc" property="twitter:description" content="Monthly recap of Claude Code usage.">
+    <meta id="ogImage" property="og:image" content="">
+    <meta id="twImage" property="twitter:image" content="">
+    <style>
+        .wrapped-page {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 32px 24px 120px;
+        }
+
+        .wrapped-hero {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 32px;
+            text-align: center;
+        }
+        .wrapped-hero img {
+            display: block;
+            width: 100%;
+            max-width: 100%;
+            height: auto;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+        }
+        [data-theme="dark"] .wrapped-hero img {
+            box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+        }
+
+        .wrapped-eyebrow {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+        .wrapped-title {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            margin-bottom: 4px;
+        }
+        .wrapped-subtitle {
+            color: var(--accent);
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 24px;
+        }
+
+        .wrapped-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .wrapped-section h2 {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        .stat-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 20px;
+        }
+        .stat-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .stat-cell .label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+        .stat-cell .value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.1;
+        }
+        .stat-cell .value.accent { color: var(--accent); }
+        .stat-cell .sub {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .stat-cell .delta {
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .stat-cell .delta.up { color: var(--green); }
+        .stat-cell .delta.down { color: var(--red); }
+
+        .heatmap-wrap {
+            overflow-x: auto;
+        }
+        .heatmap-grid {
+            display: grid;
+            grid-template-columns: 32px repeat(24, 1fr);
+            gap: 2px;
+            min-width: 540px;
+        }
+        .heatmap-grid .hdr {
+            font-size: 9px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-align: center;
+            align-self: end;
+            padding-bottom: 4px;
+        }
+        .heatmap-grid .dow-label {
+            font-size: 10px;
+            color: var(--text-secondary);
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+        }
+        .heatmap-cell {
+            aspect-ratio: 1.4 / 1;
+            border-radius: 2px;
+            background: var(--bg-hover);
+        }
+        .heatmap-cell.l0 { background: var(--bg-hover); }
+        .heatmap-cell.l1 { background: rgba(232, 105, 45, 0.20); }
+        .heatmap-cell.l2 { background: rgba(232, 105, 45, 0.40); }
+        .heatmap-cell.l3 { background: rgba(232, 105, 45, 0.65); }
+        .heatmap-cell.l4 { background: rgba(232, 105, 45, 0.90); }
+
+        .flex-line {
+            font-size: 18px;
+            font-weight: 600;
+            line-height: 1.5;
+        }
+        .flex-line .accent { color: var(--accent); }
+
+        .wrapped-actions {
+            position: sticky;
+            bottom: 16px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 24px;
+            z-index: 5;
+        }
+        .wrapped-actions button {
+            background: var(--text-primary);
+            color: var(--bg-primary);
+            border: none;
+            padding: 12px 22px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: inherit;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .wrapped-actions button.secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        .wrapped-actions button:hover { opacity: 0.85; }
+        .wrapped-actions .toast {
+            position: absolute;
+            bottom: 100%;
+            margin-bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--text-primary);
+            color: var(--bg-primary);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            letter-spacing: 1px;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        .wrapped-actions .toast.show { opacity: 1; }
+
+        .empty-state {
+            text-align: center;
+            padding: 80px 24px;
+            color: var(--text-secondary);
+        }
+        .empty-state h2 {
+            color: var(--text-primary);
+            font-size: 20px;
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+
+        .month-nav {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            font-size: 11px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .month-nav a {
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            border-radius: 6px;
+        }
+        .month-nav a:hover { background: var(--bg-hover); color: var(--text-primary); text-decoration: none; }
+    </style>
+</head>
+<body class="page-profile">
+    <header class="site-header">
+        <h1><a href="/" style="color:inherit;text-decoration:none"><img src="images/logo.png" alt="ClaudeRank logo" class="site-logo">CLAUDERANK</a></h1>
+        <nav class="header-nav" id="headerNav">
+            <a href="/leaderboard">Leaderboard</a>
+            <button id="themeToggle">dark mode</button>
+        </nav>
+        <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle menu">
+            <span></span><span></span><span></span>
+        </button>
+    </header>
+
+    <div class="wrapped-page" id="wrappedRoot">
+        <div class="empty-state"><h2>Loading wrapped…</h2></div>
+    </div>
+
+    <script type="module">
+        import { getUserByUsername, getUserWrapped, formatNumber, formatCost } from './js/api.js?v=2';
+
+        const $ = (id) => document.getElementById(id);
+        const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
+
+        // Theme toggle (mirror profile.html behavior)
+        const themeToggle = $('themeToggle');
+        function setThemeLabel() {
+            const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+            if (themeToggle) themeToggle.textContent = dark ? 'light mode' : 'dark mode';
+        }
+        setThemeLabel();
+        themeToggle?.addEventListener('click', () => {
+            const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+            if (dark) {
+                document.documentElement.removeAttribute('data-theme');
+                localStorage.removeItem('theme');
+            } else {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                localStorage.setItem('theme', 'dark');
+            }
+            setThemeLabel();
+        });
+
+        const params = new URLSearchParams(window.location.search);
+        const username = params.get('username');
+        const userHashParam = params.get('hash');
+        let ym = params.get('month');
+
+        // Default to last fully-complete month
+        if (!ym) {
+            const now = new Date();
+            const prev = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+            ym = `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, '0')}`;
+        }
+
+        async function init() {
+            if (!username && !userHashParam) {
+                renderError("No user specified — append ?username=YOUR_NAME");
+                return;
+            }
+            try {
+                let hash = userHashParam;
+                if (!hash) {
+                    const u = await getUserByUsername(username);
+                    hash = u.user_hash;
+                }
+                const summary = await getUserWrapped(hash, ym);
+                renderWrapped(summary);
+            } catch (e) {
+                console.error(e);
+                renderError(String(e?.message ?? e));
+            }
+        }
+
+        function renderError(msg) {
+            $('wrappedRoot').innerHTML = `<div class="empty-state"><h2>Couldn't load wrapped</h2><p>${esc(msg)}</p></div>`;
+        }
+
+        function adjacentMonth(ym, delta) {
+            const [y, m] = ym.split('-').map(Number);
+            const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+            return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+        }
+
+        function deltaSpan(pct) {
+            if (pct == null) return '';
+            const sign = pct >= 0 ? '+' : '';
+            const cls = pct >= 0 ? 'up' : 'down';
+            return `<span class="delta ${cls}">${sign}${pct}% vs last month</span>`;
+        }
+
+        const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        function fmtHour(h) {
+            if (h === 0) return '12am';
+            if (h < 12) return h + 'am';
+            if (h === 12) return '12pm';
+            return (h - 12) + 'pm';
+        }
+
+        function renderHeatmap(grid) {
+            let max = 0;
+            for (const row of grid) for (const v of row) if (v > max) max = v;
+            const cells = ['<div></div>'];
+            for (let h = 0; h < 24; h++) {
+                cells.push(`<div class="hdr">${(h % 3 === 0) ? fmtHour(h).replace('am','').replace('pm','') : ''}</div>`);
+            }
+            for (let dow = 0; dow < 7; dow++) {
+                cells.push(`<div class="dow-label">${DOW_NAMES[dow]}</div>`);
+                for (let h = 0; h < 24; h++) {
+                    const v = grid[dow][h];
+                    let lvl = 0;
+                    if (v > 0 && max > 0) {
+                        const r = v / max;
+                        if (r > 0.75) lvl = 4;
+                        else if (r > 0.5) lvl = 3;
+                        else if (r > 0.25) lvl = 2;
+                        else lvl = 1;
+                    }
+                    const title = `${DOW_NAMES[dow]} ${fmtHour(h)}: ${v} messages (UTC)`;
+                    cells.push(`<div class="heatmap-cell l${lvl}" title="${title}"></div>`);
+                }
+            }
+            return `<div class="heatmap-wrap"><div class="heatmap-grid">${cells.join('')}</div></div>
+                    <div style="font-size:10px;color:var(--text-secondary);margin-top:8px;letter-spacing:1px">UTC · darker = more messages</div>`;
+        }
+
+        function renderWrapped(s) {
+            const root = $('wrappedRoot');
+            const displayName = s.user.display_name || s.user.username || 'anonymous';
+            const ogImg = `${location.origin}/api/users/${s.user.user_hash}/wrapped/${s.month.ym}/og.png`;
+
+            // Wire OG/twitter meta
+            $('ogImage').setAttribute('content', ogImg);
+            $('twImage').setAttribute('content', ogImg);
+            const title = `${displayName} · Claude Rank Wrapped (${s.month.label})`;
+            $('ogTitle').setAttribute('content', title);
+            $('twTitle').setAttribute('content', title);
+            const desc = `${formatNumber(s.totals.messages)} messages · ${formatNumber(s.totals.tokens)} tokens · ${formatCost(s.totals.estimated_spend)} in ${s.month.label}.`;
+            $('ogDesc').setAttribute('content', desc);
+            $('twDesc').setAttribute('content', desc);
+            document.title = title;
+
+            // Empty-state guard
+            if (s.totals.active_days === 0) {
+                root.innerHTML = `
+                    <div class="month-nav">
+                        <a href="?username=${esc(s.user.username ?? '')}&month=${adjacentMonth(s.month.ym, -1)}">← prev month</a>
+                        <a href="?username=${esc(s.user.username ?? '')}&month=${adjacentMonth(s.month.ym, +1)}">next month →</a>
+                    </div>
+                    <div class="empty-state">
+                        <h2>No Claude activity in ${esc(s.month.label)}</h2>
+                        <p>Come back next month — once you've used Claude Code, your wrapped will appear here.</p>
+                    </div>`;
+                return;
+            }
+
+            const busiestBlock = s.busiest_day ? `
+                <div class="stat-cell">
+                    <span class="label">Busiest Day</span>
+                    <span class="value accent">${esc(s.busiest_day.date)}</span>
+                    <span class="sub">${formatNumber(s.busiest_day.tokens)} tokens · ${formatNumber(s.busiest_day.messages)} messages</span>
+                </div>` : '';
+
+            const powerBlock = s.power_hour ? `
+                <div class="stat-cell">
+                    <span class="label">Power Hour</span>
+                    <span class="value accent">${DOW_NAMES[s.power_hour.dow]} ${fmtHour(s.power_hour.hour)}</span>
+                    <span class="sub">${formatNumber(s.power_hour.messages)} messages all month, that hour (UTC)</span>
+                </div>` : '';
+
+            const flexBlock = s.concurrency_flex ? `
+                <div class="wrapped-section">
+                    <h2>Concurrency Flex</h2>
+                    <p class="flex-line">You ran <span class="accent">${s.concurrency_flex.peak_concurrency} agents at once</span>
+                        for <span class="accent">${s.concurrency_flex.minutes_at_peak} minutes</span>
+                        on <strong>${esc(s.concurrency_flex.date)}</strong>.</p>
+                </div>` : '';
+
+            const rankBlock = s.rank ? `
+                <div class="stat-cell">
+                    <span class="label">Global Rank</span>
+                    <span class="value accent">Top ${s.rank.percentile <= 1 ? '1' : Math.ceil(s.rank.percentile)}%</span>
+                    <span class="sub">#${s.rank.position.toLocaleString()} of ${s.rank.total_users.toLocaleString()} by tokens</span>
+                </div>` : `
+                <div class="stat-cell">
+                    <span class="label">Global Rank</span>
+                    <span class="value">—</span>
+                </div>`;
+
+            const planBlock = s.plan ? `
+                <div class="stat-cell">
+                    <span class="label">Plan Burn</span>
+                    <span class="value ${s.plan.utilization_pct > 100 ? 'accent' : ''}">${s.plan.utilization_pct}%</span>
+                    <span class="sub">${formatCost(s.totals.estimated_spend)} of $${s.plan.monthly_plan_usd} plan</span>
+                </div>` : '';
+
+            const delta = s.delta_vs_prev_month;
+
+            root.innerHTML = `
+                <div class="month-nav">
+                    <a href="?username=${esc(s.user.username ?? '')}&month=${adjacentMonth(s.month.ym, -1)}">← ${adjacentMonth(s.month.ym, -1)}</a>
+                    <span style="color:var(--text-secondary);padding:6px 12px">${esc(s.month.label)}</span>
+                    <a href="?username=${esc(s.user.username ?? '')}&month=${adjacentMonth(s.month.ym, +1)}">${adjacentMonth(s.month.ym, +1)} →</a>
+                </div>
+
+                <div class="wrapped-hero">
+                    <div class="wrapped-eyebrow">Claude Rank · Wrapped</div>
+                    <div class="wrapped-title">${esc(displayName)}</div>
+                    <div class="wrapped-subtitle">${esc(s.month.label)}</div>
+                    <img src="${ogImg}" alt="${esc(displayName)}'s Wrapped" loading="eager">
+                </div>
+
+                <div class="wrapped-section">
+                    <h2>The Headlines</h2>
+                    <div class="stat-row">
+                        <div class="stat-cell">
+                            <span class="label">Messages</span>
+                            <span class="value accent">${formatNumber(s.totals.messages)}</span>
+                            ${delta ? deltaSpan(delta.messages_pct) : ''}
+                        </div>
+                        <div class="stat-cell">
+                            <span class="label">Tokens</span>
+                            <span class="value accent">${formatNumber(s.totals.tokens)}</span>
+                            ${delta ? deltaSpan(delta.tokens_pct) : ''}
+                        </div>
+                        <div class="stat-cell">
+                            <span class="label">Spend</span>
+                            <span class="value accent">${formatCost(s.totals.estimated_spend)}</span>
+                            ${delta ? deltaSpan(delta.spend_pct) : ''}
+                        </div>
+                        <div class="stat-cell">
+                            <span class="label">Active Days</span>
+                            <span class="value">${s.totals.active_days} / ${s.month.days_in_month}</span>
+                            <span class="sub">${formatNumber(s.totals.tool_calls)} tool calls · ${formatNumber(s.totals.sessions)} sessions</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="wrapped-section">
+                    <h2>When You Claude</h2>
+                    <div class="stat-row" style="margin-bottom: 16px">
+                        ${busiestBlock}
+                        ${powerBlock}
+                    </div>
+                    ${renderHeatmap(s.heatmap_24x7)}
+                </div>
+
+                ${flexBlock}
+
+                <div class="wrapped-section">
+                    <h2>Where You Land</h2>
+                    <div class="stat-row">
+                        ${rankBlock}
+                        ${planBlock}
+                    </div>
+                </div>
+
+                <div class="wrapped-actions">
+                    <div class="toast" id="shareToast">Link copied!</div>
+                    <button id="btnDownload">Download Card</button>
+                    <button id="btnShare" class="secondary">Copy Link</button>
+                </div>
+            `;
+
+            // Wire actions
+            $('btnDownload')?.addEventListener('click', () => {
+                const a = document.createElement('a');
+                a.href = ogImg;
+                a.download = `claude-rank-wrapped-${s.user.username || s.user.user_hash}-${s.month.ym}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            });
+            $('btnShare')?.addEventListener('click', async () => {
+                const url = `${location.origin}/wrapped?username=${encodeURIComponent(s.user.username || '')}&month=${s.month.ym}`;
+                try {
+                    await navigator.clipboard.writeText(url);
+                } catch { /* clipboard may be blocked; fall through */ }
+                const toast = $('shareToast');
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 1600);
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>
