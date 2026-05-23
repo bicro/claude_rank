@@ -72,7 +72,7 @@ function buildSvg(summary: WrappedSummary): string {
   // ─── Mini heatmap (right side) ──────────────────────────────────────────
   const heatX = 700;
   const heatY = 360;
-  const cellW = 18;
+  const cellW = 16;
   const cellH = 14;
   const gap = 2;
   let maxCell = 0;
@@ -126,7 +126,7 @@ function buildSvg(summary: WrappedSummary): string {
   }
 
   // Heatmap label
-  svg += `<text x="${heatX}" y="${heatY - 18}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="18" letter-spacing="2">WHEN YOU CLAUDE (UTC)</text>`;
+  svg += `<text x="${heatX}" y="${heatY - 18}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="18" letter-spacing="2">WHEN YOU CLAUDE</text>`;
 
   // Heatmap grid
   for (let dow = 0; dow < 7; dow++) {
