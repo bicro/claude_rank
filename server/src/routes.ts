@@ -822,6 +822,12 @@ async function handleGetWrappedOg(userHash: string, ym: string): Promise<Respons
   if (!parsed) return error("Invalid year-month (expected YYYY-MM)", 400);
 
   const db = getDb();
+  // 404 unknown users before fanning out to ~7 SQL queries + a Resvg render.
+  // Without this guard, an attacker can amplify cheap input (random hex) into
+  // expensive output and pollute the in-memory PNG cache.
+  const userRow = await db.query("SELECT 1 FROM users WHERE user_hash = ?").get(userHash) as any;
+  if (!userRow) return error("User not found", 404);
+
   const summary = await getWrappedSummary(db, userHash, parsed.year, parsed.month);
   if (!summary) return error("Invalid month", 400);
 
