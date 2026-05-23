@@ -180,6 +180,7 @@
                             <h2>${escHtml(displayName)}${socialIconHtml}
                                 <span class="tier-badge tier-${tier.tier.toLowerCase()}" data-tooltip="Tier is based on your weighted score. Progress to ${tier.next_tier || 'max tier'}: ${Math.round(tier.progress || 0)}%.">${tierObj.icon} ${tier.tier}</span>
                                 <span class="profile-overall-rank" id="profileOverallRank"></span>
+                                <a class="profile-wrapped-link" href="/wrapped?username=${encodeURIComponent(profile.username || '')}&hash=${encodeURIComponent(hash)}" data-tooltip="See ${escHtml(displayName)}'s monthly Claude recap">WRAPPED &rarr;</a>
                             </h2>
                             <div class="meta">
                                 Joined ${new Date(profile.created_at).toLocaleDateString()}

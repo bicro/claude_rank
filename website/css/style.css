@@ -615,6 +615,26 @@ a.top-entry:hover { text-decoration: none; background: var(--bg-hover); }
     vertical-align: middle;
     margin-left: 4px;
 }
+.profile-wrapped-link {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: var(--accent);
+    background: transparent;
+    border: 1px solid var(--accent);
+    padding: 2px 9px;
+    border-radius: 12px;
+    vertical-align: middle;
+    margin-left: 6px;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+}
+.profile-wrapped-link:hover {
+    background: var(--accent);
+    color: #fff;
+}
 .profile-info .meta { color: var(--text-secondary); font-size: 13px; }
 .social-link {
     display: inline-flex;
