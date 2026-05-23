@@ -102,9 +102,9 @@ function buildSvg(summary: WrappedSummary): string {
   svg += `<rect x="20" y="20" width="${CARD_W - 40}" height="${CARD_H - 40}" fill="none" stroke="${RULE}" stroke-width="2" rx="4"/>`;
 
   // Header eyebrow + title
-  svg += `<text x="60" y="${headerY}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="22" letter-spacing="4">CLAUDE RANK · WRAPPED</text>`;
-  svg += `<text x="60" y="${headerY + 64}" fill="${FG}" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="64" font-weight="700">${escapeXml(displayName)}</text>`;
-  svg += `<text x="60" y="${headerY + 102}" fill="${ACCENT}" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="28" letter-spacing="3">${escapeXml(monthLabel)}</text>`;
+  svg += `<text x="60" y="${headerY}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="22" letter-spacing="4">CLAUDE RANK · WRAPPED</text>`;
+  svg += `<text x="60" y="${headerY + 64}" fill="${FG}" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="64" font-weight="700">${escapeXml(displayName)}</text>`;
+  svg += `<text x="60" y="${headerY + 102}" fill="${ACCENT}" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="28" letter-spacing="3">${escapeXml(monthLabel)}</text>`;
 
   // Rule
   svg += `<line x1="60" y1="${statsY - 10}" x2="${CARD_W - 60}" y2="${statsY - 10}" stroke="${RULE}" stroke-width="1"/>`;
@@ -113,20 +113,20 @@ function buildSvg(summary: WrappedSummary): string {
   const statColW = 200;
   for (let i = 0; i < 3; i++) {
     const x = 60 + i * statColW;
-    svg += `<text x="${x}" y="${statsY + 28}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="18" letter-spacing="2">${statLabels[i]}</text>`;
-    svg += `<text x="${x}" y="${statsY + 90}" fill="${FG}" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="48" font-weight="700">${escapeXml(statValues[i]!)}</text>`;
+    svg += `<text x="${x}" y="${statsY + 28}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="18" letter-spacing="2">${statLabels[i]}</text>`;
+    svg += `<text x="${x}" y="${statsY + 90}" fill="${FG}" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="48" font-weight="700">${escapeXml(statValues[i]!)}</text>`;
   }
 
   // Activity sub-line: active days + sessions
-  svg += `<text x="60" y="${statsY + 140}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="20">${totals.active_days} active days · ${totals.sessions} sessions · ${fmtNum(totals.tool_calls)} tool calls</text>`;
+  svg += `<text x="60" y="${statsY + 140}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="20">${totals.active_days} active days · ${totals.sessions} sessions · ${fmtNum(totals.tool_calls)} tool calls</text>`;
 
   // Busiest day callout
   if (busiest_day) {
-    svg += `<text x="60" y="${statsY + 180}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="20">Busiest day: ${escapeXml(busiest_day.date)} · ${fmtNum(busiest_day.tokens)} tokens</text>`;
+    svg += `<text x="60" y="${statsY + 180}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="20">Busiest day: ${escapeXml(busiest_day.date)} · ${fmtNum(busiest_day.tokens)} tokens</text>`;
   }
 
   // Heatmap label
-  svg += `<text x="${heatX}" y="${heatY - 18}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="18" letter-spacing="2">WHEN YOU CLAUDE (UTC)</text>`;
+  svg += `<text x="${heatX}" y="${heatY - 18}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="18" letter-spacing="2">WHEN YOU CLAUDE (UTC)</text>`;
 
   // Heatmap grid
   for (let dow = 0; dow < 7; dow++) {
@@ -158,12 +158,12 @@ function buildSvg(summary: WrappedSummary): string {
   ];
   for (let i = 0; i < 3; i++) {
     const colX = 60 + i * 360;
-    svg += `<text x="${colX}" y="${footerY}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="14" letter-spacing="2">${footerCols[i]!.label}</text>`;
-    svg += `<text x="${colX}" y="${footerY + 30}" fill="${FG}" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="22" font-weight="600">${escapeXml(footerCols[i]!.value)}</text>`;
+    svg += `<text x="${colX}" y="${footerY}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="14" letter-spacing="2">${footerCols[i]!.label}</text>`;
+    svg += `<text x="${colX}" y="${footerY + 30}" fill="${FG}" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="22" font-weight="600">${escapeXml(footerCols[i]!.value)}</text>`;
   }
 
   // Footer brand
-  svg += `<text x="${CARD_W - 60}" y="${CARD_H - 40}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="16" letter-spacing="3" text-anchor="end">CLAUDERANK.COM</text>`;
+  svg += `<text x="${CARD_W - 60}" y="${CARD_H - 40}" fill="${MUTED}" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="16" letter-spacing="3" text-anchor="end">CLAUDERANK.COM</text>`;
 
   svg += `</svg>`;
   return svg;
@@ -179,6 +179,13 @@ export function renderWrappedPng(summary: WrappedSummary): Uint8Array {
   const resvg = new Resvg(svg, {
     background: BG,
     fitTo: { mode: "width", value: CARD_W },
+    // The Linux production image installs fonts-dejavu-core. defaultFontFamily
+    // gives Resvg something to resolve `monospace` to when the SVG's
+    // platform-specific families (Menlo/Consolas) aren't present.
+    font: {
+      loadSystemFonts: true,
+      defaultFontFamily: "DejaVu Sans Mono",
+    },
   });
   const png = resvg.render().asPng();
 
