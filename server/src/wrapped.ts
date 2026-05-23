@@ -104,16 +104,19 @@ async function findBusiestDay(hashes: string[], start: string, endExcl: string) 
 async function findConcurrencyFlex(hashes: string[], start: string, endExcl: string) {
   const pool = getPool();
   const placeholders = hashes.map((_, i) => `$${i + 1}`).join(", ");
+  // Pick a single concrete (device, date) row — peak and minutes must come
+  // from the SAME row. Aggregating with MAX(peak) and MAX(mins) independently
+  // would mix the peak from one linked device with the minutes from another,
+  // fabricating a "5 agents for 60m" event that never happened.
   const { rows } = await pool.query(
     `SELECT snapshot_date,
-            MAX(peak_concurrency) AS peak,
-            MAX(peak_concurrency_mins) AS mins
+            peak_concurrency AS peak,
+            peak_concurrency_mins AS mins
      FROM metrics_history
      WHERE user_hash IN (${placeholders})
        AND snapshot_date >= $${hashes.length + 1}
        AND snapshot_date < $${hashes.length + 2}
        AND peak_concurrency > 1
-     GROUP BY snapshot_date
      ORDER BY peak DESC, mins DESC
      LIMIT 1`,
     [...hashes, start, endExcl],
