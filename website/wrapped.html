@@ -52,16 +52,20 @@
         }
         .rail .dot {
             width: 8px; height: 8px; border-radius: 50%;
-            background: rgba(255,255,255,0.30);
-            border: 1px solid rgba(255,255,255,0.50);
+            background: color-mix(in srgb, currentColor 26%, transparent);
+            border: 1px solid color-mix(in srgb, currentColor 55%, transparent);
+            color: #fff;
             cursor: pointer;
             transition: all 0.25s ease;
         }
-        .rail .dot[data-light="dark"] {
-            background: rgba(0,0,0,0.18);
-            border-color: rgba(0,0,0,0.4);
+        .rail[data-contrast="dark"] .dot { color: #111; }
+        .rail[data-contrast="light"] .dot { color: #fff; }
+        .rail .dot.active {
+            transform: scale(1.7);
+            background: currentColor;
+            border-color: currentColor;
+            box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
         }
-        .rail .dot.active { transform: scale(1.7); background: var(--accent); border-color: var(--accent); }
 
         /* Top brand badge */
         .brandbadge {
@@ -878,14 +882,16 @@
             sections.forEach((s) => {
                 const d = document.createElement('div');
                 d.className = 'dot';
-                const t = s.dataset.theme;
-                if (t === 'light') d.dataset.light = 'dark';
                 d.title = s.dataset.label || '';
                 d.addEventListener('click', () => s.scrollIntoView({ behavior: 'smooth' }));
                 rail.appendChild(d);
             });
 
             const dots = rail.querySelectorAll('.dot');
+            const setRailContrast = (section) => {
+                rail.dataset.contrast = section.dataset.theme === 'light' ? 'dark' : 'light';
+            };
+            if (sections[0]) setRailContrast(sections[0]);
 
             // Section-level observer — runs once-per-section FX (count-ups, heatmap, etc.)
             // and updates the rail / page counter as sections come into view.
@@ -897,6 +903,7 @@
                     if (e.intersectionRatio >= 0.5) {
                         dots.forEach(d => d.classList.remove('active'));
                         dots[i].classList.add('active');
+                        setRailContrast(e.target);
                         $('pn-cur').textContent = String(i + 1).padStart(2, '0');
                     }
                     // Fire one-shot effects as soon as section pokes into viewport
