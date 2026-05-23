@@ -36,8 +36,14 @@
             color: var(--text-primary);
             min-height: 100vh;
         }
-        html.wrapped-html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+        html.wrapped-html { scroll-snap-type: y proximity; scroll-behavior: smooth; }
         body.wrapped a { text-decoration: none; }
+
+        /* Parallax — composes with .r-up's `translate` property */
+        [data-parallax] {
+            transform: translate3d(0, var(--py, 0px), 0);
+            will-change: transform;
+        }
 
         /* progress rail (fixed) */
         .rail {
@@ -416,9 +422,10 @@
         #c8 .actions .toast.show { opacity: 1; }
 
         /* ── Reveal classes ─────────────────────────────────── */
-        .r-up { opacity: 0; transform: translateY(40px); transition: opacity 0.9s ease, transform 0.9s cubic-bezier(0.2,0.7,0.2,1); }
-        .r-left { opacity: 0; transform: translateX(-30px); transition: opacity 0.9s ease, transform 0.9s cubic-bezier(0.2,0.7,0.2,1); }
-        .r-up.in, .r-left.in { opacity: 1; transform: none; }
+        /* Use the `translate` property so it composes with `transform` parallax. */
+        .r-up   { opacity: 0; translate: 0 40px;  transition: opacity 0.9s ease, translate 0.9s cubic-bezier(0.2,0.7,0.2,1); }
+        .r-left { opacity: 0; translate: -30px 0; transition: opacity 0.9s ease, translate 0.9s cubic-bezier(0.2,0.7,0.2,1); }
+        .r-up.in, .r-left.in { opacity: 1; translate: 0 0; }
         .d1 { transition-delay: 0.10s; }
         .d2 { transition-delay: 0.22s; }
         .d3 { transition-delay: 0.34s; }
@@ -612,7 +619,7 @@
                       <p class="sub r-up d2">${avgPerActiveDay.toLocaleString()} a day on the days you logged in. You were active <b>${s.totals.active_days}</b> of ${s.month.days_in_month} days this month.</p>
                       ${hasDelta ? deltaPill(s.delta_vs_prev_month.messages_pct) : ''}
                     </div>
-                    <div class="megaCount r-up d2"><span class="cnt" data-c="${s.totals.messages}">0</span></div>
+                    <div class="megaCount r-up d2" data-parallax="0.15"><span class="cnt" data-c="${s.totals.messages}">0</span></div>
                   </div>
                 </div>
               </section>`;
@@ -629,10 +636,10 @@
                   <div class="layout">
                     <div>
                       <div class="eb r-up">Chapter __EB2__ · Tokens burned</div>
-                      <div class="megaCount r-up d1"><span class="cnt" data-c="${tokensDisplayC}" data-dp="1">0</span><span class="unit">${tokensUnit}</span></div>
+                      <div class="megaCount r-up d1" data-parallax="0.15"><span class="cnt" data-c="${tokensDisplayC}" data-dp="1">0</span><span class="unit">${tokensUnit}</span></div>
                       <h2 class="hl r-up d2" style="font-size:clamp(28px,4vw,44px); margin-top:8px;">tokens. That's ${formatCost(s.totals.estimated_spend)} of Anthropic money.</h2>
                     </div>
-                    <div class="receipt r-up d3">
+                    <div class="receipt r-up d3" data-parallax="0.07">
                       <div class="head">// month receipt</div>
                       <div class="ln"><span class="l">messages</span><span class="r">${formatNumber(s.totals.messages)}</span></div>
                       <div class="ln"><span class="l">tool calls</span><span class="r">${formatNumber(s.totals.tool_calls)}</span></div>
@@ -672,14 +679,14 @@
                         <h2 class="hl">You burned ${headlineLabel} Claude than ${prevMonthAbbr.charAt(0) + prevMonthAbbr.slice(1).toLowerCase()}.</h2>
                       </div>
                       <div class="split">
-                        <div class="card prev r-left d1">
+                        <div class="card prev r-left d1" data-parallax="0.1">
                           <h3>Last month</h3>
                           <div class="month">${prevMonthAbbr} '${prevYy}</div>
                           <div class="stat-line"><div class="lab">Messages</div><div class="ring"><i data-w="${Math.round(((prevM || 0) / wM) * 100)}"></i></div><div class="v">${formatNumber(Math.round(prevM || 0))}</div></div>
                           <div class="stat-line"><div class="lab">Tokens</div><div class="ring"><i data-w="${Math.round(((prevT || 0) / wT) * 100)}"></i></div><div class="v">${formatNumber(Math.round(prevT || 0))}</div></div>
                           <div class="stat-line"><div class="lab">Spend</div><div class="ring"><i data-w="${Math.round(((prevS || 0) / wS) * 100)}"></i></div><div class="v">${formatCost(prevS || 0)}</div></div>
                         </div>
-                        <div class="card r-up d2">
+                        <div class="card r-up d2" data-parallax="0.05">
                           <h3>This month</h3>
                           <div class="month now">${monthAbbr} '${yy}</div>
                           <div class="stat-line"><div class="lab">Messages</div><div class="ring"><i data-w="${Math.round((s.totals.messages / wM) * 100)}"></i></div><div class="v">${formatNumber(s.totals.messages)}</div></div>
@@ -709,7 +716,7 @@
                         <span class="peak-tag">⏱ POWER HOUR · ${esc(phLabel)}</span>
                       </div>` : ''}
                     </div>
-                    <div class="map-card r-up d2">
+                    <div class="map-card r-up d2" data-parallax="0.1">
                       <div class="head">
                         <span>7 DAYS × 24 HOURS · UTC</span>
                         <span class="legend"><span>LOW</span><div class="g"></div><span>HIGH</span></span>
@@ -742,9 +749,9 @@
                           <div class="eb r-up">Chapter __EB5__ · The day you went the hardest</div>
                           <h2 class="hl r-up d1">It was a <span class="accent">${dayOfWeek}</span>.</h2>
                           <p class="sub r-up d2"><b>${formatNumber(bd.tokens)}</b> tokens. <b>${formatNumber(bd.messages)}</b> messages. That single day was <b>${sharePct}%</b> of your month's token burn.</p>
-                          <div class="dayMega r-up d3"><span class="accent">${dayNum}</span></div>
+                          <div class="dayMega r-up d3" data-parallax="0.18"><span class="accent">${dayNum}</span></div>
                         </div>
-                        <div class="ticket r-up d2">
+                        <div class="ticket r-up d2" data-parallax="0.08">
                           <div class="d">// session report</div>
                           <div class="dt">${dayMonthAbbr} <span class="day">${dayNum}</span></div>
                           <hr>
@@ -781,12 +788,12 @@
                         <div>
                           <div class="eb r-up">Chapter __EB6__ · Peak concurrent agents</div>
                           <h2 class="hl r-up d1">At your <span class="accent">peak</span>, you ran</h2>
-                          <div class="megaRow r-up d2">
+                          <div class="megaRow r-up d2" data-parallax="0.12">
                             <span class="n cnt" data-c="${cf.peak_concurrency}">0</span><span class="x">agents</span>
                           </div>
                           <p class="sub r-up d3">All at once. ${cfDow}, ${cfMonth} ${cfDay} — ${cf.peak_concurrency} Claude Code sessions in parallel, holding for <b style="color:#fff;">${cf.minutes_at_peak} minutes</b>. Multi-agent flexing.</p>
                         </div>
-                        <div class="agents" id="agentList">
+                        <div class="agents" id="agentList" data-parallax="0.05">
                           ${agentRows}
                         </div>
                       </div>
@@ -879,42 +886,72 @@
             });
 
             const dots = rail.querySelectorAll('.dot');
-            const io = new IntersectionObserver((entries) => {
+
+            // Section-level observer — runs once-per-section FX (count-ups, heatmap, etc.)
+            // and updates the rail / page counter as sections come into view.
+            const sectionIO = new IntersectionObserver((entries) => {
                 for (const e of entries) {
+                    if (!e.isIntersecting) continue;
                     const i = [...sections].indexOf(e.target);
-                    if (e.isIntersecting && e.intersectionRatio > 0.55) {
+                    // Active rail dot whenever a section is the most visible (>=0.5)
+                    if (e.intersectionRatio >= 0.5) {
                         dots.forEach(d => d.classList.remove('active'));
                         dots[i].classList.add('active');
                         $('pn-cur').textContent = String(i + 1).padStart(2, '0');
-                        e.target.querySelectorAll('.r-up, .r-left').forEach(el => el.classList.add('in'));
+                    }
+                    // Fire one-shot effects as soon as section pokes into viewport
+                    e.target.classList.add('in');
+                    runSectionFx(e.target);
+                }
+            }, { threshold: [0.05, 0.3, 0.5, 0.75] });
+            sections.forEach(s => sectionIO.observe(s));
+
+            // Element-level reveal observer — each .r-up/.r-left fades in
+            // independently as it enters the viewport, instead of the whole
+            // section snapping in at once.
+            const revealIO = new IntersectionObserver((entries) => {
+                for (const e of entries) {
+                    if (e.isIntersecting) {
                         e.target.classList.add('in');
-                        runSectionFx(e.target);
+                        revealIO.unobserve(e.target);
                     }
                 }
-            }, { threshold: [0.4, 0.6, 0.8] });
-            sections.forEach(s => io.observe(s));
+            }, { threshold: 0, rootMargin: '0px 0px -12% 0px' });
+            document.querySelectorAll('.r-up, .r-left').forEach(el => revealIO.observe(el));
 
-            // Cover parallax echoes
+            // Scroll parallax — both the cover echoes and any [data-parallax] element.
             const e0 = document.querySelector('#c0 .echo.e0');
             const e1 = document.querySelector('#c0 .echo.e1');
+            const parallaxEls = document.querySelectorAll('[data-parallax]');
             let ticking = false;
             function update() {
                 const y = window.scrollY;
+                const vh = window.innerHeight;
                 if (e0) e0.style.transform = `translateY(calc(-50% + ${(-y * 0.25).toFixed(1)}px)) translateX(${(y * 0.04).toFixed(1)}px)`;
                 if (e1) e1.style.transform = `translateY(calc(-50% + ${(-y * 0.5).toFixed(1)}px)) translateX(${(-y * 0.06).toFixed(1)}px)`;
+                for (const el of parallaxEls) {
+                    const rect = el.getBoundingClientRect();
+                    // Only update when element is near or in viewport
+                    if (rect.bottom < -vh || rect.top > vh * 2) continue;
+                    const center = rect.top + rect.height / 2;
+                    // -1 above viewport, 0 centered, +1 below viewport
+                    const t = (center - vh / 2) / vh;
+                    const factor = parseFloat(el.dataset.parallax) || 0;
+                    // Drift opposite to scroll direction → element "lags" behind, depth feel
+                    const py = -t * factor * vh;
+                    el.style.setProperty('--py', py.toFixed(1) + 'px');
+                }
                 ticking = false;
             }
             window.addEventListener('scroll', () => {
                 if (!ticking) { ticking = true; requestAnimationFrame(update); }
             }, { passive: true });
-
-            // First section reveal (no scroll yet)
-            const first = sections[0];
-            if (first) {
-                first.querySelectorAll('.r-up, .r-left').forEach(el => el.classList.add('in'));
-                first.classList.add('in');
-                runSectionFx(first);
-            }
+            window.addEventListener('resize', () => {
+                if (!ticking) { ticking = true; requestAnimationFrame(update); }
+            }, { passive: true });
+            // Prime parallax + first-section reveals (so cover content shows
+            // before any scroll happens).
+            update();
         }
 
         function animateNum(el) {
