@@ -1887,6 +1887,33 @@ async function handleSync(request: Request): Promise<Response> {
     }
   }
 
+  // Persist daily_model_tokens — batched
+  if (req.daily_model_tokens && Array.isArray(req.daily_model_tokens)) {
+    const rows: (string | number)[][] = [];
+    for (const entry of req.daily_model_tokens) {
+      if (!entry || typeof entry !== "object" || !entry.date) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) continue;
+      const map = entry.tokensByModel ?? entry.tokens_by_model;
+      if (!map || typeof map !== "object") continue;
+      for (const [model, tokens] of Object.entries(map)) {
+        const n = Math.floor(Number(tokens) || 0);
+        if (n <= 0) continue;
+        if (typeof model !== "string" || model.length === 0 || model.length > 200) continue;
+        rows.push([req.user_hash, entry.date, model, n]);
+      }
+    }
+    if (rows.length > 0 && rows.length <= 10000) {
+      const values = rows.map((_, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`).join(", ");
+      await pool.query(
+        `INSERT INTO metrics_model_daily (user_hash, snapshot_date, model_name, tokens)
+         VALUES ${values}
+         ON CONFLICT (user_hash, snapshot_date, model_name) DO UPDATE SET
+           tokens = EXCLUDED.tokens`,
+        rows.flat(),
+      );
+    }
+  }
+
   // Persist concurrency_histogram — batched
   if (req.concurrency_histogram && typeof req.concurrency_histogram === "object") {
     const rows: [string, string, string][] = [];

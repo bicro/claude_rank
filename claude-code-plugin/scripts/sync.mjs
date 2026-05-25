@@ -73,6 +73,7 @@ export async function buildAndSync(config, stats) {
     },
     token_breakdown: tokenBreakdown,
     daily_activity: dailyActivity,
+    daily_model_tokens: stats.dailyModelTokens || [],
     hour_counts: floorValues(stats.hourCounts || {}),
     hour_tokens: floorValues(stats.hourTokens || {}),
     concurrency_histogram: stats.concurrencyHistogram || {},

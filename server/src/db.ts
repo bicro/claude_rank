@@ -182,6 +182,15 @@ export async function initDb(): Promise<void> {
       UNIQUE(user_hash, snapshot_date)
     );
 
+    CREATE TABLE IF NOT EXISTS metrics_model_daily (
+      id SERIAL PRIMARY KEY,
+      user_hash TEXT NOT NULL,
+      snapshot_date TEXT NOT NULL,
+      model_name TEXT NOT NULL,
+      tokens BIGINT NOT NULL DEFAULT 0,
+      UNIQUE(user_hash, snapshot_date, model_name)
+    );
+
     CREATE TABLE IF NOT EXISTS device_metrics (
       device_hash TEXT PRIMARY KEY,
       total_tokens BIGINT DEFAULT 0,
@@ -220,6 +229,7 @@ export async function initDb(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_metrics_hourly_user_hash ON metrics_hourly(user_hash);
     CREATE INDEX IF NOT EXISTS idx_concurrency_histogram_user_hash ON concurrency_histogram(user_hash);
     CREATE INDEX IF NOT EXISTS idx_daily_sessions_user_hash ON daily_sessions(user_hash);
+    CREATE INDEX IF NOT EXISTS idx_metrics_model_daily_user_date ON metrics_model_daily(user_hash, snapshot_date);
   `);
 
   // Migrations

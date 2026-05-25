@@ -24,6 +24,12 @@ export interface WrappedSummary {
   rank: { position: number; total_users: number; percentile: number } | null;
   delta_vs_prev_month: { messages_pct: number | null; tokens_pct: number | null; spend_pct: number | null } | null;
   plan: { monthly_plan_usd: number; utilization_pct: number } | null;
+  favourite_model: {
+    model_name: string;
+    tokens: number;
+    share_pct: number;
+    top_models: { model_name: string; tokens: number; share_pct: number }[];
+  } | null;
 }
 
 /** Format a 0-padded YYYY-MM string. month is 1-indexed. */
@@ -170,6 +176,37 @@ function findPowerHour(grid: number[][]): { hour: number; dow: number; messages:
   return best.messages > 0 ? best : null;
 }
 
+/** Find the user's favourite model + top 3 by total tokens in the month range. */
+async function findFavouriteModel(hashes: string[], start: string, endExcl: string) {
+  const pool = getPool();
+  const placeholders = hashes.map((_, i) => `$${i + 1}`).join(", ");
+  const { rows } = await pool.query(
+    `SELECT model_name, SUM(tokens)::bigint AS tokens
+     FROM metrics_model_daily
+     WHERE user_hash IN (${placeholders})
+       AND snapshot_date >= $${hashes.length + 1}
+       AND snapshot_date < $${hashes.length + 2}
+     GROUP BY model_name
+     ORDER BY tokens DESC
+     LIMIT 5`,
+    [...hashes, start, endExcl],
+  );
+  if (rows.length === 0) return null;
+  const totals = rows.map((r: any) => ({ model_name: String(r.model_name), tokens: Number(r.tokens ?? 0) }));
+  const grandTotal = totals.reduce((s, r) => s + r.tokens, 0);
+  if (grandTotal <= 0) return null;
+  const withShare = totals.map(r => ({
+    ...r,
+    share_pct: Math.round((r.tokens / grandTotal) * 1000) / 10,
+  }));
+  return {
+    model_name: withShare[0]!.model_name,
+    tokens: withShare[0]!.tokens,
+    share_pct: withShare[0]!.share_pct,
+    top_models: withShare.slice(0, 3),
+  };
+}
+
 /** Count sessions in daily_sessions JSON arrays for the month range. */
 async function countSessions(hashes: string[], start: string, endExcl: string): Promise<number> {
   const pool = getPool();
@@ -266,13 +303,14 @@ export async function getWrappedSummary(
   const monthlyPlanUsd = userRow?.monthly_plan_usd ?? null;
 
   // Parallel queries
-  const [totals, busiestDay, concurrencyFlex, heatmap, sessions, rank] = await Promise.all([
+  const [totals, busiestDay, concurrencyFlex, heatmap, sessions, rank, favouriteModel] = await Promise.all([
     sumMonthTotals(hashes, start, endExcl),
     findBusiestDay(hashes, start, endExcl),
     findConcurrencyFlex(hashes, start, endExcl),
     buildHeatmap(hashes, start, endExcl),
     countSessions(hashes, start, endExcl),
     getMonthlyTokenRank(userHash, year, month),
+    findFavouriteModel(hashes, start, endExcl),
   ]);
 
   // Previous month delta
@@ -320,6 +358,7 @@ export async function getWrappedSummary(
     rank,
     delta_vs_prev_month: delta,
     plan,
+    favourite_model: favouriteModel,
   };
 }
 

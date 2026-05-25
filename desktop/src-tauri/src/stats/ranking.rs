@@ -99,6 +99,8 @@ pub(crate) struct SyncPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     daily_activity: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    daily_model_tokens: Option<Vec<DailyModelTokensEntry>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     hour_counts: Option<HashMap<String, u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     hour_tokens: Option<HashMap<String, u64>>,
@@ -150,6 +152,13 @@ struct TokenBreakdown {
     output: u64,
     cache_read: u64,
     cache_creation: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct DailyModelTokensEntry {
+    date: String,
+    #[serde(rename = "tokensByModel")]
+    tokens_by_model: HashMap<String, u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -321,6 +330,23 @@ impl RankingEngine {
             None
         };
 
+        // Per-day per-model tokens (powers "favourite model" wrapped chapter
+        // and future per-day model breakdown analytics).
+        let daily_model_tokens = if settings.tokens {
+            Some(
+                stats
+                    .daily_model_tokens
+                    .iter()
+                    .map(|dmt| DailyModelTokensEntry {
+                        date: dmt.date.clone(),
+                        tokens_by_model: dmt.tokens_by_model.clone(),
+                    })
+                    .collect(),
+            )
+        } else {
+            None
+        };
+
         // Hour counts
         let hour_counts = if settings.hour_activity {
             Some(stats.hour_counts.clone())
@@ -356,6 +382,7 @@ impl RankingEngine {
             totals,
             token_breakdown,
             daily_activity,
+            daily_model_tokens,
             hour_counts,
             hour_tokens,
             concurrency_histogram,

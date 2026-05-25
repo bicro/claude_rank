@@ -386,6 +386,53 @@
         #c6 .agents .agent .task b { color: #fff; font-weight: 700; }
         #c6 .agents .agent .dur { color: #888; font-weight: 700; font-variant-numeric: tabular-nums; }
 
+        /* ╔═══ CHAPTER 7 · FAVOURITE MODEL ═══╗ */
+        #c7 { background: var(--bg-page-end); }
+        #c7 .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 50px; align-items: center; }
+        @media (max-width: 1000px) { #c7 .grid { grid-template-columns: 1fr; } }
+        #c7 .modelMega {
+            font-size: clamp(80px, 12vw, 180px);
+            font-weight: 900; line-height: 0.9; letter-spacing: -4px;
+            color: var(--text-primary); margin: 20px 0;
+        }
+        #c7 .modelMega .accent { color: var(--accent); }
+        #c7 .ranklist {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px;
+            padding: 24px 26px;
+        }
+        #c7 .ranklist .head {
+            font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+            text-transform: uppercase; color: var(--text-secondary);
+            margin-bottom: 14px;
+        }
+        #c7 .ranklist .row {
+            display: grid; grid-template-columns: 24px 1fr 70px;
+            gap: 12px; align-items: center;
+            padding: 12px 0;
+            border-top: 1px solid var(--border);
+        }
+        #c7 .ranklist .row:first-of-type { border-top: none; }
+        #c7 .ranklist .rk {
+            font-weight: 800; color: var(--text-secondary);
+            font-variant-numeric: tabular-nums;
+        }
+        #c7 .ranklist .mid .nm {
+            font-weight: 800; color: var(--text-primary);
+            font-size: 14px; margin-bottom: 6px;
+        }
+        #c7 .ranklist .mid .ring {
+            height: 6px; background: var(--bg-page-end); border-radius: 999px; overflow: hidden;
+        }
+        #c7 .ranklist .mid .ring i {
+            display: block; height: 100%; background: var(--accent); border-radius: 999px;
+            width: 0; transition: width 1.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+        }
+        #c7 .ranklist .row:not(:first-of-type) .mid .ring i { background: var(--text-secondary); }
+        #c7 .ranklist .pct {
+            text-align: right; font-weight: 800;
+            font-variant-numeric: tabular-nums; color: var(--text-primary);
+        }
+
         /* ╔═══ CHAPTER 7 · SHARE ═══╗ */
         #c8 { background: var(--bg-page-end); }
         #c8 .layout { display: grid; grid-template-columns: 1.1fr 1fr; gap: 60px; align-items: center; }
@@ -535,6 +582,16 @@
             return curr / denom;
         }
 
+        // "claude-opus-4-7" → "Opus 4.7"; "claude-3-5-sonnet-20241022" → "Sonnet 3.5"
+        function prettyModelName(name) {
+            if (!name || typeof name !== 'string') return 'Claude';
+            let m = name.match(/^claude-(opus|sonnet|haiku)-(\d+)-(\d+)(?:-\d+)?$/i);
+            if (m) return `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}.${m[3]}`;
+            m = name.match(/^claude-(\d+)-(\d+)-(opus|sonnet|haiku)/i);
+            if (m) return `${m[3][0].toUpperCase()}${m[3].slice(1)} ${m[1]}.${m[2]}`;
+            return name;
+        }
+
         function deltaPill(pct) {
             if (pct == null) return '';
             const sign = pct >= 0 ? '▲ +' : '▼ ';
@@ -585,6 +642,7 @@
             const hasDelta = !!s.delta_vs_prev_month;
             const hasBusy = !!s.busiest_day;
             const hasConc = !!s.concurrency_flex;
+            const hasFavModel = !!s.favourite_model;
 
             // ────────── Chapter 0 · COVER ──────────
             const cover = `
@@ -805,7 +863,40 @@
                   </section>`;
             }
 
-            // ────────── Chapter 7 · SHARE ──────────
+            // ────────── Chapter 7 · FAVOURITE MODEL ──────────
+            let favModelChap = '';
+            if (hasFavModel) {
+                const fm = s.favourite_model;
+                const headline = prettyModelName(fm.model_name);
+                const rows = (fm.top_models || []).slice(0, 3).map((m, i) => `
+                    <div class="row">
+                      <div class="rk">${i + 1}</div>
+                      <div class="mid">
+                        <div class="nm">${esc(prettyModelName(m.model_name))}</div>
+                        <div class="ring"><i data-w="${Math.round(m.share_pct)}"></i></div>
+                      </div>
+                      <div class="pct">${m.share_pct}%</div>
+                    </div>`).join('');
+                favModelChap = `
+                  <section class="chap" id="c7" data-theme="light" data-label="Favourite model">
+                    <div class="inner">
+                      <div class="grid">
+                        <div>
+                          <div class="eb r-up">Chapter __EB7__ · Your favourite model</div>
+                          <h2 class="hl r-up d1">You ran on <span class="accent">${esc(headline)}</span>.</h2>
+                          <p class="sub r-up d2"><b>${fm.share_pct}%</b> of your tokens — <b>${formatNumber(fm.tokens)}</b> in all.</p>
+                          <div class="modelMega r-up d3" data-parallax="0.18"><span class="accent">${esc(headline)}</span></div>
+                        </div>
+                        <div class="ranklist r-up d2" data-parallax="0.06">
+                          <div class="head">// top models · ${s.month.label}</div>
+                          ${rows}
+                        </div>
+                      </div>
+                    </div>
+                  </section>`;
+            }
+
+            // ────────── Chapter 8 · SHARE ──────────
             const rankLine = s.rank
                 ? `<div class="meta r-up d2" style="margin-top:24px;"><span><b>Top ${s.rank.percentile <= 1 ? '1' : Math.ceil(s.rank.percentile)}%</b> · #${s.rank.position.toLocaleString()} of ${s.rank.total_users.toLocaleString()}</span></div>`
                 : '';
@@ -834,7 +925,7 @@
               </section>`;
 
             // Assemble — number eyebrows after we know which chapters rendered
-            const chapters = [cover, messagesChap, tokensChap, vsChap, heatChap, busyChap, concChap, shareChap].filter(Boolean);
+            const chapters = [cover, messagesChap, tokensChap, vsChap, heatChap, busyChap, concChap, favModelChap, shareChap].filter(Boolean);
             // Replace eyebrow placeholders with sequential numbers
             let ebIdx = 1;
             const numberedChapters = chapters.map((html) => {
@@ -844,7 +935,7 @@
             });
             // Re-walk in order and substitute. Cover doesn't have a placeholder; the rest have __EBN__ tokens.
             // We assigned __EB1__..__EB6__ + __EBLAST__ in the templates above. Map them in render order to 01..NN.
-            const placeholders = ['__EB1__', '__EB2__', '__EB3__', '__EB4__', '__EB5__', '__EB6__', '__EBLAST__'];
+            const placeholders = ['__EB1__', '__EB2__', '__EB3__', '__EB4__', '__EB5__', '__EB6__', '__EB7__', '__EBLAST__'];
             // The cover doesn't take an eyebrow number. Numbers start at 01 for chapter "Messages".
             let n = 1;
             let assembled = numberedChapters.join('');
