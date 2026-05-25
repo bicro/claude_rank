@@ -30,7 +30,24 @@ export interface WrappedSummary {
     share_pct: number;
     top_models: { model_name: string; tokens: number; share_pct: number }[];
   } | null;
+  team_comparison: {
+    team_hash: string;
+    team_name: string;
+    total_members: number;
+    self_rank: number;
+    members: Array<{
+      user_hash: string;
+      username: string | null;
+      display_name: string | null;
+      avatar_url: string | null;
+      tokens: number;
+      rank: number;
+      is_self: boolean;
+    }>;
+  } | null;
 }
+
+const TEAM_DISPLAY_CAP = 10;
 
 /** Format a 0-padded YYYY-MM string. month is 1-indexed. */
 export function formatYm(year: number, month: number): string {
@@ -207,6 +224,100 @@ async function findFavouriteModel(hashes: string[], start: string, endExcl: stri
   };
 }
 
+/**
+ * Rank the requester's team members by monthly token burn.
+ * Returns null if the user is solo, the team has fewer than 2 members,
+ * or no member burned any tokens this month.
+ *
+ * Aggregates linked devices into their primary owner in a single query,
+ * mirroring the pattern in getMonthlyTokenRank — N round-trips would be
+ * slow for teams of 10+.
+ */
+async function findTeamComparison(
+  userHash: string,
+  start: string,
+  endExcl: string,
+): Promise<WrappedSummary["team_comparison"]> {
+  const pool = getPool();
+
+  // Resolve to primary user and read team_hash from the primary record
+  // (linked secondary devices don't carry team_hash; it lives on the primary).
+  const primaryRow = await pool.query(
+    `SELECT u_primary.user_hash AS primary_hash, u_primary.team_hash
+     FROM users u_self
+     JOIN users u_primary
+       ON u_primary.user_hash = COALESCE(u_self.linked_to, u_self.user_hash)
+     WHERE u_self.user_hash = $1`,
+    [userHash],
+  );
+  const selfHash: string = primaryRow.rows[0]?.primary_hash ?? userHash;
+  const teamHash: string | null = primaryRow.rows[0]?.team_hash ?? null;
+  if (!teamHash) return null;
+
+  // Pull all primary team members + team name in one shot.
+  const membersRows = await pool.query(
+    `SELECT u.user_hash, u.username, u.display_name, u.avatar_url, t.team_name
+     FROM users u
+     JOIN teams t ON t.team_hash = u.team_hash
+     WHERE u.team_hash = $1 AND u.linked_to IS NULL`,
+    [teamHash],
+  );
+  if (membersRows.rows.length < 2) return null;
+  const teamName = String(membersRows.rows[0].team_name);
+  const memberHashes: string[] = membersRows.rows.map((r: any) => String(r.user_hash));
+
+  // Sum month tokens per primary member (collapsing linked devices) in one query.
+  const ph = memberHashes.map((_, i) => `$${i + 1}`).join(", ");
+  const tokensRows = await pool.query(
+    `SELECT COALESCE(u.linked_to, u.user_hash) AS primary_hash,
+            SUM(mh.daily_tokens) AS tokens
+     FROM metrics_history mh
+     JOIN users u ON u.user_hash = mh.user_hash
+     WHERE COALESCE(u.linked_to, u.user_hash) IN (${ph})
+       AND mh.snapshot_date >= $${memberHashes.length + 1}
+       AND mh.snapshot_date < $${memberHashes.length + 2}
+     GROUP BY COALESCE(u.linked_to, u.user_hash)`,
+    [...memberHashes, start, endExcl],
+  );
+  const tokensByPrimary = new Map<string, number>();
+  for (const r of tokensRows.rows) {
+    tokensByPrimary.set(String(r.primary_hash), Number(r.tokens ?? 0));
+  }
+
+  const ranked = membersRows.rows
+    .map((r: any) => ({
+      user_hash: String(r.user_hash),
+      username: r.username ?? null,
+      display_name: r.display_name ?? null,
+      avatar_url: r.avatar_url ?? null,
+      tokens: tokensByPrimary.get(String(r.user_hash)) ?? 0,
+    }))
+    .sort((a, b) => b.tokens - a.tokens)
+    .map((m, i) => ({
+      ...m,
+      rank: i + 1,
+      is_self: m.user_hash === selfHash,
+    }));
+
+  if (ranked.every((m) => m.tokens === 0)) return null;
+  const self = ranked.find((m) => m.is_self);
+  if (!self) return null;
+
+  // Show top N; always include self even if they fall outside the cap.
+  let displayMembers = ranked.slice(0, TEAM_DISPLAY_CAP);
+  if (!displayMembers.some((m) => m.is_self)) {
+    displayMembers = [...displayMembers, self];
+  }
+
+  return {
+    team_hash: teamHash,
+    team_name: teamName,
+    total_members: ranked.length,
+    self_rank: self.rank,
+    members: displayMembers,
+  };
+}
+
 /** Count sessions in daily_sessions JSON arrays for the month range. */
 async function countSessions(hashes: string[], start: string, endExcl: string): Promise<number> {
   const pool = getPool();
@@ -303,7 +414,7 @@ export async function getWrappedSummary(
   const monthlyPlanUsd = userRow?.monthly_plan_usd ?? null;
 
   // Parallel queries
-  const [totals, busiestDay, concurrencyFlex, heatmap, sessions, rank, favouriteModel] = await Promise.all([
+  const [totals, busiestDay, concurrencyFlex, heatmap, sessions, rank, favouriteModel, teamComparison] = await Promise.all([
     sumMonthTotals(hashes, start, endExcl),
     findBusiestDay(hashes, start, endExcl),
     findConcurrencyFlex(hashes, start, endExcl),
@@ -311,6 +422,7 @@ export async function getWrappedSummary(
     countSessions(hashes, start, endExcl),
     getMonthlyTokenRank(userHash, year, month),
     findFavouriteModel(hashes, start, endExcl),
+    findTeamComparison(userHash, start, endExcl),
   ]);
 
   // Previous month delta
@@ -359,6 +471,7 @@ export async function getWrappedSummary(
     delta_vs_prev_month: delta,
     plan,
     favourite_model: favouriteModel,
+    team_comparison: teamComparison,
   };
 }
 

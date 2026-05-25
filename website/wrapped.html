@@ -285,6 +285,56 @@
         }
         #c3 .card.prev .stat-line .ring i { background: var(--text-secondary); }
 
+        /* ╔═══ CHAPTER · TEAM ═══╗ */
+        #c-team { background: var(--bg-page-end); }
+        #c-team .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 50px; align-items: center; }
+        @media (max-width: 1000px) { #c-team .grid { grid-template-columns: 1fr; } }
+        #c-team .ranklist {
+            background: #fff; border: 1px solid var(--border); border-radius: 18px;
+            padding: 24px 26px; box-shadow: var(--shadow-card);
+        }
+        #c-team .ranklist .head {
+            font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+            text-transform: uppercase; color: var(--text-secondary);
+            margin-bottom: 14px;
+        }
+        #c-team .ranklist .row {
+            display: grid; grid-template-columns: 28px 1fr 110px;
+            gap: 12px; align-items: center;
+            padding: 11px 0;
+            border-top: 1px solid var(--border);
+        }
+        #c-team .ranklist .row:first-of-type { border-top: none; }
+        #c-team .ranklist .rk {
+            font-weight: 800; color: var(--text-secondary);
+            font-variant-numeric: tabular-nums; font-size: 13px;
+        }
+        #c-team .ranklist .mid .nm {
+            font-weight: 800; color: var(--text-primary);
+            font-size: 14px; margin-bottom: 6px;
+            display: flex; align-items: center; gap: 8px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        #c-team .ranklist .mid .nm .youtag {
+            background: var(--accent); color: #fff;
+            font-size: 9px; font-weight: 700; letter-spacing: 1.5px;
+            padding: 2px 6px; border-radius: 4px;
+        }
+        #c-team .ranklist .mid .ring {
+            height: 6px; background: var(--bg-page-end); border-radius: 999px; overflow: hidden;
+        }
+        #c-team .ranklist .mid .ring i {
+            display: block; height: 100%; background: var(--text-secondary); border-radius: 999px;
+            width: 0; transition: width 1.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+        }
+        #c-team .ranklist .row.is-self .mid .ring i { background: var(--accent); }
+        #c-team .ranklist .row.is-self .rk { color: var(--accent); }
+        #c-team .ranklist .pct {
+            text-align: right; font-weight: 800;
+            font-variant-numeric: tabular-nums; color: var(--text-primary);
+            font-size: 13px;
+        }
+
         /* ╔═══ CHAPTER 4 · HEATMAP (DARK) ═══╗ */
         #c4 { background: #0e0e0e; color: #fff; }
         #c4 .hm-grid { display: grid; grid-template-columns: 1fr 1.4fr; gap: 60px; align-items: center; }
@@ -643,6 +693,7 @@
             const hasBusy = !!s.busiest_day;
             const hasConc = !!s.concurrency_flex;
             const hasFavModel = !!s.favourite_model;
+            const hasTeam = !!s.team_comparison;
 
             // ────────── Chapter 0 · COVER ──────────
             const cover = `
@@ -754,6 +805,54 @@
                           <div class="stat-line"><div class="lab">Messages</div><div class="ring"><i data-w="${Math.round((s.totals.messages / wM) * 100)}"></i></div><div class="v">${formatNumber(s.totals.messages)}</div></div>
                           <div class="stat-line"><div class="lab">Tokens</div><div class="ring"><i data-w="${Math.round((s.totals.tokens / wT) * 100)}"></i></div><div class="v">${formatNumber(s.totals.tokens)}</div></div>
                           <div class="stat-line"><div class="lab">Spend</div><div class="ring"><i data-w="${Math.round((s.totals.estimated_spend / wS) * 100)}"></i></div><div class="v">${formatCost(s.totals.estimated_spend)}</div></div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>`;
+            }
+
+            // ────────── Chapter · TEAM ──────────
+            let teamChap = '';
+            if (hasTeam) {
+                const tc = s.team_comparison;
+                const topTokens = tc.members.reduce((mx, m) => Math.max(mx, m.tokens), 0) || 1;
+                const total = tc.total_members;
+                const rk = tc.self_rank;
+                let tagline;
+                if (rk === 1) {
+                    tagline = `Top of the pack — nobody on your team burned more.`;
+                } else if (rk <= Math.ceil(total / 3)) {
+                    tagline = `Top third. You're carrying weight on this team.`;
+                } else if (rk <= Math.ceil((total * 2) / 3)) {
+                    tagline = `Right in the middle of the pack.`;
+                } else {
+                    tagline = `Room to climb — there's always next month.`;
+                }
+                const rows = tc.members.map((m) => {
+                    const name = m.display_name || m.username || 'Anonymous';
+                    const widthPct = Math.round((m.tokens / topTokens) * 100);
+                    return `
+                      <div class="row${m.is_self ? ' is-self' : ''}">
+                        <div class="rk">${m.rank}</div>
+                        <div class="mid">
+                          <div class="nm">${esc(name)}${m.is_self ? '<span class="youtag">YOU</span>' : ''}</div>
+                          <div class="ring"><i data-w="${widthPct}"></i></div>
+                        </div>
+                        <div class="pct">${formatNumber(m.tokens)}</div>
+                      </div>`;
+                }).join('');
+                teamChap = `
+                  <section class="chap" id="c-team" data-theme="light" data-label="Team">
+                    <div class="inner">
+                      <div class="grid">
+                        <div>
+                          <div class="eb r-up">Chapter __EBTEAM__ · Versus your team</div>
+                          <h2 class="hl r-up d1">You ranked <span class="accent">#${rk}</span><br>of ${total} on <span class="accent">${esc(tc.team_name)}</span>.</h2>
+                          <p class="sub r-up d2">${tagline}</p>
+                        </div>
+                        <div class="ranklist r-up d2" data-parallax="0.06">
+                          <div class="head">// team burn · ${s.month.label}</div>
+                          ${rows}
                         </div>
                       </div>
                     </div>
@@ -925,7 +1024,7 @@
               </section>`;
 
             // Assemble — number eyebrows after we know which chapters rendered
-            const chapters = [cover, messagesChap, tokensChap, vsChap, heatChap, busyChap, concChap, favModelChap, shareChap].filter(Boolean);
+            const chapters = [cover, messagesChap, tokensChap, vsChap, teamChap, heatChap, busyChap, concChap, favModelChap, shareChap].filter(Boolean);
             // Replace eyebrow placeholders with sequential numbers
             let ebIdx = 1;
             const numberedChapters = chapters.map((html) => {
@@ -935,7 +1034,7 @@
             });
             // Re-walk in order and substitute. Cover doesn't have a placeholder; the rest have __EBN__ tokens.
             // We assigned __EB1__..__EB6__ + __EBLAST__ in the templates above. Map them in render order to 01..NN.
-            const placeholders = ['__EB1__', '__EB2__', '__EB3__', '__EB4__', '__EB5__', '__EB6__', '__EB7__', '__EBLAST__'];
+            const placeholders = ['__EB1__', '__EB2__', '__EB3__', '__EBTEAM__', '__EB4__', '__EB5__', '__EB6__', '__EB7__', '__EBLAST__'];
             // The cover doesn't take an eyebrow number. Numbers start at 01 for chapter "Messages".
             let n = 1;
             let assembled = numberedChapters.join('');
