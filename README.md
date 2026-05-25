@@ -44,6 +44,8 @@
 
 - **Tier Progression** — Advance through Bronze, Silver, Gold, Platinum, and Diamond tiers
 
+- **Wrapped** — Spotify-Wrapped-style monthly recap of your Claude Code usage. Includes totals, busiest day, power hour, 24×7 heatmap, peak concurrency, month-over-month deltas, favorite model breakdown, and team comparison. Each user gets a shareable OG image card per month.
+
 - **Desktop App** — Tauri-based app that monitors your Claude Code logs in real-time, syncs metrics, and displays a tray widget with your stats
 
 - **Claude Code Plugin** — [Install directly in Claude Code](#claude-code-plugin) to sync usage, view leaderboards, check badges, and track stats without leaving your terminal
@@ -140,6 +142,10 @@ The server exposes a REST API at `/api`:
 | `/api/users/{hash}/history` | GET | Get metric history |
 | `/api/users/{hash}/heatmap` | GET | Get hourly usage heatmap |
 | `/api/users/{hash}/daily-ranks` | GET | Get daily rank snapshots |
+| `/api/users/{hash}/wrapped/{YYYY-MM}` | GET | Get monthly Wrapped recap summary |
+| `/api/users/{hash}/wrapped/{YYYY-MM}/og.png` | GET | Render Wrapped OG share image |
+| `/api/users/{hash}/wrapped/status` | GET | Check if a new Wrapped is ready (and unviewed) |
+| `/api/users/{hash}/wrapped/{YYYY-MM}/seen` | POST | Mark a Wrapped as viewed |
 | `/api/users/by-username/{username}` | GET | Lookup user by username |
 | `/api/users/{hash}/connect` | POST | Connect OAuth account |
 | `/api/sync` | POST | Sync usage metrics |
