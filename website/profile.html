@@ -33,7 +33,7 @@
     <div id="profileContent"><div class="loading">Loading profile</div></div>
 
     <script type="module">
-        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserConcurrency, getUserConcurrencyByDate, getUserDailyRanks, getUserRewards, formatNumber, formatCost, formatPercentile, getCategoryLabel, getTier, animateValue } from './js/api.js?v=2';
+        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserConcurrency, getUserConcurrencyByDate, getUserDailyRanks, getUserRewards, getWrappedStatus, markWrappedSeen, formatNumber, formatCost, formatPercentile, getCategoryLabel, getTier, animateValue } from './js/api.js?v=2';
         import { getCachedAvatar } from './js/avatar.js';
 
         function escHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
@@ -141,6 +141,11 @@
                     getUserHistory(hash, 30),
                 ]);
 
+                let wrappedStatus = null;
+                if (profile.is_owner) {
+                    try { wrappedStatus = await getWrappedStatus(hash); } catch {}
+                }
+
                 const m = profile.metrics;
                 const ranks = profile.ranks || {};
                 const tier = profile.tier || { tier: 'Bronze', next_tier: 'Silver', progress: 0 };
@@ -173,13 +178,31 @@
                     ? ` <a href="${escHtml(profile.social_url)}" target="_blank" rel="noopener noreferrer" class="social-link" title="${profile.auth_provider === 'twitter' ? 'X' : profile.auth_provider.charAt(0).toUpperCase() + profile.auth_provider.slice(1)}">${socialIcons[profile.auth_provider]}</a>`
                     : '';
 
+                let wrappedBannerHtml = '';
+                if (wrappedStatus?.latest_month && !wrappedStatus.viewed) {
+                    const [yr, mo] = wrappedStatus.latest_month.split('-').map(Number);
+                    const monthLabel = new Date(yr, mo - 1, 1).toLocaleString(undefined, { month: 'long', year: 'numeric' });
+                    const wrappedHref = `/wrapped?username=${encodeURIComponent(profile.username || '')}&hash=${encodeURIComponent(hash)}`;
+                    wrappedBannerHtml = `
+                        <div class="wrapped-ready-banner" id="wrappedReadyBanner">
+                            <span class="wrapped-ready-text">
+                                <strong>Your ${escHtml(monthLabel)} Wrapped is ready.</strong>
+                                See your monthly Claude recap.
+                            </span>
+                            <a class="wrapped-ready-cta" id="wrappedReadyCta" href="${wrappedHref}">Open Wrapped &rarr;</a>
+                        </div>
+                    `;
+                }
+
                 container.innerHTML = `
+                    ${wrappedBannerHtml}
                     <div class="profile-header">
                         ${avatarHtml}
                         <div class="profile-info">
                             <h2>${escHtml(displayName)}${socialIconHtml}
                                 <span class="tier-badge tier-${tier.tier.toLowerCase()}" data-tooltip="Tier is based on your weighted score. Progress to ${tier.next_tier || 'max tier'}: ${Math.round(tier.progress || 0)}%.">${tierObj.icon} ${tier.tier}</span>
                                 <span class="profile-overall-rank" id="profileOverallRank"></span>
+                                <a class="profile-wrapped-link" href="/wrapped?username=${encodeURIComponent(profile.username || '')}&hash=${encodeURIComponent(hash)}" data-tooltip="See ${escHtml(displayName)}'s monthly Claude recap">WRAPPED &rarr;</a>
                             </h2>
                             <div class="meta">
                                 Joined ${new Date(profile.created_at).toLocaleDateString()}
@@ -286,6 +309,16 @@
                     </div>
                     ` : ''}
                 `;
+
+                // Mark Wrapped as seen when the banner CTA is clicked (fire-and-forget so navigation isn't blocked)
+                if (wrappedStatus?.latest_month && !wrappedStatus.viewed) {
+                    const ctaEl = document.getElementById('wrappedReadyCta');
+                    if (ctaEl) {
+                        ctaEl.addEventListener('click', () => {
+                            markWrappedSeen(hash, wrappedStatus.latest_month).catch(() => {});
+                        });
+                    }
+                }
 
                 // Load cached avatar
                 let cachedAvatarDataUrl = null;

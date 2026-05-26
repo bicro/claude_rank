@@ -18,6 +18,8 @@ import {
 } from "./services";
 import { recomputeUserMetrics, getLinkedHashes } from "./aggregate";
 import { mergeAllDeviceHistograms } from "./concurrency";
+import { getWrappedSummary, getWrappedStatus, markWrappedSeen } from "./wrapped";
+import { renderWrappedPng } from "./wrapped-og";
 
 const MIN_PEAK_MINUTES = 2;
 
@@ -270,6 +272,30 @@ export async function handleApiRequest(url: URL, request: Request): Promise<Resp
   const rewardsMatch = path.match(/^\/api\/users\/([^/]+)\/rewards$/);
   if (rewardsMatch && method === "GET") {
     return handleGetUserRewards(rewardsMatch[1]!, url);
+  }
+
+  // GET /api/users/:user_hash/wrapped/status
+  const wrappedStatusMatch = path.match(/^\/api\/users\/([^/]+)\/wrapped\/status$/);
+  if (wrappedStatusMatch && method === "GET") {
+    return handleGetWrappedStatus(wrappedStatusMatch[1]!);
+  }
+
+  // POST /api/users/:user_hash/wrapped/:ym/seen
+  const wrappedSeenMatch = path.match(/^\/api\/users\/([^/]+)\/wrapped\/(\d{4}-\d{2})\/seen$/);
+  if (wrappedSeenMatch && method === "POST") {
+    return handleMarkWrappedSeen(wrappedSeenMatch[1]!, wrappedSeenMatch[2]!, request);
+  }
+
+  // GET /api/users/:user_hash/wrapped/:ym/og.png
+  const wrappedOgMatch = path.match(/^\/api\/users\/([^/]+)\/wrapped\/(\d{4}-\d{2})\/og\.png$/);
+  if (wrappedOgMatch && method === "GET") {
+    return handleGetWrappedOg(wrappedOgMatch[1]!, wrappedOgMatch[2]!);
+  }
+
+  // GET /api/users/:user_hash/wrapped/:ym
+  const wrappedMatch = path.match(/^\/api\/users\/([^/]+)\/wrapped\/(\d{4}-\d{2})$/);
+  if (wrappedMatch && method === "GET") {
+    return handleGetWrapped(wrappedMatch[1]!, wrappedMatch[2]!);
   }
 
   // GET /api/users/:user_hash — profile (must come after more specific routes)
@@ -765,6 +791,72 @@ async function handleGetUserProfile(userHash: string, request: Request): Promise
       unlocked_at: b.unlocked_at,
     })),
   });
+}
+
+// ─── Wrapped (monthly recap) ───────────────────────────────────────────────
+
+function parseYm(ym: string): { year: number; month: number } | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(ym);
+  if (!m) return null;
+  const year = parseInt(m[1]!, 10);
+  const month = parseInt(m[2]!, 10);
+  if (year < 2020 || year > 2100 || month < 1 || month > 12) return null;
+  return { year, month };
+}
+
+async function handleGetWrapped(userHash: string, ym: string): Promise<Response> {
+  const parsed = parseYm(ym);
+  if (!parsed) return error("Invalid year-month (expected YYYY-MM)", 400);
+
+  const db = getDb();
+  const userRow = await db.query("SELECT 1 FROM users WHERE user_hash = ?").get(userHash) as any;
+  if (!userRow) return error("User not found", 404);
+
+  const summary = await getWrappedSummary(db, userHash, parsed.year, parsed.month);
+  if (!summary) return error("Invalid month", 400);
+  return json(summary);
+}
+
+async function handleGetWrappedOg(userHash: string, ym: string): Promise<Response> {
+  const parsed = parseYm(ym);
+  if (!parsed) return error("Invalid year-month (expected YYYY-MM)", 400);
+
+  const db = getDb();
+  // 404 unknown users before fanning out to ~7 SQL queries + a Resvg render.
+  // Without this guard, an attacker can amplify cheap input (random hex) into
+  // expensive output and pollute the in-memory PNG cache.
+  const userRow = await db.query("SELECT 1 FROM users WHERE user_hash = ?").get(userHash) as any;
+  if (!userRow) return error("User not found", 404);
+
+  const summary = await getWrappedSummary(db, userHash, parsed.year, parsed.month);
+  if (!summary) return error("Invalid month", 400);
+
+  const png = renderWrappedPng(summary);
+  return new Response(png, {
+    status: 200,
+    headers: {
+      "Content-Type": "image/png",
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
+}
+
+async function handleGetWrappedStatus(userHash: string): Promise<Response> {
+  const db = getDb();
+  const userRow = await db.query("SELECT 1 FROM users WHERE user_hash = ?").get(userHash) as any;
+  if (!userRow) return error("User not found", 404);
+  const status = await getWrappedStatus(db, userHash);
+  return json(status);
+}
+
+async function handleMarkWrappedSeen(userHash: string, ym: string, request: Request): Promise<Response> {
+  const parsed = parseYm(ym);
+  if (!parsed) return error("Invalid year-month (expected YYYY-MM)", 400);
+  const authErr = await requireOwnerDual(request, userHash);
+  if (authErr) return authErr;
+  const db = getDb();
+  await markWrappedSeen(db, userHash, ym);
+  return json({ ok: true });
 }
 
 async function handleGetUserHistory(userHash: string, url: URL): Promise<Response> {
@@ -1790,6 +1882,33 @@ async function handleSync(request: Request): Promise<Response> {
          ON CONFLICT (user_hash, snapshot_date) DO UPDATE SET
            daily_messages = EXCLUDED.daily_messages, daily_tool_calls = EXCLUDED.daily_tool_calls,
            daily_tokens = EXCLUDED.daily_tokens`,
+        rows.flat(),
+      );
+    }
+  }
+
+  // Persist daily_model_tokens — batched
+  if (req.daily_model_tokens && Array.isArray(req.daily_model_tokens)) {
+    const rows: (string | number)[][] = [];
+    for (const entry of req.daily_model_tokens) {
+      if (!entry || typeof entry !== "object" || !entry.date) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) continue;
+      const map = entry.tokensByModel ?? entry.tokens_by_model;
+      if (!map || typeof map !== "object") continue;
+      for (const [model, tokens] of Object.entries(map)) {
+        const n = Math.floor(Number(tokens) || 0);
+        if (n <= 0) continue;
+        if (typeof model !== "string" || model.length === 0 || model.length > 200) continue;
+        rows.push([req.user_hash, entry.date, model, n]);
+      }
+    }
+    if (rows.length > 0 && rows.length <= 10000) {
+      const values = rows.map((_, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`).join(", ");
+      await pool.query(
+        `INSERT INTO metrics_model_daily (user_hash, snapshot_date, model_name, tokens)
+         VALUES ${values}
+         ON CONFLICT (user_hash, snapshot_date, model_name) DO UPDATE SET
+           tokens = EXCLUDED.tokens`,
         rows.flat(),
       );
     }
