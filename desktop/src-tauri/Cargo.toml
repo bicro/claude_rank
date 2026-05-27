@@ -31,6 +31,8 @@ arboard = { version = "3", features = ["image-data"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 ab_glyph = "0.2"
 base64 = "0.22"
+sha2 = "0.10"
+hex = "0.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 notify = { version = "7", features = ["macos_fsevent"] }

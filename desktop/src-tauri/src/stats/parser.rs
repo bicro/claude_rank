@@ -60,6 +60,15 @@ pub struct StatsCache {
     /// Day sessions: key is "YYYY-MM-DD", value is session entries for that day
     #[serde(default)]
     pub day_sessions: HashMap<String, Vec<DaySessionEntry>>,
+    /// SHA256 hex digests of the first user prompt per session.
+    /// Currently populated by the Codex collector only; the Claude path computes
+    /// these in the Node.js log-parser, so this stays empty for Claude.
+    #[serde(default)]
+    pub prompt_hashes: Vec<String>,
+    /// Tool/function names invoked across all sessions, one entry per call.
+    /// Currently populated by the Codex collector only.
+    #[serde(default)]
+    pub tool_names: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

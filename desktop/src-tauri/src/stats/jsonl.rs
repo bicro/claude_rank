@@ -548,7 +548,7 @@ fn parse_jsonl_file(path: &PathBuf, is_main: bool) -> SessionStats {
 // ── Concurrency Histogram ──
 
 /// Compute active segments from sorted timestamps, splitting at gaps > IDLE_THRESHOLD_SECS.
-fn compute_active_segments(timestamps: &[DateTime<Utc>]) -> Vec<(DateTime<Utc>, DateTime<Utc>)> {
+pub(super) fn compute_active_segments(timestamps: &[DateTime<Utc>]) -> Vec<(DateTime<Utc>, DateTime<Utc>)> {
     if timestamps.is_empty() {
         return vec![];
     }
@@ -998,5 +998,9 @@ fn aggregate_stats(sessions: &[&SessionStats]) -> StatsCache {
         total_idle_time_secs,
         hour_tokens,
         day_sessions,
+        // Claude collector hashes prompts in the Node.js plugin path, not here,
+        // so these stay empty on the Claude side. Codex populates them.
+        prompt_hashes: Vec::new(),
+        tool_names: Vec::new(),
     }
 }

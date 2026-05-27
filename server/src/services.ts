@@ -37,6 +37,44 @@ export function estimateCost(tokenBreakdown: Record<string, any>): number {
   return Math.round(cost * 100) / 100;
 }
 
+// OpenAI/Codex pricing — USD per 1M tokens. Sourced from openai.com/api/pricing
+// (retrieved 2026-05-26). Matched by substring on the model name string Codex
+// emits in `turn_context.model`. Cache hits are billed at 25% of input on most
+// GPT-5 family models. Cache writes don't exist as a separate line item for
+// OpenAI (we set cache_write = input to keep estimateCodexCost call shape
+// compatible with estimateCost).
+// Order matters: lookup uses `model.includes(p.match)` so more specific
+// patterns must come before less specific ones (e.g. "gpt-5.5" before "gpt-5").
+const CODEX_PRICING = [
+  { match: "gpt-5.5",       input: 5,    output: 30,   cache_read: 0.50,  cache_write: 5 },
+  { match: "gpt-5.4",       input: 2.50, output: 15,   cache_read: 0.25,  cache_write: 2.50 },
+  { match: "gpt-5.2-codex", input: 1.75, output: 14,   cache_read: 0.175, cache_write: 1.75 },
+  { match: "gpt-5-codex",   input: 1.25, output: 10,   cache_read: 0.125, cache_write: 1.25 },
+  { match: "gpt-5.2",       input: 1.25, output: 10,   cache_read: 0.125, cache_write: 1.25 },
+  { match: "gpt-5",         input: 1.25, output: 10,   cache_read: 0.125, cache_write: 1.25 },
+  { match: "o3-mini",       input: 1.10, output: 4.40, cache_read: 0.55,  cache_write: 1.10 },
+  { match: "o3",            input: 2,    output: 8,    cache_read: 0.50,  cache_write: 2 },
+  { match: "o4-mini",       input: 1.10, output: 4.40, cache_read: 0.275, cache_write: 1.10 },
+];
+const CODEX_FALLBACK_PRICE = { input: 1.25, output: 10, cache_read: 0.125, cache_write: 1.25 };
+
+export function estimateCodexCost(tokenBreakdown: Record<string, any>): number {
+  let cost = 0.0;
+  for (const [model, usage] of Object.entries(tokenBreakdown)) {
+    if (!usage || typeof usage !== "object") continue;
+    const tier =
+      CODEX_PRICING.find(p => model.includes(p.match)) ?? CODEX_FALLBACK_PRICE;
+    cost += (
+      ((usage.input ?? 0) * tier.input
+        + (usage.output ?? 0) * tier.output
+        + (usage.cache_read ?? 0) * tier.cache_read
+        + (usage.cache_creation ?? 0) * tier.cache_write)
+      / 1_000_000
+    );
+  }
+  return Math.round(cost * 100) / 100;
+}
+
 // ─── Subscription plan pricing ────────────────────────────────────────────────
 // Clients auto-detect the plan from ~/.claude.json (oauthAccount.organizationRateLimitTier
 // / organizationType) and send the raw strings. We map them to a monthly USD price here so
@@ -417,6 +455,209 @@ export async function getWeeklyRanksForUser(db: DbClient, userHash: string, week
   return ranks;
 }
 
+// ─── Codex rank helpers ─────────────────────────────────────────────────────
+// Twins of getUserRanksWithPercentiles / getDailyRanksForUser that read from
+// the parallel codex_* tables. Written as separate functions rather than
+// parameterizing the Claude versions to keep the production rankings' SQL
+// unchanged and minimize regression risk during the Codex rollout.
+
+const CODEX_CATEGORY_COLUMNS: Record<string, string> = {
+  tokens: "total_tokens",
+  messages: "(total_messages + total_sessions)",
+  tools: "total_tool_calls",
+  uniqueness: "prompt_uniqueness_score",
+  weighted: "weighted_score",
+};
+
+async function getCodexUserRank(db: DbClient, userHash: string, category: string): Promise<number | null> {
+  const col = CODEX_CATEGORY_COLUMNS[category];
+  if (!col) return null;
+
+  const userRow = await db.query(
+    `SELECT ${col} as value FROM codex_user_metrics WHERE user_hash = ?`
+  ).get(userHash) as any;
+  if (!userRow) return null;
+
+  const val = userRow.value;
+  if (val == null) return null;
+
+  // codex_user_metrics has no users FK; join through users.linked_to so linked
+  // devices are folded the same way as the Claude ranks.
+  const countRow = await db.query(
+    `SELECT COUNT(*) as cnt FROM codex_user_metrics cum
+     JOIN users u ON u.user_hash = cum.user_hash
+     WHERE u.linked_to IS NULL AND ${col} > ?`
+  ).get(val) as any;
+  return (countRow?.cnt ?? 0) + 1;
+}
+
+export async function getCodexUserRanksWithPercentiles(
+  db: DbClient,
+  userHash: string,
+): Promise<Record<string, any>> {
+  const totalRow = await db.query(
+    `SELECT COUNT(*) as cnt FROM codex_user_metrics cum
+     JOIN users u ON u.user_hash = cum.user_hash WHERE u.linked_to IS NULL`
+  ).get() as any;
+  const total = totalRow?.cnt ?? 0;
+
+  const result: Record<string, any> = {};
+  for (const cat of Object.keys(CODEX_CATEGORY_COLUMNS)) {
+    const rank = await getCodexUserRank(db, userHash, cat);
+    result[cat] = rank !== null ? rankEntry(rank, total) : null;
+  }
+  return result;
+}
+
+export async function getCodexDailyRanksForUser(
+  db: DbClient,
+  userHash: string,
+  targetDate: string,
+  linkedHashes?: string[],
+): Promise<Record<string, any>> {
+  const ranks: Record<string, any> = {};
+  const myHashes = new Set(linkedHashes && linkedHashes.length > 0 ? linkedHashes : [userHash]);
+
+  // daily_tokens rank from codex_metrics_history
+  const tokenRows = await db.query(
+    "SELECT user_hash, daily_tokens FROM codex_metrics_history WHERE snapshot_date = ? AND daily_tokens > 0"
+  ).all(targetDate) as any[];
+
+  let userTokens: number | null = null;
+  for (const row of tokenRows) {
+    if (myHashes.has(row.user_hash)) {
+      userTokens = (userTokens || 0) + row.daily_tokens;
+    }
+  }
+
+  if (userTokens !== null && userTokens > 0) {
+    const total = tokenRows.length;
+    const higher = tokenRows.filter(r => r.daily_tokens > userTokens!).length;
+    const entry = rankEntry(higher + 1, total);
+    ranks.daily_tokens = entry;
+    ranks.daily_spend = entry;
+  } else {
+    ranks.daily_tokens = null;
+    ranks.daily_spend = null;
+  }
+
+  // concurrency metrics from codex_concurrency_histogram
+  const dayStart = `${targetDate}T00:00:00`;
+  const dayEnd = `${targetDate}T23:59:59`;
+
+  const concRows = await db.query(
+    "SELECT user_hash, snapshot_hour, histogram FROM codex_concurrency_histogram WHERE snapshot_hour >= ? AND snapshot_hour <= ?"
+  ).all(dayStart, dayEnd) as any[];
+
+  const allUsers = await db.query("SELECT user_hash, linked_to FROM users").all() as any[];
+  const deviceToPrimary: Record<string, string> = {};
+  for (const u of allUsers) {
+    deviceToPrimary[u.user_hash] = u.linked_to || u.user_hash;
+  }
+
+  const byPrimaryHourDevice: Record<string, Record<string, Record<string, Record<string, number>>>> = {};
+  for (const row of concRows) {
+    let histogram: Record<string, number>;
+    try {
+      histogram = row.histogram ? JSON.parse(row.histogram) : {};
+    } catch {
+      continue;
+    }
+    const primary = deviceToPrimary[row.user_hash] ?? row.user_hash;
+    const hourKey = row.snapshot_hour;
+    if (!byPrimaryHourDevice[primary]) byPrimaryHourDevice[primary] = {};
+    if (!byPrimaryHourDevice[primary][hourKey]) byPrimaryHourDevice[primary][hourKey] = {};
+    byPrimaryHourDevice[primary][hourKey][row.user_hash] = histogram;
+  }
+
+  const userStats: Record<string, { peak: number; active_mins: number; concurrent_mins: number }> = {};
+  for (const [primary, hourMap] of Object.entries(byPrimaryHourDevice)) {
+    if (!userStats[primary]) {
+      userStats[primary] = { peak: 0, active_mins: 0, concurrent_mins: 0 };
+    }
+    for (const deviceMap of Object.values(hourMap)) {
+      const combined = mergeDeviceHistogramsForHour(Object.values(deviceMap));
+      for (const [sessionsStr, minutes] of Object.entries(combined)) {
+        const sessionCount = parseInt(sessionsStr, 10);
+        if (sessionCount > userStats[primary].peak && (sessionCount <= 1 || minutes >= MIN_PEAK_MINUTES)) {
+          userStats[primary].peak = sessionCount;
+        }
+        if (sessionCount >= 1) userStats[primary].active_mins += minutes;
+        if (sessionCount > 1) userStats[primary].concurrent_mins += minutes;
+      }
+    }
+  }
+
+  const primaryHash = deviceToPrimary[userHash] ?? userHash;
+  const myStats = userStats[primaryHash] ?? { peak: 0, active_mins: 0, concurrent_mins: 0 };
+  const activeUsers = Object.values(userStats).filter(s => s.peak > 0);
+
+  ranks.peak_concurrency = myStats.peak > 0
+    ? rankEntry(activeUsers.filter(s => s.peak > myStats.peak).length + 1, activeUsers.length)
+    : null;
+
+  if (myStats.active_mins > 0) {
+    const list = Object.values(userStats).filter(s => s.active_mins > 0);
+    ranks.active_mins = rankEntry(list.filter(s => s.active_mins > myStats.active_mins).length + 1, list.length);
+  } else {
+    ranks.active_mins = null;
+  }
+
+  if (myStats.concurrent_mins > 0) {
+    const list = Object.values(userStats).filter(s => s.concurrent_mins > 0);
+    ranks.concurrent_mins = rankEntry(list.filter(s => s.concurrent_mins > myStats.concurrent_mins).length + 1, list.length);
+  } else {
+    ranks.concurrent_mins = null;
+  }
+
+  // hourly_streak — collapse linked devices via COALESCE(linked_to, user_hash)
+  const streakRows = await db.query(
+    `SELECT COALESCE(u.linked_to, u.user_hash) as user_hash, MAX(mh.peak_hourly_streak) as peak_hourly_streak
+     FROM codex_metrics_history mh JOIN users u ON u.user_hash = mh.user_hash
+     WHERE mh.snapshot_date = ? AND mh.peak_hourly_streak > 0
+     GROUP BY COALESCE(u.linked_to, u.user_hash)
+     HAVING MAX(mh.peak_hourly_streak) > 0`
+  ).all(targetDate) as any[];
+
+  let userStreak: number | null = null;
+  for (const row of streakRows) {
+    if (myHashes.has(row.user_hash)) {
+      userStreak = Number(row.peak_hourly_streak);
+      break;
+    }
+  }
+
+  if (userStreak !== null && userStreak > 0) {
+    const higher = streakRows.filter(r => Number(r.peak_hourly_streak) > userStreak!).length;
+    ranks.hourly_streak = rankEntry(higher + 1, streakRows.length);
+  } else {
+    ranks.hourly_streak = null;
+  }
+
+  // daily_overall rank — same weighted formula as Claude
+  const dailyRows = await db.query(
+    "SELECT user_hash, daily_tokens, daily_messages, daily_tool_calls FROM codex_metrics_history WHERE snapshot_date = ? AND (daily_tokens > 0 OR daily_messages > 0 OR daily_tool_calls > 0)"
+  ).all(targetDate) as any[];
+
+  const scored = dailyRows.map(r => ({
+    user_hash: r.user_hash,
+    score: (r.daily_tokens / 1_000_000) * 0.40 + r.daily_messages * 0.27 + r.daily_tool_calls * 0.33,
+  }));
+
+  let myTotalScore = 0;
+  for (const s of scored) {
+    if (myHashes.has(s.user_hash)) myTotalScore += s.score;
+  }
+  if (myTotalScore > 0) {
+    const higher = scored.filter(s => s.score > myTotalScore).length;
+    ranks.daily_overall = rankEntry(higher + 1, scored.length);
+  } else {
+    ranks.daily_overall = null;
+  }
+
+  return ranks;
+}
+
 // ─── Badge Engine ───────────────────────────────────────────────────────────
 
 const MILESTONE_BADGES = [
@@ -456,25 +697,35 @@ export async function seedBadges(db: DbClient): Promise<void> {
   }
 }
 
-async function awardBadge(db: DbClient, userHash: string, badgeId: string): Promise<string | null> {
+async function awardBadge(
+  db: DbClient,
+  userHash: string,
+  badgeId: string,
+  badgesTable: string = "user_badges",
+): Promise<string | null> {
   const existing = await db.query(
-    "SELECT 1 FROM user_badges WHERE user_hash = ? AND badge_id = ?"
+    `SELECT 1 FROM ${badgesTable} WHERE user_hash = ? AND badge_id = ?`
   ).get(userHash, badgeId);
   if (existing) return null;
 
   await db.query(
-    `INSERT INTO user_badges (user_hash, badge_id, unlocked_at) VALUES (?, ?, ?)
+    `INSERT INTO ${badgesTable} (user_hash, badge_id, unlocked_at) VALUES (?, ?, ?)
      ON CONFLICT (user_hash, badge_id) DO NOTHING`
   ).run(userHash, badgeId, new Date().toISOString());
   return badgeId;
 }
 
-export async function evaluateMilestoneBadges(db: DbClient, userHash: string, metrics: any): Promise<string[]> {
+export async function evaluateMilestoneBadges(
+  db: DbClient,
+  userHash: string,
+  metrics: any,
+  badgesTable: string = "user_badges",
+): Promise<string[]> {
   const newlyAwarded: string[] = [];
   for (const badgeDef of MILESTONE_BADGES) {
     const value = metrics?.[badgeDef.field] ?? 0;
     if (value >= badgeDef.threshold) {
-      const result = await awardBadge(db, userHash, badgeDef.id);
+      const result = await awardBadge(db, userHash, badgeDef.id, badgesTable);
       if (result) newlyAwarded.push(result);
     }
   }
@@ -544,10 +795,14 @@ export function computePoints(metrics: {
   return { total_points, level };
 }
 
-export async function computeStreak(db: DbClient, hashes: string[]): Promise<number> {
+export async function computeStreak(
+  db: DbClient,
+  hashes: string[],
+  historyTable: string = "metrics_history",
+): Promise<number> {
   const placeholders = hashes.map(() => "?").join(", ");
   const rows = await db.query(
-    `SELECT DISTINCT snapshot_date FROM metrics_history
+    `SELECT DISTINCT snapshot_date FROM ${historyTable}
      WHERE user_hash IN (${placeholders}) AND (daily_messages > 0 OR daily_tool_calls > 0 OR daily_tokens > 0)
      ORDER BY snapshot_date DESC`
   ).all(...hashes) as any[];
@@ -578,10 +833,14 @@ export async function computeStreak(db: DbClient, hashes: string[]): Promise<num
   return streak;
 }
 
-export async function computeHourlyStreak(db: DbClient, hashes: string[]): Promise<number> {
+export async function computeHourlyStreak(
+  db: DbClient,
+  hashes: string[],
+  hourlyTable: string = "metrics_hourly",
+): Promise<number> {
   const placeholders = hashes.map(() => "?").join(", ");
   const rows = await db.query(
-    `SELECT DISTINCT snapshot_hour FROM metrics_hourly
+    `SELECT DISTINCT snapshot_hour FROM ${hourlyTable}
      WHERE user_hash IN (${placeholders}) AND (total_messages > 0 OR total_tokens > 0)
      ORDER BY snapshot_hour DESC`
   ).all(...hashes) as any[];

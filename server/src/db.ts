@@ -252,6 +252,67 @@ export async function initDb(): Promise<void> {
       total_idle_time_secs BIGINT DEFAULT 0
     );
 
+    -- Codex parity tables: mirror metrics_history / metrics_hourly /
+    -- concurrency_histogram / daily_sessions / user_badges so the existing
+    -- aggregation helpers can be reused with a tablePrefix parameter.
+    CREATE TABLE IF NOT EXISTS codex_metrics_history (
+      id SERIAL PRIMARY KEY,
+      user_hash TEXT,
+      snapshot_date TEXT,
+      total_tokens BIGINT DEFAULT 0,
+      total_messages BIGINT DEFAULT 0,
+      total_sessions BIGINT DEFAULT 0,
+      total_tool_calls BIGINT DEFAULT 0,
+      prompt_uniqueness_score DOUBLE PRECISION DEFAULT 0,
+      weighted_score DOUBLE PRECISION DEFAULT 0,
+      daily_messages BIGINT DEFAULT 0,
+      daily_tool_calls BIGINT DEFAULT 0,
+      daily_tokens BIGINT DEFAULT 0,
+      peak_concurrency INTEGER DEFAULT 0,
+      total_agent_mins INTEGER DEFAULT 0,
+      concurrent_mins INTEGER DEFAULT 0,
+      peak_concurrency_mins INTEGER DEFAULT 0,
+      daily_spend DOUBLE PRECISION DEFAULT 0,
+      peak_hourly_streak INTEGER DEFAULT 0,
+      UNIQUE(user_hash, snapshot_date)
+    );
+
+    CREATE TABLE IF NOT EXISTS codex_metrics_hourly (
+      id SERIAL PRIMARY KEY,
+      user_hash TEXT,
+      snapshot_hour TEXT,
+      total_tokens BIGINT,
+      total_messages BIGINT,
+      total_sessions BIGINT,
+      total_tool_calls BIGINT,
+      prompt_uniqueness_score DOUBLE PRECISION,
+      weighted_score DOUBLE PRECISION,
+      UNIQUE(user_hash, snapshot_hour)
+    );
+
+    CREATE TABLE IF NOT EXISTS codex_concurrency_histogram (
+      id SERIAL PRIMARY KEY,
+      user_hash TEXT,
+      snapshot_hour TEXT,
+      histogram TEXT,
+      UNIQUE(user_hash, snapshot_hour)
+    );
+
+    CREATE TABLE IF NOT EXISTS codex_daily_sessions (
+      id SERIAL PRIMARY KEY,
+      user_hash TEXT,
+      snapshot_date TEXT,
+      sessions TEXT,
+      UNIQUE(user_hash, snapshot_date)
+    );
+
+    CREATE TABLE IF NOT EXISTS codex_user_badges (
+      user_hash TEXT,
+      badge_id TEXT,
+      unlocked_at TEXT,
+      PRIMARY KEY(user_hash, badge_id)
+    );
+
     CREATE TABLE IF NOT EXISTS wrapped_views (
       user_hash TEXT NOT NULL,
       year_month TEXT NOT NULL,
@@ -264,6 +325,10 @@ export async function initDb(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_concurrency_histogram_user_hash ON concurrency_histogram(user_hash);
     CREATE INDEX IF NOT EXISTS idx_daily_sessions_user_hash ON daily_sessions(user_hash);
     CREATE INDEX IF NOT EXISTS idx_metrics_model_daily_user_date ON metrics_model_daily(user_hash, snapshot_date);
+    CREATE INDEX IF NOT EXISTS idx_codex_metrics_history_user_hash ON codex_metrics_history(user_hash);
+    CREATE INDEX IF NOT EXISTS idx_codex_metrics_hourly_user_hash ON codex_metrics_hourly(user_hash);
+    CREATE INDEX IF NOT EXISTS idx_codex_concurrency_histogram_user_hash ON codex_concurrency_histogram(user_hash);
+    CREATE INDEX IF NOT EXISTS idx_codex_daily_sessions_user_hash ON codex_daily_sessions(user_hash);
   `);
 
   // Migrations
@@ -415,4 +480,42 @@ export async function initDb(): Promise<void> {
     FROM user_metrics
     WHERE user_hash NOT IN (SELECT device_hash FROM device_metrics)
   `);
+
+  // ── Codex parity migrations ──
+  // Add gamification/uniqueness columns the POC didn't define so Phase-3
+  // aggregation can persist them. NULL-safe defaults match the Claude tables.
+  const codexColumns: Array<[string, string]> = [
+    ["prompt_uniqueness_score", "DOUBLE PRECISION DEFAULT 0"],
+    ["current_streak", "INTEGER DEFAULT 0"],
+    ["total_points", "BIGINT DEFAULT 0"],
+    ["level", "INTEGER DEFAULT 0"],
+    ["current_hourly_streak", "INTEGER DEFAULT 0"],
+  ];
+  for (const table of ["codex_device_metrics", "codex_user_metrics"]) {
+    for (const [col, type] of codexColumns) {
+      try {
+        await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${col} ${type}`);
+      } catch { /* already exists */ }
+    }
+  }
+
+  // One-shot: the POC stored every Codex token under model_name = 'codex'.
+  // Phase-1 collects real model names (gpt-5.2-codex etc.), so the legacy
+  // rows would double-count after the first post-upgrade sync. Idempotent
+  // via migrations_log.
+  const { rows: codexCleanupRows } = await pool.query(
+    `SELECT 1 FROM migrations_log WHERE key = 'codex_drop_legacy_model_name_v1'`
+  );
+  if (codexCleanupRows.length === 0) {
+    try {
+      await pool.query(`DELETE FROM metrics_model_daily WHERE model_name = 'codex'`);
+      await pool.query(
+        `INSERT INTO migrations_log (key, ran_at) VALUES ('codex_drop_legacy_model_name_v1', $1)
+         ON CONFLICT (key) DO NOTHING`,
+        [new Date().toISOString()],
+      );
+    } catch (e) {
+      console.error("[db] codex legacy model_name cleanup failed", e);
+    }
+  }
 }

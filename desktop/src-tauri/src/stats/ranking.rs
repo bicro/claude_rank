@@ -401,11 +401,12 @@ impl RankingEngine {
         }
     }
 
-    /// Build the Codex sync payload — a slim subset of the Claude payload.
-    /// We only send what the server's codex sync branch actually writes:
-    /// totals (codex_device_metrics), token_breakdown (also codex_device_metrics),
-    /// and daily_model_tokens (metrics_model_daily, safe to share because
-    /// model_name disambiguates `codex` from Claude models).
+    /// Build the Codex sync payload — full parity with Claude's
+    /// `build_sync_payload`, gated by the same `sync_settings` flags. `plan`
+    /// stays `None` because Codex auth lives in `~/.codex/`, not `~/.claude.json`,
+    /// and the server doesn't have a plan-tier mapping for OpenAI yet.
+    /// `current_streak` / `total_points` / `level` are computed server-side
+    /// from `codex_metrics_history`, so the desktop sends zeros.
     pub fn build_codex_sync_payload(
         &self,
         codex_stats: &StatsCache,
@@ -442,23 +443,60 @@ impl RankingEngine {
             total_idle_time_secs: codex_stats.total_idle_time_secs,
         };
 
-        let token_breakdown = Some(
-            codex_stats
-                .model_usage
+        let token_breakdown = if settings.tokens {
+            Some(
+                codex_stats
+                    .model_usage
+                    .iter()
+                    .map(|(model, usage)| {
+                        (
+                            model.clone(),
+                            TokenBreakdown {
+                                input: usage.input_tokens,
+                                output: usage.output_tokens,
+                                cache_read: usage.cache_read_input_tokens,
+                                cache_creation: usage.cache_creation_input_tokens,
+                            },
+                        )
+                    })
+                    .collect(),
+            )
+        } else {
+            None
+        };
+
+        // Enrich daily_activity with tokenCount the same way the Claude builder does.
+        let daily_activity = if settings.daily_breakdown {
+            let daily_token_totals: HashMap<&str, u64> = codex_stats
+                .daily_model_tokens
                 .iter()
-                .map(|(model, usage)| {
-                    (
-                        model.clone(),
-                        TokenBreakdown {
-                            input: usage.input_tokens,
-                            output: usage.output_tokens,
-                            cache_read: usage.cache_read_input_tokens,
-                            cache_creation: usage.cache_creation_input_tokens,
-                        },
-                    )
+                .map(|dmt| {
+                    let total: u64 = dmt.tokens_by_model.values().sum();
+                    (dmt.date.as_str(), total)
                 })
-                .collect(),
-        );
+                .collect();
+
+            let enriched: Vec<serde_json::Value> = codex_stats
+                .daily_activity
+                .iter()
+                .map(|da| {
+                    let token_count = daily_token_totals
+                        .get(da.date.as_str())
+                        .copied()
+                        .unwrap_or(0);
+                    serde_json::json!({
+                        "date": da.date,
+                        "messageCount": da.message_count,
+                        "sessionCount": da.session_count,
+                        "toolCallCount": da.tool_call_count,
+                        "tokenCount": token_count,
+                    })
+                })
+                .collect();
+            serde_json::to_value(&enriched).ok()
+        } else {
+            None
+        };
 
         let daily_model_tokens = if settings.tokens {
             Some(
@@ -475,21 +513,53 @@ impl RankingEngine {
             None
         };
 
+        let hour_counts = if settings.hour_activity {
+            Some(codex_stats.hour_counts.clone())
+        } else {
+            None
+        };
+        let hour_tokens = if settings.hour_activity {
+            Some(codex_stats.hour_tokens.clone())
+        } else {
+            None
+        };
+        let concurrency_histogram = if settings.concurrency_activity {
+            Some(codex_stats.concurrency_histogram.clone())
+        } else {
+            None
+        };
+        let day_sessions = if settings.concurrency_activity {
+            Some(codex_stats.day_sessions.clone())
+        } else {
+            None
+        };
+
+        let prompt_hashes = if settings.prompt_hashes && !codex_stats.prompt_hashes.is_empty() {
+            Some(codex_stats.prompt_hashes.clone())
+        } else {
+            None
+        };
+        let tool_names = if settings.tool_calls && !codex_stats.tool_names.is_empty() {
+            Some(codex_stats.tool_names.clone())
+        } else {
+            None
+        };
+
         SyncPayload {
             user_hash: self.config.user_hash.clone(),
             sync_secret: self.config.sync_secret.clone().unwrap_or_default(),
             sync_settings: settings.clone(),
             totals,
             token_breakdown,
-            daily_activity: None,
+            daily_activity,
             daily_model_tokens,
-            hour_counts: None,
-            hour_tokens: None,
-            concurrency_histogram: None,
-            day_sessions: None,
-            prompt_hashes: None,
+            hour_counts,
+            hour_tokens,
+            concurrency_histogram,
+            day_sessions,
+            prompt_hashes,
             prompts: None,
-            tool_names: None,
+            tool_names,
             full_reparse,
             plan: None,
             provider: Some("codex".to_string()),

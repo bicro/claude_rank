@@ -10,11 +10,14 @@ import {
   evaluateRankingBadges,
   evaluateTeamBadges,
   estimateCost,
+  estimateCodexCost,
   mapPlanToUsd,
   getHotUsers,
   computePoints,
   computeStreak,
   evaluateAchievements,
+  getCodexUserRanksWithPercentiles,
+  getCodexDailyRanksForUser,
 } from "./services";
 import { recomputeUserMetrics, recomputeCodexUserMetrics, getLinkedHashes } from "./aggregate";
 import { mergeAllDeviceHistograms } from "./concurrency";
@@ -369,6 +372,51 @@ export async function handleApiRequest(url: URL, request: Request): Promise<Resp
     return handleGetHotCards(url);
   }
 
+  // ─── Codex Read Endpoints ─────────────────────────────────────────────
+  // Parallel to /api/users/:hash family; reads codex_* tables. No leaderboard /
+  // wrapped / teams endpoints — deferred. Shapes mirror the Claude endpoints
+  // so a future UI can reuse client types.
+
+  const codexHistoryMatch = path.match(/^\/api\/codex\/users\/([^/]+)\/history$/);
+  if (codexHistoryMatch && method === "GET") {
+    return handleGetCodexUserHistory(codexHistoryMatch[1]!, url);
+  }
+
+  const codexBadgesMatch = path.match(/^\/api\/codex\/users\/([^/]+)\/badges$/);
+  if (codexBadgesMatch && method === "GET") {
+    return handleGetCodexUserBadges(codexBadgesMatch[1]!);
+  }
+
+  const codexHourlyHeatmapMatch = path.match(/^\/api\/codex\/users\/([^/]+)\/heatmap\/hourly$/);
+  if (codexHourlyHeatmapMatch && method === "GET") {
+    return handleGetCodexHourlyHeatmap(codexHourlyHeatmapMatch[1]!, url);
+  }
+
+  const codexHeatmapMatch = path.match(/^\/api\/codex\/users\/([^/]+)\/heatmap$/);
+  if (codexHeatmapMatch && method === "GET") {
+    return handleGetCodexHeatmap(codexHeatmapMatch[1]!, url);
+  }
+
+  const codexDailyRanksMatch = path.match(/^\/api\/codex\/users\/([^/]+)\/daily-ranks$/);
+  if (codexDailyRanksMatch && method === "GET") {
+    return handleGetCodexDailyRanks(codexDailyRanksMatch[1]!, url);
+  }
+
+  const codexConcurrencyMatch = path.match(/^\/api\/codex\/users\/([^/]+)\/concurrency$/);
+  if (codexConcurrencyMatch && method === "GET") {
+    return handleGetCodexConcurrency(codexConcurrencyMatch[1]!, url);
+  }
+
+  const codexRewardsMatch = path.match(/^\/api\/codex\/users\/([^/]+)\/rewards$/);
+  if (codexRewardsMatch && method === "GET") {
+    return handleGetCodexUserRewards(codexRewardsMatch[1]!, url);
+  }
+
+  const codexProfileMatch = path.match(/^\/api\/codex\/users\/([^/]+)$/);
+  if (codexProfileMatch && method === "GET") {
+    return handleGetCodexUserProfile(codexProfileMatch[1]!, request);
+  }
+
   // ─── Admin Routes ─────────────────────────────────────────────────────
 
   if (path === "/api/admin/truncate-all" && method === "POST") {
@@ -548,6 +596,7 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
     // Recompute old primary's metrics without this device
     if (user.linked_to) {
       await recomputeUserMetrics(oldPrimary);
+      await recomputeCodexUserMetrics(oldPrimary);
     }
     // Re-fetch user after clearing
     user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
@@ -566,6 +615,7 @@ async function handleConnectAuth(userHash: string, request: Request): Promise<Re
 
     // Recompute aggregate with new device included
     await recomputeUserMetrics(existingPrimary.user_hash);
+    await recomputeCodexUserMetrics(existingPrimary.user_hash);
 
     // Log the link
     await db.query(
@@ -1689,15 +1739,25 @@ async function handleCodexSync(req: any, db: ReturnType<typeof getDb>): Promise<
 
   console.log(`[sync:codex] user=${req.user_hash.substring(0, 8)}… tokens=${totals.total_tokens ?? 0} sessions=${totals.total_sessions ?? 0}`);
 
+  // Prompt uniqueness — Codex hashes the FIRST user message per session, so this
+  // ratio is "fraction of distinct session-starting prompts" (vs Claude's
+  // "fraction of distinct prompts overall"). Same shape, different semantics.
+  let promptUniqueness = 0.0;
+  if (req.prompt_hashes && Array.isArray(req.prompt_hashes) && req.prompt_hashes.length > 0) {
+    const uniqueCount = new Set(req.prompt_hashes).size;
+    promptUniqueness = uniqueCount / req.prompt_hashes.length;
+  }
+
   const weighted = computeWeightedScore(
     totals.total_tokens ?? 0,
     totals.total_messages ?? 0,
     totals.total_sessions ?? 0,
     totals.total_tool_calls ?? 0,
-    0, // No prompt uniqueness for Codex POC.
+    promptUniqueness,
   );
 
-  // Extract total_output_tokens from token_breakdown (mirrors Claude path).
+  const estimatedSpend = req.token_breakdown ? estimateCodexCost(req.token_breakdown) : 0.0;
+
   let totalOutputTokens = 0;
   if (req.token_breakdown && typeof req.token_breakdown === "object") {
     for (const usage of Object.values(req.token_breakdown) as any[]) {
@@ -1708,19 +1768,29 @@ async function handleCodexSync(req: any, db: ReturnType<typeof getDb>): Promise<
   }
 
   const now = new Date().toISOString();
+  const today = new Date().toISOString().split("T")[0]!;
+  const pool = getPool();
 
-  // Upsert codex_device_metrics for this device.
+  // Upsert codex_device_metrics. Streak/points/level come from client as zeros;
+  // the real values get written by recomputeCodexUserMetrics in Phase 3.
   await db.query(
     `INSERT INTO codex_device_metrics (
       device_hash, total_tokens, total_messages, total_sessions, total_tool_calls,
-      total_output_tokens, estimated_spend, weighted_score, last_synced,
+      prompt_uniqueness_score, weighted_score, estimated_spend,
+      current_streak, total_points, level,
+      total_output_tokens, last_synced,
       total_session_time_secs, total_active_time_secs, total_idle_time_secs
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (device_hash) DO UPDATE SET
       total_tokens = EXCLUDED.total_tokens, total_messages = EXCLUDED.total_messages,
       total_sessions = EXCLUDED.total_sessions, total_tool_calls = EXCLUDED.total_tool_calls,
+      prompt_uniqueness_score = EXCLUDED.prompt_uniqueness_score,
+      weighted_score = EXCLUDED.weighted_score,
+      estimated_spend = EXCLUDED.estimated_spend,
+      current_streak = EXCLUDED.current_streak,
+      total_points = EXCLUDED.total_points,
+      level = EXCLUDED.level,
       total_output_tokens = EXCLUDED.total_output_tokens,
-      estimated_spend = EXCLUDED.estimated_spend, weighted_score = EXCLUDED.weighted_score,
       last_synced = EXCLUDED.last_synced,
       total_session_time_secs = EXCLUDED.total_session_time_secs,
       total_active_time_secs = EXCLUDED.total_active_time_secs,
@@ -1729,19 +1799,110 @@ async function handleCodexSync(req: any, db: ReturnType<typeof getDb>): Promise<
     req.user_hash,
     totals.total_tokens ?? 0, totals.total_messages ?? 0,
     totals.total_sessions ?? 0, totals.total_tool_calls ?? 0,
-    totalOutputTokens, 0.0, weighted, now,
+    promptUniqueness, weighted, estimatedSpend,
+    totals.current_streak ?? 0, totals.total_points ?? 0, totals.level ?? 0,
+    totalOutputTokens, now,
     totals.total_session_time_secs ?? 0, totals.total_active_time_secs ?? 0,
     totals.total_idle_time_secs ?? 0,
   );
 
-  // Recompute aggregated codex_user_metrics across linked devices.
-  const syncUser = await db.query("SELECT linked_to FROM users WHERE user_hash = ?").get(req.user_hash) as any;
-  const primaryHash = syncUser?.linked_to || req.user_hash;
-  await recomputeCodexUserMetrics(primaryHash);
+  // Daily snapshot baseline — totals at end-of-day, mirroring metrics_history.
+  await db.query(
+    `INSERT INTO codex_metrics_history (
+      user_hash, snapshot_date, total_tokens, total_messages, total_sessions, total_tool_calls,
+      prompt_uniqueness_score, weighted_score
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (user_hash, snapshot_date) DO UPDATE SET
+      total_tokens = EXCLUDED.total_tokens, total_messages = EXCLUDED.total_messages,
+      total_sessions = EXCLUDED.total_sessions, total_tool_calls = EXCLUDED.total_tool_calls,
+      prompt_uniqueness_score = EXCLUDED.prompt_uniqueness_score,
+      weighted_score = EXCLUDED.weighted_score`
+  ).run(
+    req.user_hash, today,
+    totals.total_tokens ?? 0, totals.total_messages ?? 0,
+    totals.total_sessions ?? 0, totals.total_tool_calls ?? 0,
+    promptUniqueness, weighted,
+  );
 
-  // Persist daily_model_tokens — same logic as Claude path. Safe to share
-  // metrics_model_daily because the model_name ("codex") doesn't collide
-  // with Claude model names.
+  // hour_counts → codex_metrics_hourly.total_messages
+  if (req.hour_counts && typeof req.hour_counts === "object") {
+    const rows: [string, string, number][] = [];
+    for (const [hourStr, count] of Object.entries(req.hour_counts)) {
+      if (typeof count !== "number" || count <= 0) continue;
+      if (!hourStr.includes(":")) continue;
+      const lastColon = hourStr.lastIndexOf(":");
+      const datePart = hourStr.substring(0, lastColon);
+      const h = parseInt(hourStr.substring(lastColon + 1), 10);
+      if (Number.isNaN(h) || h < 0 || h > 23) continue;
+      const snapshotHour = `${datePart}T${String(h).padStart(2, "0")}:00:00`;
+      rows.push([req.user_hash, snapshotHour, count]);
+    }
+    if (rows.length > 0) {
+      const values = rows.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(", ");
+      await pool.query(
+        `INSERT INTO codex_metrics_hourly (user_hash, snapshot_hour, total_messages) VALUES ${values}
+         ON CONFLICT (user_hash, snapshot_hour) DO UPDATE SET total_messages = EXCLUDED.total_messages`,
+        rows.flat(),
+      );
+    }
+  }
+
+  // hour_tokens → codex_metrics_hourly.total_tokens
+  if (req.hour_tokens && typeof req.hour_tokens === "object") {
+    const rows: [string, string, number][] = [];
+    for (const [hourStr, tokenCount] of Object.entries(req.hour_tokens)) {
+      if (typeof tokenCount !== "number" || tokenCount <= 0) continue;
+      if (!hourStr.includes(":")) continue;
+      const lastColon = hourStr.lastIndexOf(":");
+      const datePart = hourStr.substring(0, lastColon);
+      const h = parseInt(hourStr.substring(lastColon + 1), 10);
+      if (Number.isNaN(h) || h < 0 || h > 23) continue;
+      const snapshotHour = `${datePart}T${String(h).padStart(2, "0")}:00:00`;
+      rows.push([req.user_hash, snapshotHour, tokenCount]);
+    }
+    if (rows.length > 0) {
+      if (req.full_reparse) {
+        await pool.query(
+          `UPDATE codex_metrics_hourly SET total_tokens = 0 WHERE user_hash = $1`,
+          [req.user_hash],
+        );
+      }
+      const values = rows.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(", ");
+      await pool.query(
+        `INSERT INTO codex_metrics_hourly (user_hash, snapshot_hour, total_tokens) VALUES ${values}
+         ON CONFLICT (user_hash, snapshot_hour) DO UPDATE SET total_tokens = EXCLUDED.total_tokens`,
+        rows.flat(),
+      );
+    }
+  }
+
+  // daily_activity → codex_metrics_history.daily_*
+  if (req.daily_activity && Array.isArray(req.daily_activity)) {
+    const rows: (string | number)[][] = [];
+    for (const entry of req.daily_activity) {
+      if (!entry || typeof entry !== "object" || !entry.date) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) continue;
+      const msgCount = entry.messageCount ?? 0;
+      const toolCount = entry.toolCallCount ?? 0;
+      const tokenCountVal = entry.tokenCount ?? 0;
+      if (msgCount <= 0 && toolCount <= 0 && tokenCountVal <= 0) continue;
+      rows.push([req.user_hash, entry.date, msgCount, toolCount, tokenCountVal]);
+    }
+    if (rows.length > 0) {
+      const values = rows.map((_, i) => `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5})`).join(", ");
+      await pool.query(
+        `INSERT INTO codex_metrics_history (user_hash, snapshot_date, daily_messages, daily_tool_calls, daily_tokens)
+         VALUES ${values}
+         ON CONFLICT (user_hash, snapshot_date) DO UPDATE SET
+           daily_messages = EXCLUDED.daily_messages, daily_tool_calls = EXCLUDED.daily_tool_calls,
+           daily_tokens = EXCLUDED.daily_tokens`,
+        rows.flat(),
+      );
+    }
+  }
+
+  // daily_model_tokens → metrics_model_daily (shared with Claude; real Codex
+  // model names like "gpt-5.2-codex" don't collide with Claude names).
   if (req.daily_model_tokens && Array.isArray(req.daily_model_tokens)) {
     const rows: (string | number)[][] = [];
     for (const entry of req.daily_model_tokens) {
@@ -1757,7 +1918,6 @@ async function handleCodexSync(req: any, db: ReturnType<typeof getDb>): Promise<
       }
     }
     if (rows.length > 0 && rows.length <= 10000) {
-      const pool = getPool();
       const values = rows.map((_, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`).join(", ");
       await pool.query(
         `INSERT INTO metrics_model_daily (user_hash, snapshot_date, model_name, tokens)
@@ -1769,12 +1929,165 @@ async function handleCodexSync(req: any, db: ReturnType<typeof getDb>): Promise<
     }
   }
 
-  console.log(`[sync:codex] Completed for user=${req.user_hash.substring(0, 8)}… weighted=${weighted.toFixed(2)}`);
+  // concurrency_histogram → codex_concurrency_histogram
+  if (req.concurrency_histogram && typeof req.concurrency_histogram === "object") {
+    const rows: [string, string, string][] = [];
+    for (const [hourKey, histogram] of Object.entries(req.concurrency_histogram)) {
+      if (!hourKey.includes(":")) continue;
+      if (!histogram || typeof histogram !== "object") continue;
+      const lastColon = hourKey.lastIndexOf(":");
+      const datePart = hourKey.substring(0, lastColon);
+      const h = parseInt(hourKey.substring(lastColon + 1), 10);
+      if (Number.isNaN(h) || h < 0 || h > 23) continue;
+      const snapshotHour = `${datePart}T${String(h).padStart(2, "0")}:00:00`;
+      rows.push([req.user_hash, snapshotHour, JSON.stringify(histogram)]);
+    }
+    if (rows.length > 0) {
+      const values = rows.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(", ");
+      await pool.query(
+        `INSERT INTO codex_concurrency_histogram (user_hash, snapshot_hour, histogram) VALUES ${values}
+         ON CONFLICT (user_hash, snapshot_hour) DO UPDATE SET histogram = EXCLUDED.histogram`,
+        rows.flat(),
+      );
+    }
+  }
+
+  // day_sessions → codex_daily_sessions
+  if (req.day_sessions && typeof req.day_sessions === "object") {
+    const rows: [string, string, string][] = [];
+    for (const [dateStr, sessionsList] of Object.entries(req.day_sessions)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+      if (!sessionsList || !Array.isArray(sessionsList)) continue;
+      rows.push([req.user_hash, dateStr, JSON.stringify(sessionsList)]);
+    }
+    if (rows.length > 0) {
+      const values = rows.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(", ");
+      await pool.query(
+        `INSERT INTO codex_daily_sessions (user_hash, snapshot_date, sessions) VALUES ${values}
+         ON CONFLICT (user_hash, snapshot_date) DO UPDATE SET sessions = EXCLUDED.sessions`,
+        rows.flat(),
+      );
+    }
+  }
+
+  // Per-day concurrency aggregates → codex_metrics_history.{peak_concurrency,
+  // total_agent_mins, concurrent_mins, peak_concurrency_mins}. Mirrors the
+  // Claude block at the bottom of handleSync.
+  {
+    const concurrencyDates = new Set<string>();
+    if (req.concurrency_histogram && typeof req.concurrency_histogram === "object") {
+      for (const hourKey of Object.keys(req.concurrency_histogram)) {
+        if (!hourKey.includes(":")) continue;
+        const lastColon = hourKey.lastIndexOf(":");
+        concurrencyDates.add(hourKey.substring(0, lastColon));
+      }
+    }
+    concurrencyDates.add(today);
+
+    // Aggregate across linked devices so a multi-device Codex user sees
+    // unified peak/concurrent minutes — same approach Claude uses.
+    const syncUser = await db.query("SELECT linked_to FROM users WHERE user_hash = ?").get(req.user_hash) as any;
+    const primaryHashForConcurrency = syncUser?.linked_to || req.user_hash;
+    const allHashes = await getLinkedHashes(db, primaryHashForConcurrency);
+
+    for (const syncDate of concurrencyDates) {
+      const dayStart = `${syncDate}T00:00:00`;
+      const dayEnd = `${syncDate}T23:59:59`;
+
+      const ph2 = allHashes.map((_, i) => `$${i + 1}`).join(", ");
+      const { rows: histRows } = await pool.query(
+        `SELECT user_hash, snapshot_hour, histogram FROM codex_concurrency_histogram
+         WHERE user_hash IN (${ph2}) AND snapshot_hour >= $${allHashes.length + 1} AND snapshot_hour <= $${allHashes.length + 2}`,
+        [...allHashes, dayStart, dayEnd],
+      );
+
+      let peakConcurrency = 0;
+      let totalAgentMins = 0;
+      let concurrentMinsAgg = 0;
+
+      const perHourMerged = mergeAllDeviceHistograms(histRows as any[]);
+
+      for (const histogram of Object.values(perHourMerged)) {
+        for (const [sessionsStr, minutes] of Object.entries(histogram)) {
+          const sessionCount = parseInt(sessionsStr, 10);
+          if (sessionCount > peakConcurrency && (sessionCount <= 1 || minutes >= MIN_PEAK_MINUTES)) peakConcurrency = sessionCount;
+          totalAgentMins += minutes;
+          if (sessionCount >= 2) concurrentMinsAgg += minutes;
+        }
+      }
+
+      let peakConcurrencyMins = 0;
+      for (const histogram of Object.values(perHourMerged)) {
+        peakConcurrencyMins += histogram[String(peakConcurrency)] ?? 0;
+      }
+
+      // Upsert so the row exists for primary even if today's snapshot baseline
+      // was written only for the secondary device above.
+      await pool.query(
+        `INSERT INTO codex_metrics_history (
+          user_hash, snapshot_date, peak_concurrency, total_agent_mins, concurrent_mins, peak_concurrency_mins
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (user_hash, snapshot_date) DO UPDATE SET
+          peak_concurrency = EXCLUDED.peak_concurrency,
+          total_agent_mins = EXCLUDED.total_agent_mins,
+          concurrent_mins = EXCLUDED.concurrent_mins,
+          peak_concurrency_mins = EXCLUDED.peak_concurrency_mins`,
+        [primaryHashForConcurrency, syncDate, peakConcurrency, totalAgentMins, concurrentMinsAgg, peakConcurrencyMins],
+      );
+    }
+  }
+
+  // Recompute aggregated codex_user_metrics across linked devices. Phase 3
+  // extends this to also write streak/points/level/badges.
+  const syncUser = await db.query("SELECT linked_to FROM users WHERE user_hash = ?").get(req.user_hash) as any;
+  const primaryHash = syncUser?.linked_to || req.user_hash;
+  await recomputeCodexUserMetrics(primaryHash);
+
+  // daily_spend on today's row, derived from aggregated spend × today's share
+  // of total tokens. Mirrors the Claude block.
+  {
+    const aggMetrics = await db.query(
+      "SELECT estimated_spend, total_tokens, current_hourly_streak FROM codex_user_metrics WHERE user_hash = ?"
+    ).get(primaryHash) as any;
+    const todayHistory = await db.query(
+      "SELECT daily_tokens FROM codex_metrics_history WHERE user_hash = ? AND snapshot_date = ?"
+    ).get(req.user_hash, today) as any;
+    const dailyTokens = todayHistory?.daily_tokens ?? 0;
+    const totalTokensAgg = aggMetrics?.total_tokens ?? 0;
+    const estSpend = aggMetrics?.estimated_spend ?? 0;
+    const dailySpend = totalTokensAgg > 0 ? (estSpend * dailyTokens / totalTokensAgg) : 0;
+    const hourlyStreak = aggMetrics?.current_hourly_streak ?? 0;
+
+    await pool.query(
+      `UPDATE codex_metrics_history SET daily_spend = $1
+       WHERE user_hash = $2 AND snapshot_date = $3`,
+      [dailySpend, req.user_hash, today],
+    );
+
+    await pool.query(
+      `INSERT INTO codex_metrics_history (user_hash, snapshot_date, peak_hourly_streak)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_hash, snapshot_date) DO UPDATE SET
+         peak_hourly_streak = GREATEST(COALESCE(codex_metrics_history.peak_hourly_streak, 0), EXCLUDED.peak_hourly_streak)`,
+      [primaryHash, today, hourlyStreak],
+    );
+  }
+
+  const finalMetrics = await db.query(
+    "SELECT weighted_score, prompt_uniqueness_score, total_points, level, current_streak FROM codex_user_metrics WHERE user_hash = ?"
+  ).get(primaryHash) as any;
+
+  console.log(`[sync:codex] Completed for user=${req.user_hash.substring(0, 8)}… weighted=${(finalMetrics?.weighted_score ?? weighted).toFixed(2)}`);
 
   return json({
     status: "ok",
     provider: "codex",
-    weighted_score: weighted,
+    weighted_score: finalMetrics?.weighted_score ?? weighted,
+    prompt_uniqueness_score: finalMetrics?.prompt_uniqueness_score ?? promptUniqueness,
+    total_points: finalMetrics?.total_points ?? 0,
+    level: finalMetrics?.level ?? 0,
+    current_streak: finalMetrics?.current_streak ?? 0,
+    primary_hash: primaryHash !== req.user_hash ? primaryHash : undefined,
   });
 }
 
@@ -2613,4 +2926,538 @@ async function handleGetHotCards(url: URL): Promise<Response> {
   const result = { cards };
   hotCardsCache.set(limit, { data: result, timestamp: Date.now() });
   return json(result);
+}
+
+// ─── Codex Read Handlers ─────────────────────────────────────────────────────
+// One-to-one with the Claude handlers above. Responses keep the same JSON
+// shape so a future UI can swap `/api/users/...` for `/api/codex/users/...`
+// without changing client types. All read from codex_* tables exclusively.
+
+async function handleGetCodexUserProfile(userHash: string, request: Request): Promise<Response> {
+  const db = getDb();
+  const user = await db.query("SELECT * FROM users WHERE user_hash = ?").get(userHash) as any;
+  if (!user) {
+    return json({
+      user_hash: userHash,
+      username: null,
+      display_name: null,
+      avatar_url: null,
+      auth_provider: null,
+      social_url: null,
+      team_hash: null,
+      created_at: null,
+      metrics: {
+        total_tokens: 0, total_messages: 0, total_sessions: 0,
+        total_tool_calls: 0, prompt_uniqueness_score: 0, weighted_score: 0,
+        current_streak: 0, total_points: 0, level: 0, last_synced: null,
+        max_concurrent: 0, concurrent_mins: 0, estimated_spend: 0,
+      },
+      plan_value: null,
+      ranks: {},
+      tier: computeTier(0),
+      badges: [],
+      is_owner: false,
+    });
+  }
+
+  const primaryHash = user.linked_to || userHash;
+  const profileUser = user.linked_to
+    ? await db.query("SELECT * FROM users WHERE user_hash = ?").get(primaryHash) as any
+    : user;
+  if (!profileUser) return error("User not found", 404);
+
+  const metrics = await db.query("SELECT * FROM codex_user_metrics WHERE user_hash = ?").get(primaryHash) as any;
+  const ranks = await getCodexUserRanksWithPercentiles(db, primaryHash);
+
+  const weighted = metrics?.weighted_score ?? 0;
+  const tier = computeTier(weighted);
+
+  const badges = await db.query(
+    `SELECT b.id, b.name, b.icon, b.category, ub.unlocked_at
+     FROM codex_user_badges ub JOIN badges b ON ub.badge_id = b.id
+     WHERE ub.user_hash = ?`
+  ).all(primaryHash) as any[];
+
+  const today = new Date().toISOString().split("T")[0]!;
+  const todayStart = `${today}T00:00:00`;
+  const todayEnd = `${today}T23:59:59`;
+
+  const hashes = await getLinkedHashes(db, primaryHash);
+  const pool = getPool();
+  const ph = hashes.map((_, i) => `$${i + 1}`).join(", ");
+  const { rows: concurrencyRows } = await pool.query(
+    `SELECT user_hash, snapshot_hour, histogram FROM codex_concurrency_histogram
+     WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1} AND snapshot_hour <= $${hashes.length + 2}`,
+    [...hashes, todayStart, todayEnd],
+  );
+
+  const mergedHistograms = mergeAllDeviceHistograms(concurrencyRows as any[]);
+
+  let maxConcurrent = 0;
+  let concurrentMins = 0;
+  for (const histogram of Object.values(mergedHistograms)) {
+    for (const [sessionsStr, minutes] of Object.entries(histogram)) {
+      const sessionCount = parseInt(sessionsStr, 10);
+      if (sessionCount > maxConcurrent && (sessionCount <= 1 || minutes >= MIN_PEAK_MINUTES)) maxConcurrent = sessionCount;
+      if (sessionCount > 1) concurrentMins += minutes;
+    }
+  }
+
+  let isOwner = false;
+  try {
+    const session = await getAuthSession(request);
+    if (session?.user?.id) {
+      const ownerCheck = await db.query(
+        "SELECT 1 FROM users WHERE auth_id = ? AND (user_hash = ? OR linked_to = ?)"
+      ).get(session.user.id, primaryHash, primaryHash) as any;
+      if (ownerCheck) isOwner = true;
+    }
+  } catch {}
+
+  return json({
+    user_hash: profileUser.user_hash,
+    username: profileUser.username,
+    display_name: profileUser.display_name ?? null,
+    avatar_url: profileUser.avatar_url ?? null,
+    auth_provider: user.auth_provider ?? null,
+    social_url: profileUser.social_url ?? null,
+    team_hash: profileUser.team_hash,
+    created_at: profileUser.created_at,
+    is_owner: isOwner,
+    metrics: {
+      total_tokens: metrics?.total_tokens ?? 0,
+      total_messages: metrics?.total_messages ?? 0,
+      total_sessions: metrics?.total_sessions ?? 0,
+      total_tool_calls: metrics?.total_tool_calls ?? 0,
+      prompt_uniqueness_score: metrics?.prompt_uniqueness_score ?? 0,
+      weighted_score: weighted,
+      current_streak: metrics?.current_streak ?? 0,
+      current_hourly_streak: metrics?.current_hourly_streak ?? 0,
+      total_points: metrics?.total_points ?? 0,
+      level: metrics?.level ?? 0,
+      last_synced: metrics?.last_synced ?? null,
+      max_concurrent: maxConcurrent,
+      concurrent_mins: concurrentMins,
+      estimated_spend: metrics?.estimated_spend ?? 0,
+    },
+    // Plan value is Claude-only (we don't read OpenAI subscription tiers).
+    plan_value: null,
+    ranks,
+    tier,
+    badges: badges.map(b => ({
+      id: b.id,
+      name: b.name,
+      icon: b.icon,
+      category: b.category,
+      unlocked_at: b.unlocked_at,
+    })),
+  });
+}
+
+async function handleGetCodexUserHistory(userHash: string, url: URL): Promise<Response> {
+  const days = parseInt(url.searchParams.get("days") ?? "30", 10);
+  const db = getDb();
+
+  const hashes = await getLinkedHashes(db, userHash);
+  const pool = getPool();
+  const placeholders = hashes.map((_, i) => `$${i + 1}`).join(", ");
+  const { rows } = await pool.query(
+    `SELECT snapshot_date,
+       SUM(total_tokens) as total_tokens,
+       SUM(daily_tokens) as daily_tokens,
+       SUM(total_messages) as total_messages,
+       SUM(total_sessions) as total_sessions,
+       SUM(total_tool_calls) as total_tool_calls,
+       SUM(prompt_uniqueness_score) as prompt_uniqueness_score,
+       SUM(weighted_score) as weighted_score
+     FROM codex_metrics_history
+     WHERE user_hash IN (${placeholders})
+     GROUP BY snapshot_date
+     ORDER BY snapshot_date DESC
+     LIMIT $${hashes.length + 1}`,
+    [...hashes, days],
+  );
+
+  return json(rows.map((r: any) => ({
+    date: r.snapshot_date,
+    tokens: r.total_tokens,
+    daily_tokens: r.daily_tokens ?? 0,
+    messages: r.total_messages,
+    sessions: r.total_sessions,
+    tool_calls: r.total_tool_calls,
+    uniqueness: r.prompt_uniqueness_score,
+    weighted: r.weighted_score,
+  })));
+}
+
+async function handleGetCodexUserBadges(userHash: string): Promise<Response> {
+  const db = getDb();
+  const rows = await db.query(
+    `SELECT b.id, b.name, b.description, b.icon, b.category, ub.unlocked_at
+     FROM codex_user_badges ub JOIN badges b ON ub.badge_id = b.id
+     WHERE ub.user_hash = ?`
+  ).all(userHash) as any[];
+
+  return json(rows.map(b => ({
+    id: b.id,
+    name: b.name,
+    description: b.description,
+    icon: b.icon,
+    category: b.category,
+    unlocked_at: b.unlocked_at,
+  })));
+}
+
+async function handleGetCodexHourlyHeatmap(userHash: string, url: URL): Promise<Response> {
+  const hours = Math.min(720, Math.max(1, parseInt(url.searchParams.get("hours") ?? "24", 10)));
+  const db = getDb();
+
+  const now = new Date();
+  const startHour = new Date(now);
+  startHour.setUTCHours(startHour.getUTCHours() - hours);
+  startHour.setUTCMinutes(0, 0, 0);
+  const startHourStr = startHour.toISOString().replace(/\.\d{3}Z$/, "");
+
+  const hashes = await getLinkedHashes(db, userHash);
+  const pool = getPool();
+  const placeholders = hashes.map((_, i) => `$${i + 1}`).join(", ");
+  const { rows: snapshots } = await pool.query(
+    `SELECT snapshot_hour, SUM(total_messages) as total_messages, SUM(total_tokens) as total_tokens
+     FROM codex_metrics_hourly
+     WHERE user_hash IN (${placeholders}) AND snapshot_hour >= $${hashes.length + 1}
+     GROUP BY snapshot_hour
+     ORDER BY snapshot_hour ASC`,
+    [...hashes, startHourStr],
+  );
+
+  const snapMap: Record<string, any> = {};
+  for (const s of snapshots) snapMap[s.snapshot_hour] = s;
+
+  const heatmap: any[] = [];
+  const current = new Date(startHour);
+  while (current <= now) {
+    const isoKey = current.toISOString().replace(/\.\d{3}Z$/, "");
+    const y = current.getUTCFullYear();
+    const mo = String(current.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(current.getUTCDate()).padStart(2, "0");
+    const h = String(current.getUTCHours()).padStart(2, "0");
+    const altKey = `${y}-${mo}-${d}T${h}:00:00`;
+
+    const snap = snapMap[isoKey] ?? snapMap[altKey];
+    const messages = snap?.total_messages ?? 0;
+
+    heatmap.push({ hour: isoKey, tokens: 0, messages, tool_calls: 0, activity: messages });
+    current.setUTCHours(current.getUTCHours() + 1);
+  }
+
+  const activities = heatmap.filter(d => d.activity > 0).map(d => d.activity).sort((a, b) => a - b);
+  if (activities.length > 0) {
+    const q1 = activities.length > 3 ? activities[Math.floor(activities.length / 4)] : activities[0];
+    const q2 = activities.length > 1 ? activities[Math.floor(activities.length / 2)] : activities[0];
+    const q3 = activities.length > 3 ? activities[Math.floor(activities.length * 3 / 4)] : activities[activities.length - 1];
+    for (const d of heatmap) {
+      const a = d.activity;
+      if (a === 0) d.intensity = 0;
+      else if (a <= q1) d.intensity = 1;
+      else if (a <= q2) d.intensity = 2;
+      else if (a <= q3) d.intensity = 3;
+      else d.intensity = 4;
+    }
+  } else {
+    for (const d of heatmap) d.intensity = 0;
+  }
+
+  return json(heatmap);
+}
+
+async function handleGetCodexHeatmap(userHash: string, url: URL): Promise<Response> {
+  const days = Math.min(730, Math.max(1, parseInt(url.searchParams.get("days") ?? "365", 10)));
+  const db = getDb();
+
+  const today = new Date();
+  const endDate = today.toISOString().split("T")[0]!;
+  const startDateObj = new Date(today);
+  startDateObj.setUTCDate(startDateObj.getUTCDate() - days);
+  const startDate = startDateObj.toISOString().split("T")[0]!;
+
+  const snapshots = await db.query(
+    `SELECT * FROM codex_metrics_history
+     WHERE user_hash = ? AND snapshot_date >= ?
+     ORDER BY snapshot_date ASC`
+  ).all(userHash, startDate) as any[];
+
+  const snapMap: Record<string, any> = {};
+  for (const s of snapshots) snapMap[s.snapshot_date] = s;
+
+  const heatmap: any[] = [];
+  let prev: any = null;
+  const current = new Date(startDateObj);
+  const endDateObj = new Date(endDate + "T00:00:00Z");
+
+  while (current <= endDateObj) {
+    const dateStr = current.toISOString().split("T")[0]!;
+    const snap = snapMap[dateStr];
+
+    let tokens = 0, messages = 0, toolCalls = 0, activity = 0;
+
+    if (snap && (snap.daily_messages ?? 0) > 0) {
+      messages = snap.daily_messages;
+      toolCalls = snap.daily_tool_calls ?? 0;
+      tokens = snap.daily_tokens ?? 0;
+      if (tokens === 0 && prev) {
+        tokens = Math.max(0, snap.total_tokens - prev.total_tokens);
+      }
+      activity = messages;
+    } else if (snap && prev) {
+      tokens = Math.max(0, snap.total_tokens - prev.total_tokens);
+      messages = Math.max(0, snap.total_messages - prev.total_messages);
+      toolCalls = Math.max(0, snap.total_tool_calls - prev.total_tool_calls);
+      activity = tokens + messages * 1000 + toolCalls * 500;
+    }
+
+    heatmap.push({ date: dateStr, tokens, messages, tool_calls: toolCalls, activity });
+    if (snap) prev = snap;
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  const activities = heatmap.filter(d => d.activity > 0).map(d => d.activity).sort((a, b) => a - b);
+  if (activities.length > 0) {
+    const q1 = activities.length > 3 ? activities[Math.floor(activities.length / 4)] : activities[0];
+    const q2 = activities.length > 1 ? activities[Math.floor(activities.length / 2)] : activities[0];
+    const q3 = activities.length > 3 ? activities[Math.floor(activities.length * 3 / 4)] : activities[activities.length - 1];
+    for (const d of heatmap) {
+      const a = d.activity;
+      if (a === 0) d.intensity = 0;
+      else if (a <= q1) d.intensity = 1;
+      else if (a <= q2) d.intensity = 2;
+      else if (a <= q3) d.intensity = 3;
+      else d.intensity = 4;
+    }
+  } else {
+    for (const d of heatmap) d.intensity = 0;
+  }
+
+  return json(heatmap);
+}
+
+async function handleGetCodexDailyRanks(userHash: string, url: URL): Promise<Response> {
+  const queryDate = url.searchParams.get("date");
+  const period = url.searchParams.get("period") ?? "day";
+
+  let target: string;
+  if (queryDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(queryDate)) return error("Invalid date format, use YYYY-MM-DD", 400);
+    target = queryDate;
+  } else {
+    target = new Date().toISOString().split("T")[0]!;
+  }
+
+  if (period === "week") {
+    // No Codex weekly rank twin yet — explicit empty rather than 404 so the
+    // client can render the panel without a special case.
+    return json({ date: target, period, ranks: {} });
+  }
+
+  const db = getDb();
+  try {
+    const linkedHashes = await getLinkedHashes(db, userHash);
+    const ranks = await getCodexDailyRanksForUser(db, userHash, target, linkedHashes);
+    return json({ date: target, period, ranks });
+  } catch (e) {
+    console.error('getCodexDailyRanksForUser failed:', e);
+    return json({ date: target, period, ranks: {} });
+  }
+}
+
+async function handleGetCodexConcurrency(userHash: string, url: URL): Promise<Response> {
+  const db = getDb();
+  const queryDate = url.searchParams.get("date");
+
+  const hashes = await getLinkedHashes(db, userHash);
+
+  if (queryDate !== null) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(queryDate)) return error("Invalid date format, use YYYY-MM-DD", 400);
+    const today = new Date().toISOString().split("T")[0]!;
+    const targetDate = queryDate > today ? today : queryDate;
+    const dayStart = `${targetDate}T00:00:00`;
+    const dayEnd = `${targetDate}T23:59:59`;
+
+    const pool = getPool();
+    const ph = hashes.map((_, i) => `$${i + 1}`).join(", ");
+    const { rows } = await pool.query(
+      `SELECT user_hash, snapshot_hour, histogram FROM codex_concurrency_histogram
+       WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1} AND snapshot_hour <= $${hashes.length + 2}`,
+      [...hashes, dayStart, dayEnd],
+    );
+
+    const mergedHistograms = mergeAllDeviceHistograms(rows as any[]);
+    const perHour: Record<string, any> = {};
+    for (const [hourKey, histogram] of Object.entries(mergedHistograms)) {
+      perHour[hourKey] = { histogram, tokens: 0 };
+    }
+
+    const { rows: tokenRows } = await pool.query(
+      `SELECT snapshot_hour, SUM(total_tokens) as total_tokens FROM codex_metrics_hourly
+       WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1} AND snapshot_hour <= $${hashes.length + 2}
+       GROUP BY snapshot_hour`,
+      [...hashes, dayStart, dayEnd],
+    );
+
+    for (const row of tokenRows as any[]) {
+      const snapshotDate = splitTimestamp(row.snapshot_hour)[0];
+      const hour = parseInt(splitTimestamp(row.snapshot_hour)[1].split(":")[0]!, 10);
+      const hourKey = `${snapshotDate}:${hour}`;
+      if (perHour[hourKey]) {
+        perHour[hourKey].tokens = row.total_tokens ?? 0;
+      } else if (row.total_tokens && row.total_tokens > 0) {
+        perHour[hourKey] = { histogram: {}, tokens: row.total_tokens };
+      }
+    }
+
+    const { rows: dsRows } = await pool.query(
+      `SELECT sessions FROM codex_daily_sessions WHERE user_hash IN (${ph}) AND snapshot_date = $${hashes.length + 1}`,
+      [...hashes, targetDate],
+    );
+    const allSessions: any[] = [];
+    for (const dsRow of dsRows as any[]) {
+      if (dsRow?.sessions) {
+        try {
+          const parsed = JSON.parse(dsRow.sessions);
+          if (Array.isArray(parsed)) allSessions.push(...parsed);
+        } catch { /* ignore */ }
+      }
+    }
+    if (allSessions.length > 0) perHour["sessions"] = allSessions;
+
+    return json(perHour);
+  }
+
+  // Legacy: last N hours of peak concurrency
+  const hours = parseInt(url.searchParams.get("hours") ?? "12", 10);
+  const now = new Date();
+  const startTime = new Date(now);
+  startTime.setUTCHours(startTime.getUTCHours() - hours);
+  const startTimeStr = startTime.toISOString().replace(/\.\d{3}Z$/, "");
+
+  const pool = getPool();
+  const ph = hashes.map((_, i) => `$${i + 1}`).join(", ");
+  const { rows } = await pool.query(
+    `SELECT user_hash, snapshot_hour, histogram FROM codex_concurrency_histogram
+     WHERE user_hash IN (${ph}) AND snapshot_hour >= $${hashes.length + 1}`,
+    [...hashes, startTimeStr],
+  );
+
+  const hourHistograms = mergeAllDeviceHistograms(rows as any[]);
+  const perHour: Record<string, number> = {};
+  for (const [hourKey, histogram] of Object.entries(hourHistograms)) {
+    let peak = 0;
+    for (const [sessionsStr, minutes] of Object.entries(histogram)) {
+      const s = parseInt(sessionsStr, 10);
+      if (s > peak && (s <= 1 || minutes >= MIN_PEAK_MINUTES)) peak = s;
+    }
+    perHour[hourKey] = peak;
+  }
+
+  return json(perHour);
+}
+
+async function handleGetCodexUserRewards(userHash: string, url: URL): Promise<Response> {
+  const db = getDb();
+  const pool = getPool();
+
+  const queryDate = url.searchParams.get("date");
+  const targetDate = (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate))
+    ? queryDate
+    : new Date().toISOString().split("T")[0]!;
+
+  const userRow = await db.query("SELECT linked_to FROM users WHERE user_hash = ?").get(userHash) as any;
+  if (!userRow) return error("User not found", 404);
+  const primaryHash = userRow.linked_to || userHash;
+  const hashes = await getLinkedHashes(db, primaryHash);
+  const ph = hashes.map((_, i) => `$${i + 1}`).join(", ");
+
+  const { rows: todayRows } = await pool.query(
+    `SELECT MAX(peak_concurrency) as peak_concurrency,
+            MAX(peak_hourly_streak) as peak_hourly_streak,
+            SUM(daily_spend) as daily_spend
+     FROM codex_metrics_history
+     WHERE user_hash IN (${ph}) AND snapshot_date = $${hashes.length + 1}`,
+    [...hashes, targetDate],
+  );
+  const todayVals = todayRows[0] ?? { peak_concurrency: 0, peak_hourly_streak: 0, daily_spend: 0 };
+
+  const { rows: bestRows } = await pool.query(
+    `SELECT MAX(peak_concurrency) as best_peak_concurrency,
+            MAX(peak_hourly_streak) as best_hourly_streak,
+            MAX(daily_spend) as best_daily_spend
+     FROM codex_metrics_history
+     WHERE user_hash IN (${ph}) AND snapshot_date < $${hashes.length + 1}`,
+    [...hashes, targetDate],
+  );
+  const bestVals = bestRows[0] ?? { best_peak_concurrency: 0, best_hourly_streak: 0, best_daily_spend: 0 };
+
+  async function getBestDate(column: string, bestValue: number): Promise<string | null> {
+    if (!bestValue || bestValue <= 0) return null;
+    const { rows } = await pool.query(
+      `SELECT snapshot_date FROM codex_metrics_history
+       WHERE user_hash IN (${ph}) AND ${column} = $${hashes.length + 1} AND snapshot_date < $${hashes.length + 2}
+       ORDER BY snapshot_date DESC LIMIT 1`,
+      [...hashes, bestValue, targetDate],
+    );
+    return rows[0]?.snapshot_date ?? null;
+  }
+
+  const [peakConcBestDate, streakBestDate, spendBestDate] = await Promise.all([
+    getBestDate("peak_concurrency", bestVals.best_peak_concurrency ?? 0),
+    getBestDate("peak_hourly_streak", bestVals.best_hourly_streak ?? 0),
+    getBestDate("daily_spend", bestVals.best_daily_spend ?? 0),
+  ]);
+
+  const todayPeakConc = todayVals.peak_concurrency ?? 0;
+  const todayStreak = todayVals.peak_hourly_streak ?? 0;
+  const todaySpend = todayVals.daily_spend ?? 0;
+  const bestPeakConc = bestVals.best_peak_concurrency ?? 0;
+  const bestStreak = bestVals.best_hourly_streak ?? 0;
+  const bestSpend = bestVals.best_daily_spend ?? 0;
+
+  const personal_bests: Record<string, any> = {
+    peak_concurrency: {
+      best: bestPeakConc, best_date: peakConcBestDate,
+      today: todayPeakConc, is_new_record: todayPeakConc > 0 && todayPeakConc > bestPeakConc,
+    },
+    hourly_streak: {
+      best: bestStreak, best_date: streakBestDate,
+      today: todayStreak, is_new_record: todayStreak > 0 && todayStreak > bestStreak,
+    },
+    daily_spend: {
+      best: bestSpend, best_date: spendBestDate,
+      today: todaySpend, is_new_record: todaySpend > 0 && todaySpend > bestSpend,
+    },
+  };
+
+  // Team comparisons are Claude-only for now (Codex teams not wired up).
+  const team_ranks = null;
+
+  const dailyRanks = await getCodexDailyRanksForUser(db, primaryHash, targetDate);
+
+  function toTier(percentile: number | null): string | null {
+    if (percentile == null) return null;
+    if (percentile <= 1) return "top1";
+    if (percentile <= 10) return "top10";
+    if (percentile <= 25) return "top25";
+    if (percentile <= 50) return "top50";
+    return null;
+  }
+
+  const global_tiers: Record<string, any> = {
+    peak_concurrency: dailyRanks.peak_concurrency
+      ? { percentile: dailyRanks.peak_concurrency.percentile, tier: toTier(dailyRanks.peak_concurrency.percentile) }
+      : null,
+    daily_spend: dailyRanks.daily_spend
+      ? { percentile: dailyRanks.daily_spend.percentile, tier: toTier(dailyRanks.daily_spend.percentile) }
+      : null,
+    hourly_streak: null,
+  };
+
+  return json({ date: targetDate, personal_bests, team_ranks, global_tiers });
 }
