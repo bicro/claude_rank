@@ -1,3 +1,4 @@
+pub mod codex_jsonl;
 pub mod commands;
 pub mod cost;
 pub mod jsonl;

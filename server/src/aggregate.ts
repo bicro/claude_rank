@@ -2,6 +2,75 @@ import { getDb, getPool, type DbClient } from "./db";
 import { computeWeightedScore, computePoints, computeStreak, computeHourlyStreak } from "./services";
 
 /**
+ * Codex POC: recompute the aggregated codex_user_metrics row for a primary user.
+ * Mirrors recomputeUserMetrics but reads/writes the parallel codex_* tables.
+ * No streak / hourly streak / points / level computation — Codex isn't surfaced
+ * anywhere user-facing yet, so we only need the raw totals + weighted score.
+ */
+export async function recomputeCodexUserMetrics(primaryHash: string): Promise<void> {
+  const db = getDb();
+  const hashes = await getLinkedHashes(db, primaryHash);
+  if (hashes.length === 0) return;
+
+  const placeholders = hashes.map((_, i) => `$${i + 1}`).join(", ");
+  const { rows } = await getPool().query(
+    `SELECT
+      SUM(total_tokens) as total_tokens,
+      SUM(total_messages) as total_messages,
+      SUM(total_sessions) as total_sessions,
+      SUM(total_tool_calls) as total_tool_calls,
+      SUM(estimated_spend) as estimated_spend,
+      SUM(total_output_tokens) as total_output_tokens,
+      SUM(total_session_time_secs) as total_session_time_secs,
+      SUM(total_active_time_secs) as total_active_time_secs,
+      SUM(total_idle_time_secs) as total_idle_time_secs,
+      MAX(last_synced) as last_synced
+    FROM codex_device_metrics
+    WHERE device_hash IN (${placeholders})`,
+    hashes,
+  );
+
+  const agg = rows[0];
+  if (!agg) return;
+
+  const weighted = computeWeightedScore(
+    agg.total_tokens ?? 0,
+    agg.total_messages ?? 0,
+    agg.total_sessions ?? 0,
+    agg.total_tool_calls ?? 0,
+    0, // No prompt uniqueness for Codex (not collecting prompt hashes).
+  );
+
+  const now = new Date().toISOString();
+
+  await db.query(
+    `INSERT INTO codex_user_metrics (
+      user_hash, total_tokens, total_messages, total_sessions, total_tool_calls,
+      total_output_tokens, estimated_spend, weighted_score, last_synced,
+      total_session_time_secs, total_active_time_secs, total_idle_time_secs
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (user_hash) DO UPDATE SET
+      total_tokens = EXCLUDED.total_tokens, total_messages = EXCLUDED.total_messages,
+      total_sessions = EXCLUDED.total_sessions, total_tool_calls = EXCLUDED.total_tool_calls,
+      total_output_tokens = EXCLUDED.total_output_tokens,
+      estimated_spend = EXCLUDED.estimated_spend, weighted_score = EXCLUDED.weighted_score,
+      last_synced = EXCLUDED.last_synced,
+      total_session_time_secs = EXCLUDED.total_session_time_secs,
+      total_active_time_secs = EXCLUDED.total_active_time_secs,
+      total_idle_time_secs = EXCLUDED.total_idle_time_secs`
+  ).run(
+    primaryHash,
+    agg.total_tokens ?? 0, agg.total_messages ?? 0,
+    agg.total_sessions ?? 0, agg.total_tool_calls ?? 0,
+    agg.total_output_tokens ?? 0,
+    agg.estimated_spend ?? 0, weighted,
+    agg.last_synced ?? now,
+    agg.total_session_time_secs ?? 0, agg.total_active_time_secs ?? 0,
+    agg.total_idle_time_secs ?? 0,
+  );
+}
+
+/**
  * Get all device hashes linked to a user (primary + all secondaries).
  * If the given hash is itself a secondary, resolves to the primary first.
  */

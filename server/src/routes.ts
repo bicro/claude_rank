@@ -16,7 +16,7 @@ import {
   computeStreak,
   evaluateAchievements,
 } from "./services";
-import { recomputeUserMetrics, getLinkedHashes } from "./aggregate";
+import { recomputeUserMetrics, recomputeCodexUserMetrics, getLinkedHashes } from "./aggregate";
 import { mergeAllDeviceHistograms } from "./concurrency";
 import { getWrappedSummary, getWrappedStatus, markWrappedSeen } from "./wrapped";
 import { renderWrappedPng } from "./wrapped-og";
@@ -1673,6 +1673,111 @@ async function handleGetTeamHistory(teamHash: string, url: URL): Promise<Respons
   })));
 }
 
+// ─── Codex Sync Handler (POC) ───────────────────────────────────────────────
+
+/**
+ * Handle a sync payload tagged provider="codex". Writes only to codex_*
+ * tables and to metrics_model_daily. Skips every Claude-specific path
+ * (badges, achievements, points, daily/hourly/concurrency, peak streak)
+ * so the existing leaderboards remain Claude-only.
+ *
+ * Caller (handleSync) has already verified sync_secret and ensured the
+ * users row exists.
+ */
+async function handleCodexSync(req: any, db: ReturnType<typeof getDb>): Promise<Response> {
+  const totals = req.totals ?? {};
+
+  console.log(`[sync:codex] user=${req.user_hash.substring(0, 8)}… tokens=${totals.total_tokens ?? 0} sessions=${totals.total_sessions ?? 0}`);
+
+  const weighted = computeWeightedScore(
+    totals.total_tokens ?? 0,
+    totals.total_messages ?? 0,
+    totals.total_sessions ?? 0,
+    totals.total_tool_calls ?? 0,
+    0, // No prompt uniqueness for Codex POC.
+  );
+
+  // Extract total_output_tokens from token_breakdown (mirrors Claude path).
+  let totalOutputTokens = 0;
+  if (req.token_breakdown && typeof req.token_breakdown === "object") {
+    for (const usage of Object.values(req.token_breakdown) as any[]) {
+      if (usage && typeof usage === "object") {
+        totalOutputTokens += (usage.output ?? 0);
+      }
+    }
+  }
+
+  const now = new Date().toISOString();
+
+  // Upsert codex_device_metrics for this device.
+  await db.query(
+    `INSERT INTO codex_device_metrics (
+      device_hash, total_tokens, total_messages, total_sessions, total_tool_calls,
+      total_output_tokens, estimated_spend, weighted_score, last_synced,
+      total_session_time_secs, total_active_time_secs, total_idle_time_secs
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (device_hash) DO UPDATE SET
+      total_tokens = EXCLUDED.total_tokens, total_messages = EXCLUDED.total_messages,
+      total_sessions = EXCLUDED.total_sessions, total_tool_calls = EXCLUDED.total_tool_calls,
+      total_output_tokens = EXCLUDED.total_output_tokens,
+      estimated_spend = EXCLUDED.estimated_spend, weighted_score = EXCLUDED.weighted_score,
+      last_synced = EXCLUDED.last_synced,
+      total_session_time_secs = EXCLUDED.total_session_time_secs,
+      total_active_time_secs = EXCLUDED.total_active_time_secs,
+      total_idle_time_secs = EXCLUDED.total_idle_time_secs`
+  ).run(
+    req.user_hash,
+    totals.total_tokens ?? 0, totals.total_messages ?? 0,
+    totals.total_sessions ?? 0, totals.total_tool_calls ?? 0,
+    totalOutputTokens, 0.0, weighted, now,
+    totals.total_session_time_secs ?? 0, totals.total_active_time_secs ?? 0,
+    totals.total_idle_time_secs ?? 0,
+  );
+
+  // Recompute aggregated codex_user_metrics across linked devices.
+  const syncUser = await db.query("SELECT linked_to FROM users WHERE user_hash = ?").get(req.user_hash) as any;
+  const primaryHash = syncUser?.linked_to || req.user_hash;
+  await recomputeCodexUserMetrics(primaryHash);
+
+  // Persist daily_model_tokens — same logic as Claude path. Safe to share
+  // metrics_model_daily because the model_name ("codex") doesn't collide
+  // with Claude model names.
+  if (req.daily_model_tokens && Array.isArray(req.daily_model_tokens)) {
+    const rows: (string | number)[][] = [];
+    for (const entry of req.daily_model_tokens) {
+      if (!entry || typeof entry !== "object" || !entry.date) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) continue;
+      const map = entry.tokensByModel ?? entry.tokens_by_model;
+      if (!map || typeof map !== "object") continue;
+      for (const [model, tokens] of Object.entries(map)) {
+        const n = Math.floor(Number(tokens) || 0);
+        if (n <= 0) continue;
+        if (typeof model !== "string" || model.length === 0 || model.length > 200) continue;
+        rows.push([req.user_hash, entry.date, model, n]);
+      }
+    }
+    if (rows.length > 0 && rows.length <= 10000) {
+      const pool = getPool();
+      const values = rows.map((_, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`).join(", ");
+      await pool.query(
+        `INSERT INTO metrics_model_daily (user_hash, snapshot_date, model_name, tokens)
+         VALUES ${values}
+         ON CONFLICT (user_hash, snapshot_date, model_name) DO UPDATE SET
+           tokens = EXCLUDED.tokens`,
+        rows.flat(),
+      );
+    }
+  }
+
+  console.log(`[sync:codex] Completed for user=${req.user_hash.substring(0, 8)}… weighted=${weighted.toFixed(2)}`);
+
+  return json({
+    status: "ok",
+    provider: "codex",
+    weighted_score: weighted,
+  });
+}
+
 // ─── Sync Handler ───────────────────────────────────────────────────────────
 
 async function handleSync(request: Request): Promise<Response> {
@@ -1696,6 +1801,16 @@ async function handleSync(request: Request): Promise<Response> {
     await db.query("UPDATE users SET sync_secret = ? WHERE user_hash = ?").run(req.sync_secret, req.user_hash);
   } else if (existingUser.sync_secret !== req.sync_secret) {
     return error("Forbidden", 403);
+  }
+
+  // ── Codex POC branch ────────────────────────────────────────────────────
+  // When a client sends provider="codex", we route the payload to the
+  // parallel codex_* tables and skip every Claude-specific path (badges,
+  // achievements, points, daily/hourly/concurrency, peak streak, plan).
+  // metrics_model_daily writes ARE allowed — model_name (e.g. "codex")
+  // disambiguates from Claude models.
+  if (req.provider === "codex") {
+    return handleCodexSync(req, db);
   }
 
   // Store auto-detected subscription plan (sent by plugin/desktop from ~/.claude.json).

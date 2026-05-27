@@ -128,7 +128,7 @@ impl FileWatcher {
         ranking: &Arc<Mutex<RankingEngine>>,
     ) {
         // Refresh metrics (tracker computes stats from JSONL)
-        let stats = if let Ok(mut m) = metrics.lock() {
+        let (stats, codex_stats) = if let Ok(mut m) = metrics.lock() {
             m.refresh();
             let _ = app.emit("metrics-updated", &m.data);
 
@@ -137,9 +137,9 @@ impl FileWatcher {
             let label = cost::format_tokens(tokens);
             Self::update_tray_icon(app, &label);
 
-            Some(m.data.stats.clone())
+            (Some(m.data.stats.clone()), Some(m.codex_stats.clone()))
         } else {
-            None
+            (None, None)
         };
 
         // Estimate points locally from stats for fast feedback between server syncs.
@@ -163,8 +163,14 @@ impl FileWatcher {
             } else {
                 false
             };
-            info!("[stats-watcher] calling try_sync (sessions={}, messages={}, full_reparse={})", stats.total_sessions, stats.total_messages, full_reparse);
-            super::ranking::try_sync(ranking, stats, points, app, full_reparse);
+            let codex = codex_stats.clone().unwrap_or_default();
+            info!(
+                "[stats-watcher] calling try_sync (claude sessions={}, messages={}, codex sessions={}, messages={}, full_reparse={})",
+                stats.total_sessions, stats.total_messages,
+                codex.total_sessions, codex.total_messages,
+                full_reparse,
+            );
+            super::ranking::try_sync(ranking, stats, &codex, points, app, full_reparse);
         }
     }
 }

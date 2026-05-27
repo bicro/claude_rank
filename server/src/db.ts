@@ -218,6 +218,40 @@ export async function initDb(): Promise<void> {
       linked_at TEXT NOT NULL
     );
 
+    -- Codex POC: parallel device/user totals tables. Mirror device_metrics and
+    -- user_metrics column-for-column (minus the users FK) so future code that
+    -- generalizes "provider" can lift these into a single table without a
+    -- column-level migration. Kept fully separate from production rankings.
+    CREATE TABLE IF NOT EXISTS codex_device_metrics (
+      device_hash TEXT PRIMARY KEY,
+      total_tokens BIGINT DEFAULT 0,
+      total_messages BIGINT DEFAULT 0,
+      total_sessions BIGINT DEFAULT 0,
+      total_tool_calls BIGINT DEFAULT 0,
+      total_output_tokens BIGINT DEFAULT 0,
+      estimated_spend DOUBLE PRECISION DEFAULT 0,
+      weighted_score DOUBLE PRECISION DEFAULT 0,
+      last_synced TEXT,
+      total_session_time_secs BIGINT DEFAULT 0,
+      total_active_time_secs BIGINT DEFAULT 0,
+      total_idle_time_secs BIGINT DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS codex_user_metrics (
+      user_hash TEXT PRIMARY KEY,
+      total_tokens BIGINT DEFAULT 0,
+      total_messages BIGINT DEFAULT 0,
+      total_sessions BIGINT DEFAULT 0,
+      total_tool_calls BIGINT DEFAULT 0,
+      total_output_tokens BIGINT DEFAULT 0,
+      estimated_spend DOUBLE PRECISION DEFAULT 0,
+      weighted_score DOUBLE PRECISION DEFAULT 0,
+      last_synced TEXT,
+      total_session_time_secs BIGINT DEFAULT 0,
+      total_active_time_secs BIGINT DEFAULT 0,
+      total_idle_time_secs BIGINT DEFAULT 0
+    );
+
     CREATE TABLE IF NOT EXISTS wrapped_views (
       user_hash TEXT NOT NULL,
       year_month TEXT NOT NULL,

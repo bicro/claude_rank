@@ -118,6 +118,11 @@ pub(crate) struct SyncPayload {
     full_reparse: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     plan: Option<Plan>,
+    /// Identifies which CLI's usage this payload represents. Absent = Claude Code
+    /// (back-compat with older clients). When set to "codex", the server routes
+    /// writes to the parallel codex_* tables.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provider: Option<String>,
 }
 
 /// Auto-detected subscription plan signals read from ~/.claude.json (oauthAccount).
@@ -392,6 +397,102 @@ impl RankingEngine {
             tool_names: None,    // Could be populated from stats
             full_reparse,
             plan: detect_plan(),
+            provider: None,
+        }
+    }
+
+    /// Build the Codex sync payload — a slim subset of the Claude payload.
+    /// We only send what the server's codex sync branch actually writes:
+    /// totals (codex_device_metrics), token_breakdown (also codex_device_metrics),
+    /// and daily_model_tokens (metrics_model_daily, safe to share because
+    /// model_name disambiguates `codex` from Claude models).
+    pub fn build_codex_sync_payload(
+        &self,
+        codex_stats: &StatsCache,
+        full_reparse: bool,
+    ) -> SyncPayload {
+        let settings = &self.config.sync_settings;
+
+        let total_tokens: u64 = codex_stats
+            .model_usage
+            .values()
+            .map(|m| {
+                m.input_tokens
+                    + m.output_tokens
+                    + m.cache_read_input_tokens
+                    + m.cache_creation_input_tokens
+            })
+            .sum();
+        let total_tool_calls: u64 = codex_stats
+            .daily_activity
+            .iter()
+            .map(|d| d.tool_call_count)
+            .sum();
+
+        let totals = SyncTotals {
+            total_tokens,
+            total_messages: codex_stats.total_messages,
+            total_sessions: codex_stats.total_sessions,
+            total_tool_calls,
+            current_streak: 0,
+            total_points: 0,
+            level: 0,
+            total_session_time_secs: codex_stats.total_session_time_secs,
+            total_active_time_secs: codex_stats.total_active_time_secs,
+            total_idle_time_secs: codex_stats.total_idle_time_secs,
+        };
+
+        let token_breakdown = Some(
+            codex_stats
+                .model_usage
+                .iter()
+                .map(|(model, usage)| {
+                    (
+                        model.clone(),
+                        TokenBreakdown {
+                            input: usage.input_tokens,
+                            output: usage.output_tokens,
+                            cache_read: usage.cache_read_input_tokens,
+                            cache_creation: usage.cache_creation_input_tokens,
+                        },
+                    )
+                })
+                .collect(),
+        );
+
+        let daily_model_tokens = if settings.tokens {
+            Some(
+                codex_stats
+                    .daily_model_tokens
+                    .iter()
+                    .map(|dmt| DailyModelTokensEntry {
+                        date: dmt.date.clone(),
+                        tokens_by_model: dmt.tokens_by_model.clone(),
+                    })
+                    .collect(),
+            )
+        } else {
+            None
+        };
+
+        SyncPayload {
+            user_hash: self.config.user_hash.clone(),
+            sync_secret: self.config.sync_secret.clone().unwrap_or_default(),
+            sync_settings: settings.clone(),
+            totals,
+            token_breakdown,
+            daily_activity: None,
+            daily_model_tokens,
+            hour_counts: None,
+            hour_tokens: None,
+            concurrency_histogram: None,
+            day_sessions: None,
+            prompt_hashes: None,
+            prompts: None,
+            tool_names: None,
+            full_reparse,
+            plan: None,
+            provider: Some("codex".to_string()),
         }
     }
 }
@@ -670,13 +771,13 @@ pub async fn force_sync(
         let mut engine = ranking.lock().map_err(|e| e.to_string())?;
         engine.reset_sync_timer();
     }
-    let stats = {
+    let (stats, codex_stats) = {
         let m = metrics.lock().map_err(|e| e.to_string())?;
-        m.data.stats.clone()
+        (m.data.stats.clone(), m.codex_stats.clone())
     };
     // force_reparse sets needs_full_sync=true on the tracker,
     // but force_sync bypasses the watcher, so pass it explicitly
-    try_sync_inner(&ranking.inner().clone(), &stats, &points.inner().clone(), &app, true);
+    try_sync_inner(&ranking.inner().clone(), &stats, &codex_stats, &points.inner().clone(), &app, true);
     Ok(())
 }
 
@@ -685,16 +786,18 @@ pub async fn force_sync(
 pub fn try_sync(
     ranking: &Arc<Mutex<RankingEngine>>,
     stats: &StatsCache,
+    codex_stats: &StatsCache,
     points: &Arc<Mutex<super::points::PointsEngine>>,
     app: &tauri::AppHandle,
     full_reparse: bool,
 ) {
-    try_sync_inner(ranking, stats, points, app, full_reparse);
+    try_sync_inner(ranking, stats, codex_stats, points, app, full_reparse);
 }
 
 fn try_sync_inner(
     ranking: &Arc<Mutex<RankingEngine>>,
     stats: &StatsCache,
+    codex_stats: &StatsCache,
     points: &Arc<Mutex<super::points::PointsEngine>>,
     app: &tauri::AppHandle,
     full_reparse: bool,
@@ -705,7 +808,7 @@ fn try_sync_inner(
     };
     let points_clone = Arc::clone(points);
 
-    let payload_json = {
+    let (payload_json, codex_payload_json) = {
         let mut engine = match ranking.lock() {
             Ok(e) => e,
             Err(_) => return,
@@ -723,8 +826,23 @@ fn try_sync_inner(
                 return;
             }
         };
+
+        // Build a Codex payload only if there's any Codex activity to report.
+        let codex_json = if codex_stats.total_sessions > 0 {
+            let codex_payload = engine.build_codex_sync_payload(codex_stats, full_reparse);
+            match serde_json::to_string(&codex_payload) {
+                Ok(j) => Some(j),
+                Err(e) => {
+                    warn!("[ranking] Failed to serialize codex payload: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         engine.is_syncing = true;
-        json
+        (json, codex_json)
     };
 
     let app_handle = app.clone();
@@ -814,6 +932,38 @@ fn try_sync_inner(
             }
             Err(e) => {
                 warn!("[ranking] Sync network error: {:?}", e);
+            }
+        }
+
+        // After the Claude sync (regardless of success), fire the Codex sync if we
+        // built a payload. Codex success/failure does not gate the throttle — the
+        // Claude sync is the source of truth for that.
+        if let Some(codex_json) = codex_payload_json {
+            let codex_url = format!("{}/api/sync", ranking_api_base());
+            info!(
+                "[ranking] Sending codex sync POST to {} (payload {} bytes)",
+                codex_url,
+                codex_json.len()
+            );
+            match client
+                .post(&codex_url)
+                .header("Content-Type", "application/json")
+                .body(codex_json)
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    if resp.status().is_success() {
+                        info!("[ranking] Codex sync OK");
+                    } else {
+                        let status = resp.status();
+                        let text = resp.text().await.unwrap_or_default();
+                        warn!("[ranking] Codex sync failed: {} - {}", status, text);
+                    }
+                }
+                Err(e) => {
+                    warn!("[ranking] Codex sync network error: {:?}", e);
+                }
             }
         }
 
