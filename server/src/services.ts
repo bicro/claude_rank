@@ -38,7 +38,7 @@ export function estimateCost(tokenBreakdown: Record<string, any>): number {
 }
 
 // OpenAI/Codex pricing — USD per 1M tokens. Sourced from openai.com/api/pricing
-// (retrieved 2026-05-26). Matched by substring on the model name string Codex
+// (retrieved 2026-05-28; short-context <272K standard-tier rates). Matched by substring on the model name string Codex
 // emits in `turn_context.model`. Cache hits are billed at 25% of input on most
 // GPT-5 family models. Cache writes don't exist as a separate line item for
 // OpenAI (we set cache_write = input to keep estimateCodexCost call shape
@@ -48,9 +48,10 @@ export function estimateCost(tokenBreakdown: Record<string, any>): number {
 const CODEX_PRICING = [
   { match: "gpt-5.5",       input: 5,    output: 30,   cache_read: 0.50,  cache_write: 5 },
   { match: "gpt-5.4",       input: 2.50, output: 15,   cache_read: 0.25,  cache_write: 2.50 },
+  { match: "gpt-5.3-codex", input: 1.75, output: 14,   cache_read: 0.175, cache_write: 1.75 },
   { match: "gpt-5.2-codex", input: 1.75, output: 14,   cache_read: 0.175, cache_write: 1.75 },
   { match: "gpt-5-codex",   input: 1.25, output: 10,   cache_read: 0.125, cache_write: 1.25 },
-  { match: "gpt-5.2",       input: 1.25, output: 10,   cache_read: 0.125, cache_write: 1.25 },
+  { match: "gpt-5.2",       input: 1.75, output: 14,   cache_read: 0.175, cache_write: 1.75 },
   { match: "gpt-5",         input: 1.25, output: 10,   cache_read: 0.125, cache_write: 1.25 },
   { match: "o3-mini",       input: 1.10, output: 4.40, cache_read: 0.55,  cache_write: 1.10 },
   { match: "o3",            input: 2,    output: 8,    cache_read: 0.50,  cache_write: 2 },
