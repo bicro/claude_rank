@@ -46,7 +46,8 @@
   .header-row {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
+    gap: 8px;
     background: var(--accent);
     margin: -16px -16px 0 -16px;
     padding: 6px 16px;
@@ -75,6 +76,14 @@
   .view-toggle-btn.active {
     background: #fff;
     color: var(--accent);
+  }
+  .provider-toggle .view-toggle-btn {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .view-toggle-btn:disabled {
+    cursor: default;
+    opacity: 0.45;
   }
 
   /* ── Team view ── */
@@ -1031,6 +1040,10 @@
 
   <!-- 1. Header row -->
   <div class="header-row">
+    <div class="view-toggle provider-toggle" id="providerToggle">
+      <button class="view-toggle-btn active" id="providerClaude">CLAUDE</button>
+      <button class="view-toggle-btn" id="providerCodex">CODEX</button>
+    </div>
     <div class="view-toggle" id="viewToggle">
       <button class="view-toggle-btn active" id="toggleSolo">SOLO</button>
       <button class="view-toggle-btn" id="toggleTeam">TEAM</button>
@@ -1184,7 +1197,7 @@
 </div>
 
 <script type="module">
-import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, getUserRewards, getUserDailyRanks, formatPercentile, setDisplayName, formatNumber, formatCost, animateValue, getWrappedStatus, markWrappedSeen } from './js/api.js?v=3';
+import { getUserProfile, getUserConcurrencyByDate, getUserHeatmap, getUserRewards, getUserDailyRanks, formatPercentile, setDisplayName, formatNumber, formatCost, animateValue, getWrappedStatus, markWrappedSeen } from './js/api.js?v=4';
 import { getCachedAvatar, clearCachedAvatar } from './js/avatar.js';
 
 const ALLOWED_PARENT_ORIGINS = [
@@ -1237,11 +1250,12 @@ let currentDailyTokens = 0;
 let rewardsData = null;
 let toastQueue = [];
 let toastActive = false;
+let activeProvider = 'claude';
 
 // ── Rewards ──
 async function loadRewards() {
   try {
-    rewardsData = await getUserRewards(userHash, lastLocalDateStr);
+    rewardsData = await getUserRewards(userHash, lastLocalDateStr, activeProvider);
     renderPersonalBests();
   } catch (e) {
     console.error('Failed to load rewards:', e);
@@ -1273,7 +1287,7 @@ function renderPersonalBests() {
 // ── Daily Ranks ──
 async function loadDailyRanks() {
   try {
-    const resp = await getUserDailyRanks(userHash, lastLocalDateStr);
+    const resp = await getUserDailyRanks(userHash, lastLocalDateStr, 'day', activeProvider);
     const dr = resp.ranks || {};
     // Overall rank pill under username
     const overallEl = document.getElementById('userOverallRank');
@@ -1675,7 +1689,7 @@ function formatDateLabel(dateStr) {
 // ── Day navigation ──
 async function loadActiveDates() {
   try {
-    const heatmap = await getUserHeatmap(userHash, 30);
+    const heatmap = await getUserHeatmap(userHash, 30, activeProvider);
     const localDates = new Set();
     const localTokens = {};
     const localMessages = {};
@@ -1732,7 +1746,7 @@ async function loadDayByIndex(index) {
 
   try {
     const utcDates = utcDatesForLocalDay(localDateStr);
-    const results = await Promise.all(utcDates.map(d => getUserConcurrencyByDate(userHash, d)));
+    const results = await Promise.all(utcDates.map(d => getUserConcurrencyByDate(userHash, d, activeProvider)));
     lastMergedHistograms = Object.assign({}, ...results);
     lastLocalDateStr = localDateStr;
     const hourlyData = processHourlyData(lastMergedHistograms, localDateStr);
@@ -1783,9 +1797,9 @@ document.getElementById('dayNext').addEventListener('click', () => {
 // ── Load profile ──
 async function loadProfile() {
   try {
-    console.log('[widget] loadProfile for', userHash?.substring(0, 8) + '…');
-    const data = await getUserProfile(userHash);
-    console.log('[widget] profile response: tokens=', data?.metrics?.total_tokens, 'auth=', data?.auth_provider ?? 'none');
+    console.log('[widget] loadProfile for', userHash?.substring(0, 8) + '…', 'provider=', activeProvider);
+    const data = await getUserProfile(userHash, activeProvider);
+    console.log('[widget] profile response: tokens=', data?.metrics?.total_tokens, 'auth=', data?.auth_provider ?? 'none', 'provider=', activeProvider);
     const usernameEl = document.getElementById('username');
     const avatarEl = document.getElementById('userAvatar');
     const overlay = document.getElementById('loginOverlay');
@@ -1911,6 +1925,8 @@ async function doLogout() {
 
 // ── Solo / Team toggle ──
 let currentTeamHash = null;
+const providerClaude = document.getElementById('providerClaude');
+const providerCodex = document.getElementById('providerCodex');
 const toggleSolo = document.getElementById('toggleSolo');
 const toggleTeam = document.getElementById('toggleTeam');
 const soloView = document.getElementById('soloView');
@@ -1938,6 +1954,7 @@ function switchToSolo() {
 }
 
 function switchToTeam() {
+  if (activeProvider !== 'claude') return;
   deactivateAllTabs();
   document.body.classList.add('team-view-active');
   toggleTeam.classList.add('active');
@@ -1962,6 +1979,40 @@ function switchToSettings() {
 
 toggleSolo.addEventListener('click', switchToSolo);
 toggleTeam.addEventListener('click', switchToTeam);
+
+function updateProviderControls() {
+  providerClaude.classList.toggle('active', activeProvider === 'claude');
+  providerCodex.classList.toggle('active', activeProvider === 'codex');
+  providerClaude.setAttribute('aria-selected', activeProvider === 'claude' ? 'true' : 'false');
+  providerCodex.setAttribute('aria-selected', activeProvider === 'codex' ? 'true' : 'false');
+  toggleTeam.disabled = activeProvider !== 'claude';
+  toggleTeam.title = activeProvider === 'claude' ? 'Team' : 'Team stats are Claude-only';
+  const banner = document.getElementById('wrappedBanner');
+  if (activeProvider !== 'claude' && banner) banner.classList.remove('show');
+}
+
+async function switchProvider(provider) {
+  if (provider === activeProvider) return;
+  activeProvider = provider;
+  rewardsData = null;
+  heatmapByDate = {};
+  lastMergedHistograms = {};
+  previousPeakAgents = 0;
+  previousHourlyStreak = 0;
+  currentDailyTokens = 0;
+  currentDailyCost = '$0';
+  updateProviderControls();
+  switchToSolo();
+  await loadProfile();
+  await loadActiveDates();
+  await loadDayByIndex(activeDates.length - 1);
+  if (activeProvider === 'claude') checkWrappedStatus();
+  notifyHeight();
+}
+
+providerClaude.addEventListener('click', () => switchProvider('claude'));
+providerCodex.addEventListener('click', () => switchProvider('codex'));
+updateProviderControls();
 
 // Autostart toggle
 autostartToggle.addEventListener('change', () => {
@@ -2685,7 +2736,8 @@ document.getElementById('refreshMetricsBtn').addEventListener('click', async (e)
 document.getElementById('viewRankingsBtn').addEventListener('click', (e) => {
   e.preventDefault();
   userMenu.classList.remove('open');
-  const url = window.location.origin + '/profile.html?hash=' + encodeURIComponent(userHash);
+  const providerParam = activeProvider === 'codex' ? '&provider=codex' : '';
+  const url = window.location.origin + '/profile.html?hash=' + encodeURIComponent(userHash) + providerParam;
   if (window.parent !== window) {
     postToParent({ type: 'open-url', url });
   } else {
@@ -2763,6 +2815,10 @@ function wrappedMonthLabel(ym) {
 }
 
 async function checkWrappedStatus() {
+  if (activeProvider !== 'claude') {
+    document.getElementById('wrappedBanner')?.classList.remove('show');
+    return;
+  }
   try {
     const status = await getWrappedStatus(userHash, syncSecret);
     if (!status?.latest_month || status.viewed) return;
@@ -2794,7 +2850,7 @@ async function checkWrappedStatus() {
     console.warn('[widget] wrapped status check failed:', e);
   }
 }
-checkWrappedStatus();
+if (activeProvider === 'claude') checkWrappedStatus();
 </script>
 </body>
 </html>

@@ -540,6 +540,13 @@ async function handleClearCache(userHash: string, request: Request): Promise<Res
   await db.query("DELETE FROM user_badges WHERE user_hash = ?").run(userHash);
   await db.query("DELETE FROM concurrency_histogram WHERE user_hash = ?").run(userHash);
   await db.query("DELETE FROM daily_sessions WHERE user_hash = ?").run(userHash);
+  await db.query("DELETE FROM codex_user_metrics WHERE user_hash = ?").run(userHash);
+  await db.query("DELETE FROM codex_device_metrics WHERE device_hash = ?").run(userHash);
+  await db.query("DELETE FROM codex_metrics_history WHERE user_hash = ?").run(userHash);
+  await db.query("DELETE FROM codex_metrics_hourly WHERE user_hash = ?").run(userHash);
+  await db.query("DELETE FROM codex_user_badges WHERE user_hash = ?").run(userHash);
+  await db.query("DELETE FROM codex_concurrency_histogram WHERE user_hash = ?").run(userHash);
+  await db.query("DELETE FROM codex_daily_sessions WHERE user_hash = ?").run(userHash);
   return json({ status: "cleared" });
 }
 

@@ -33,7 +33,7 @@
     <div id="profileContent"><div class="loading">Loading profile</div></div>
 
     <script type="module">
-        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserConcurrency, getUserConcurrencyByDate, getUserDailyRanks, getUserRewards, getWrappedStatus, markWrappedSeen, formatNumber, formatCost, formatPercentile, getCategoryLabel, getTier, animateValue } from './js/api.js?v=2';
+        import { getUserProfile, getUserHistory, getAllBadges, getUserByUsername, getUserConcurrencyByDate, getUserDailyRanks, getUserRewards, getWrappedStatus, markWrappedSeen, formatNumber, formatCost, formatPercentile, getCategoryLabel, getTier, animateValue } from './js/api.js?v=4';
         import { getCachedAvatar } from './js/avatar.js';
 
         function escHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
@@ -41,12 +41,16 @@
         const params = new URLSearchParams(window.location.search);
         const userHash = params.get('hash');
         const username = params.get('username');
+        const requestedProvider = params.get('provider');
+        let activeProvider = requestedProvider === 'codex' ? 'codex' : 'claude';
+        let activeProfileHash = userHash || null;
 
         if (userHash) {
-            loadProfile(userHash);
+            loadProfile(userHash, activeProvider);
         } else if (username) {
             getUserByUsername(username).then(data => {
-                loadProfile(data.user_hash);
+                activeProfileHash = data.user_hash;
+                loadProfile(data.user_hash, activeProvider);
             }).catch(err => {
                 document.getElementById('profileContent').innerHTML =
                     `<div class="loading" style="color:var(--red)">User "${escHtml(username)}" not found</div>`;
@@ -132,17 +136,25 @@
             }
         }
 
-        async function loadProfile(hash) {
+        function providerLabel(provider = activeProvider) {
+            return provider === 'codex' ? 'Codex' : 'Claude';
+        }
+
+        async function loadProfile(hash, provider = activeProvider) {
+            activeProvider = provider;
+            activeProfileHash = hash;
             const container = document.getElementById('profileContent');
             try {
+                const isCodex = provider === 'codex';
+                const providerName = providerLabel(provider);
                 const [profile, allBadges, history] = await Promise.all([
-                    getUserProfile(hash),
+                    getUserProfile(hash, provider),
                     getAllBadges(),
-                    getUserHistory(hash, 30),
+                    getUserHistory(hash, 30, provider),
                 ]);
 
                 let wrappedStatus = null;
-                if (profile.is_owner) {
+                if (!isCodex && profile.is_owner) {
                     try { wrappedStatus = await getWrappedStatus(hash); } catch {}
                 }
 
@@ -202,11 +214,15 @@
                             <h2>${escHtml(displayName)}${socialIconHtml}
                                 <span class="tier-badge tier-${tier.tier.toLowerCase()}" data-tooltip="Tier is based on your weighted score. Progress to ${tier.next_tier || 'max tier'}: ${Math.round(tier.progress || 0)}%.">${tierObj.icon} ${tier.tier}</span>
                                 <span class="profile-overall-rank" id="profileOverallRank"></span>
-                                <a class="profile-wrapped-link" href="/wrapped?username=${encodeURIComponent(profile.username || '')}&hash=${encodeURIComponent(hash)}" data-tooltip="See ${escHtml(displayName)}'s monthly Claude recap">WRAPPED &rarr;</a>
+                                ${!isCodex ? `<a class="profile-wrapped-link" href="/wrapped?username=${encodeURIComponent(profile.username || '')}&hash=${encodeURIComponent(hash)}" data-tooltip="See ${escHtml(displayName)}'s monthly Claude recap">WRAPPED &rarr;</a>` : ''}
                             </h2>
                             <div class="meta">
                                 Joined ${new Date(profile.created_at).toLocaleDateString()}
                                 ${profile.team_hash ? ` &middot; Team: <a href="/team.html?hash=${profile.team_hash}">${profile.team_hash}</a>` : ''}
+                            </div>
+                            <div class="profile-provider-toggle" role="tablist" aria-label="Stats provider">
+                                <button type="button" class="profile-provider-btn ${provider === 'claude' ? 'active' : ''}" data-provider="claude" aria-selected="${provider === 'claude'}">Claude</button>
+                                <button type="button" class="profile-provider-btn ${provider === 'codex' ? 'active' : ''}" data-provider="codex" aria-selected="${provider === 'codex'}">Codex</button>
                             </div>
                             <div class="xp-display" data-tooltip="XP is earned from tokens, messages, tool calls, and streaks. Level = floor(sqrt(points / 100)).">
                                 <div class="xp-bar"><div class="xp-fill" style="width:${xpProgress.toFixed(1)}%"></div></div>
@@ -235,24 +251,24 @@
                     <div class="profile-section-divider" data-tooltip="Cumulative stats across all time since this account was created."><span>Lifetime</span></div>
 
                     <div class="profile-stats-below">
-                        <div class="stat-category" data-tooltip="Estimated cost based on per-model token pricing. Includes all input and output tokens across Claude models.">
+                        <div class="stat-category" data-tooltip="Estimated cost based on per-model token pricing. Includes all input and output tokens across ${providerName} models.">
                             <div class="stat-category-header">
                                 <div class="stat-category-value" data-raw-cost="${m.estimated_spend || 0}">0</div>
                                 <div class="stat-category-label">Total Estimated Spend</div>
                                 <div class="reward-pills" id="rewardPillsSpend"></div>
                             </div>
                             <div class="stat-category-items">
-                                <div class="stat-card" data-tooltip="Total input + output tokens consumed across all Claude models.">
+                                <div class="stat-card" data-tooltip="Total input + output tokens consumed across all ${providerName} models.">
                                     <div class="label">Total Tokens</div>
                                     <div class="value" data-raw="${m.total_tokens || 0}">0</div>
                                     ${rankDisplay(ranks.tokens)}
                                 </div>
-                                <div class="stat-card" data-tooltip="Total tool calls executed by Claude Code agents (file edits, bash commands, etc).">
+                                <div class="stat-card" data-tooltip="Total tool calls executed by ${providerName} agents (file edits, bash commands, etc).">
                                     <div class="label">Tool Calls</div>
                                     <div class="value" data-raw="${m.total_tool_calls || 0}">0</div>
                                     ${rankDisplay(ranks.tools)}
                                 </div>
-                                ${profile.plan_value && profile.plan_value.ratio > 0 ? `
+                                ${!isCodex && profile.plan_value && profile.plan_value.ratio > 0 ? `
                                 <div class="stat-card" data-tooltip="How much your Claude Code usage is worth this month versus what you pay Anthropic: $${profile.plan_value.month_spend.toFixed(2)} of API-equivalent usage on your $${profile.plan_value.monthly_usd}/mo plan.">
                                     <div class="label">Plan Value (this month)</div>
                                     <div class="value" data-raw-ratio="${profile.plan_value.ratio}">0×</div>
@@ -260,22 +276,22 @@
                                 ` : ''}
                             </div>
                         </div>
-                        <div class="stat-category" data-tooltip="Peak number of Claude Code sessions running at the same time today.">
+                        <div class="stat-category" data-tooltip="Peak number of ${providerName} sessions running at the same time today.">
                             <div class="stat-category-header">
                                 <div class="stat-category-value" data-raw="${m.max_concurrent || 0}">${m.max_concurrent ? '0' : '\u2014'}</div>
                                 <div class="stat-category-label">Max Concurrent Agents</div>
                                 <div class="reward-pills" id="rewardPillsConcurrency"></div>
                             </div>
                             <div class="stat-category-items">
-                                <div class="stat-card" data-tooltip="Total number of Claude Code sessions started.">
+                                <div class="stat-card" data-tooltip="Total number of ${providerName} sessions started.">
                                     <div class="label">Sessions</div>
                                     <div class="value" data-raw="${m.total_sessions || 0}">0</div>
                                 </div>
-                                <div class="stat-card" data-tooltip="Minutes spent running 2 or more Claude Code sessions simultaneously.">
+                                <div class="stat-card" data-tooltip="Minutes spent running 2 or more ${providerName} sessions simultaneously.">
                                     <div class="label">Concurrent Mins</div>
                                     <div class="value" data-raw-mins="${m.concurrent_mins || 0}">${m.concurrent_mins > 0 ? '0' : '\u2014'}</div>
                                 </div>
-                                <div class="stat-card" data-tooltip="Total prompts you sent to Claude across all sessions.">
+                                <div class="stat-card" data-tooltip="Total prompts you sent to ${providerName} across all sessions.">
                                     <div class="label">Messages</div>
                                     <div class="value" data-raw="${m.total_messages || 0}">0</div>
                                     ${rankDisplay(ranks.messages)}
@@ -309,6 +325,20 @@
                     </div>
                     ` : ''}
                 `;
+
+                container.querySelectorAll('.profile-provider-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const nextProvider = btn.getAttribute('data-provider');
+                        if (!nextProvider || nextProvider === activeProvider) return;
+                        const nextUrl = new URL(window.location.href);
+                        nextUrl.searchParams.set('hash', hash);
+                        nextUrl.searchParams.delete('username');
+                        if (nextProvider === 'codex') nextUrl.searchParams.set('provider', 'codex');
+                        else nextUrl.searchParams.delete('provider');
+                        window.history.replaceState(null, '', nextUrl.toString());
+                        loadProfile(hash, nextProvider);
+                    });
+                });
 
                 // Mark Wrapped as seen when the banner CTA is clicked (fire-and-forget so navigation isn't blocked)
                 if (wrappedStatus?.latest_month && !wrappedStatus.viewed) {
@@ -395,7 +425,7 @@
                 async function fetchDayConcurrency(localDateStr) {
                     if (weekConcurrencyCache[localDateStr]) return weekConcurrencyCache[localDateStr];
                     const utcDates = utcDatesForLocalDay(localDateStr);
-                    const results = await Promise.all(utcDates.map(d => getUserConcurrencyByDate(hash, d)));
+                    const results = await Promise.all(utcDates.map(d => getUserConcurrencyByDate(hash, d, provider)));
                     // Collect sessions from all UTC dates before merging
                     let allSessions = [];
                     for (const r of results) {
@@ -425,7 +455,7 @@
                         const [dayConcurrency, yesterdayConcurrency, dailyRanksResp] = await Promise.all([
                             fetchDayConcurrency(localDateStr),
                             fetchDayConcurrency(yesterdayStr),
-                            getUserDailyRanks(hash, localDateStr, 'day').catch(e => { console.error('Daily ranks fetch failed:', e); return { ranks: {} }; })
+                            getUserDailyRanks(hash, localDateStr, 'day', provider).catch(e => { console.error('Daily ranks fetch failed:', e); return { ranks: {} }; })
                         ]);
 
                         // Extract best rank for card pill
@@ -461,7 +491,7 @@
                         }
 
                         // Fetch rewards and render pills
-                        getUserRewards(hash, localDateStr).then(rewards => {
+                        getUserRewards(hash, localDateStr, provider).then(rewards => {
                             renderProfileRewards(rewards);
                             // Store PR data for shareable
                             if (window._burnClockRenderArgs) {
@@ -658,7 +688,7 @@
                         svgContent += `<circle cx="${tx + 36}" cy="${termY + 11}" r="3.5" fill="#28CA41" />`;
                         // Terminal content: show per-session stats or placeholder
                         const ringSessions = sessions.filter(s => s.ring === i);
-                        svgContent += `<text x="${tx + 12}" y="${termY + 40}" font-size="12" font-family="monospace" fill="#aaa">$ claude</text>`;
+                        svgContent += `<text x="${tx + 12}" y="${termY + 40}" font-size="12" font-family="monospace" fill="#aaa">$ ${provider === 'codex' ? 'codex' : 'claude'}</text>`;
                         if (ringSessions.length > 0) {
                             const totalTokens = ringSessions.reduce((sum, s) => sum + (s.tokens || 0), 0);
                             const totalMsgs = ringSessions.reduce((sum, s) => sum + (s.messages || 0), 0);

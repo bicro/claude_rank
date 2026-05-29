@@ -9,14 +9,19 @@ async function apiFetch(path) {
     return resp.json();
 }
 
+function userApiBase(userHash, provider = 'claude') {
+    const encoded = encodeURIComponent(userHash);
+    return provider === 'codex' ? `/api/codex/users/${encoded}` : `/api/users/${encoded}`;
+}
+
 export async function getLeaderboard(category, period = 'alltime', limit = 50, offset = 0, date = null) {
     let url = `/api/leaderboard/${category}?period=${period}&limit=${limit}&offset=${offset}`;
     if (date) url += `&date=${date}`;
     return apiFetch(url);
 }
 
-export async function getUserProfile(userHash) {
-    return apiFetch(`/api/users/${userHash}`);
+export async function getUserProfile(userHash, provider = 'claude') {
+    return apiFetch(userApiBase(userHash, provider));
 }
 
 export async function getUserByUsername(username) {
@@ -39,12 +44,12 @@ export async function setDisplayName(userHash, displayName, syncSecret) {
     return resp.json();
 }
 
-export async function getUserBadges(userHash) {
-    return apiFetch(`/api/users/${userHash}/badges`);
+export async function getUserBadges(userHash, provider = 'claude') {
+    return apiFetch(`${userApiBase(userHash, provider)}/badges`);
 }
 
-export async function getUserHistory(userHash, days = 30) {
-    return apiFetch(`/api/users/${userHash}/history?days=${days}`);
+export async function getUserHistory(userHash, days = 30, provider = 'claude') {
+    return apiFetch(`${userApiBase(userHash, provider)}/history?days=${days}`);
 }
 
 export async function getUserWrapped(userHash, ym) {
@@ -222,30 +227,30 @@ export async function getHotCards(limit = 3) {
     return apiFetch(`/api/hot/cards?limit=${limit}`);
 }
 
-export async function getUserHeatmap(userHash, days = 365) {
-    return apiFetch(`/api/users/${userHash}/heatmap?days=${days}`);
+export async function getUserHeatmap(userHash, days = 365, provider = 'claude') {
+    return apiFetch(`${userApiBase(userHash, provider)}/heatmap?days=${days}`);
 }
 
-export async function getUserHourlyHeatmap(userHash, hours = 24) {
-    return apiFetch(`/api/users/${userHash}/heatmap/hourly?hours=${hours}`);
+export async function getUserHourlyHeatmap(userHash, hours = 24, provider = 'claude') {
+    return apiFetch(`${userApiBase(userHash, provider)}/heatmap/hourly?hours=${hours}`);
 }
 
-export async function getUserConcurrency(userHash) {
-    return apiFetch(`/api/users/${userHash}/concurrency`);
+export async function getUserConcurrency(userHash, provider = 'claude') {
+    return apiFetch(`${userApiBase(userHash, provider)}/concurrency`);
 }
 
-export async function getUserConcurrencyByDate(userHash, dateStr) {
-    return apiFetch(`/api/users/${userHash}/concurrency?date=${dateStr}`);
+export async function getUserConcurrencyByDate(userHash, dateStr, provider = 'claude') {
+    return apiFetch(`${userApiBase(userHash, provider)}/concurrency?date=${dateStr}`);
 }
 
-export async function getUserRewards(userHash, dateStr) {
-    let url = `/api/users/${userHash}/rewards`;
+export async function getUserRewards(userHash, dateStr, provider = 'claude') {
+    let url = `${userApiBase(userHash, provider)}/rewards`;
     if (dateStr) url += `?date=${dateStr}`;
     return apiFetch(url);
 }
 
-export async function getUserDailyRanks(userHash, dateStr, period = 'day') {
-    let url = `/api/users/${userHash}/daily-ranks?period=${period}`;
+export async function getUserDailyRanks(userHash, dateStr, period = 'day', provider = 'claude') {
+    let url = `${userApiBase(userHash, provider)}/daily-ranks?period=${period}`;
     if (dateStr) url += `&date=${dateStr}`;
     return apiFetch(url);
 }

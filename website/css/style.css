@@ -603,6 +603,33 @@ a.top-entry:hover { text-decoration: none; background: var(--bg-hover); }
     flex-shrink: 0;
 }
 .profile-info h2 { font-size: 24px; margin-bottom: 4px; }
+.profile-provider-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-top: 10px;
+    padding: 2px;
+    border: 1px solid var(--border, #e0ddd9);
+    border-radius: 8px;
+    background: var(--bg-card);
+}
+.profile-provider-btn {
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 5px 11px;
+    text-transform: uppercase;
+}
+.profile-provider-btn.active {
+    background: var(--text-primary);
+    color: var(--bg-primary);
+}
 .profile-overall-rank {
     display: none;
     font-size: 11px;
