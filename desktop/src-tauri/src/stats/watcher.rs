@@ -1,3 +1,4 @@
+use super::codex_jsonl::codex_sessions_dir;
 use super::cost;
 use super::metrics::MetricsEngine;
 use super::points::PointsEngine;
@@ -91,6 +92,24 @@ impl FileWatcher {
         if let Some(claude_dir) = dirs::home_dir().map(|h| h.join(".claude")) {
             if claude_dir.exists() {
                 watcher.watch(&claude_dir, RecursiveMode::Recursive)?;
+            }
+        }
+
+        if let Some(codex_dir) = codex_sessions_dir() {
+            if codex_dir.exists() {
+                watcher.watch(&codex_dir, RecursiveMode::Recursive)?;
+                info!(
+                    "[stats-watcher] watching Codex sessions at {}",
+                    codex_dir.display()
+                );
+            } else if let Some(codex_root) = codex_dir.parent() {
+                if codex_root.exists() {
+                    watcher.watch(codex_root, RecursiveMode::Recursive)?;
+                    info!(
+                        "[stats-watcher] watching Codex root at {}",
+                        codex_root.display()
+                    );
+                }
             }
         }
 
