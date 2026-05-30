@@ -104,6 +104,7 @@ claude_rank/
 
 - [Bun](https://bun.sh/)
 - [Rust](https://rustup.rs/) (for the desktop app)
+- Windows desktop app: [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
 
 ### Full Stack (Server + Desktop)
 
@@ -125,6 +126,10 @@ cd desktop
 bun install
 bun run dev
 ```
+
+On Windows, if the tray icon appears but the widget never opens and the log contains
+`Could not find the webview runtime`, install the Microsoft Edge WebView2 Evergreen
+Runtime and restart the app. You can also run `desktop\setup.ps1` to check for it.
 
 ### Website
 

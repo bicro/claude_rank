@@ -606,6 +606,23 @@ fn position_overlay_window(window: &tauri::WebviewWindow, app: &AppHandle) {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn is_missing_webview_runtime_error(error: &str) -> bool {
+    let lower = error.to_lowercase();
+    lower.contains("webview") && lower.contains("runtime") && lower.contains("find")
+}
+
+fn log_overlay_error(context: &str, error: &str) {
+    error!("[overlay] {}: {}", context, error);
+
+    #[cfg(target_os = "windows")]
+    if is_missing_webview_runtime_error(error) {
+        error!(
+            "[overlay] Microsoft Edge WebView2 Runtime is missing. Install the Evergreen Runtime from https://developer.microsoft.com/en-us/microsoft-edge/webview2/ and restart ClaudeRank."
+        );
+    }
+}
+
 fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
     if let Some(window) = app.get_webview_window("overlay") {
         return Ok(window);
@@ -614,7 +631,7 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
     let width = 380.0;
     let height = 480.0;
 
-    let window = tauri::WebviewWindowBuilder::new(
+    let window = match tauri::WebviewWindowBuilder::new(
         app,
         "overlay",
         tauri::WebviewUrl::App("overlay.html".into()),
@@ -649,7 +666,14 @@ fn ensure_overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String
     .inner_size(width, height)
     .resizable(true)
     .build()
-    .map_err(|e| format!("Failed to create overlay window: {}", e))?;
+    {
+        Ok(window) => window,
+        Err(e) => {
+            let message = format!("Failed to create overlay window: {}", e);
+            log_overlay_error("create failed", &message);
+            return Err(message);
+        }
+    };
 
     // Persist window size and per-monitor position on resize/move
     let app_for_events = app.clone();
@@ -832,18 +856,31 @@ fn toggle_overlay_sync(app: &AppHandle) {
                 let _ = window.hide();
             }
         });
-    } else if let Ok(window) = ensure_overlay_window(app) {
-        *state.overlay_pinned.lock().unwrap() = false;
-        let _ = configure_overlay(&window);
-        position_overlay_window(&window, app);
+    } else {
+        match ensure_overlay_window(app) {
+            Ok(window) => {
+                *state.overlay_pinned.lock().unwrap() = false;
+                if let Err(e) = configure_overlay(&window) {
+                    log_overlay_error("configure failed", &e);
+                    return;
+                }
+                position_overlay_window(&window, app);
 
-        let _ = window.show();
-        let _ = window.set_focus();
-        *state.overlay_visible.lock().unwrap() = true;
-        let _ = app.emit("overlay-visibility-changed", json!({ "visible": true }));
+                if let Err(e) = window.show() {
+                    log_overlay_error("show failed", &e.to_string());
+                    return;
+                }
+                if let Err(e) = window.set_focus() {
+                    log_overlay_error("focus failed", &e.to_string());
+                }
+                *state.overlay_visible.lock().unwrap() = true;
+                let _ = app.emit("overlay-visibility-changed", json!({ "visible": true }));
 
-        if let Some(menu_item) = state.toggle_menu_item.lock().unwrap().as_ref() {
-            let _ = menu_item.set_text("Hide Widget");
+                if let Some(menu_item) = state.toggle_menu_item.lock().unwrap().as_ref() {
+                    let _ = menu_item.set_text("Hide Widget");
+                }
+            }
+            Err(e) => log_overlay_error("toggle failed", &e),
         }
     }
 }
@@ -1098,7 +1135,9 @@ fn main() {
             // Pre-create the overlay window (hidden) so it's ready on first click.
             // Without this, the first tray-icon click creates the webview on-demand
             // and the window geometry isn't settled yet, causing it to appear offscreen.
-            let _ = ensure_overlay_window(app.handle());
+            if let Err(e) = ensure_overlay_window(app.handle()) {
+                log_overlay_error("startup pre-create failed", &e);
+            }
 
             // Always show the overlay on launch so users know the app is running.
             {
@@ -1107,7 +1146,9 @@ fn main() {
                 let delay_ms = if cfg!(target_os = "windows") { 1500 } else { 500 };
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-                    let _ = show_overlay_sync(&handle);
+                    if let Err(e) = show_overlay_sync(&handle) {
+                        log_overlay_error("startup show failed", &e);
+                    }
                 });
             }
 
@@ -1142,7 +1183,9 @@ fn main() {
                     for url_str in urls {
                         if url_str.starts_with("clauderank") {
                             info!("[deep-link] received: {}", url_str);
-                            let _ = show_overlay_sync(&handle);
+                            if let Err(e) = show_overlay_sync(&handle) {
+                                log_overlay_error("deep-link show failed", &e);
+                            }
                             break;
                         }
                     }
